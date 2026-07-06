@@ -1,9 +1,13 @@
-import { writeFileSync } from "node:fs"
+import { readFileSync, writeFileSync } from "node:fs"
+import path from "node:path"
 
 import * as Effect from "effect/Effect"
 
 import { loadFileConfig, resolveRun } from "../config/service.ts"
-import type { RunFlags } from "../config/service.ts"
+import type { Profile, RunFlags } from "../config/service.ts"
+import { loadBaseline, partitionByBaseline, saveBaseline } from "../review/baseline.ts"
+import { boostCrossModelAgreement } from "../review/dedup.ts"
+import { verifyFindings } from "../review/verify.ts"
 import { loadContextText } from "../context/service.ts"
 import type { FailOn } from "../domain/report.ts"
 import type { ReviewScope } from "../domain/scope.ts"
@@ -12,14 +16,19 @@ import { GitService } from "../git/service.ts"
 import { assembleReport, EXIT_CLEAN, renderJson } from "../output/json.ts"
 import { renderTerminal } from "../output/terminal.ts"
 import { runReviewers } from "../review/orchestrator.ts"
+import type { ProjectInfo } from "../reviewers/registry.ts"
+import { detectFrameworks } from "../reviewers/registry.ts"
 
 export interface ReviewCliFlags {
   readonly staged?: boolean
   readonly since?: string
   readonly file?: readonly string[]
+  readonly profile?: Profile
   readonly reviewers?: string
   readonly model?: string
-  readonly engine?: "pi" | "claude"
+  readonly engine?: "pi" | "claude" | "codex"
+  readonly verify?: boolean
+  readonly updateBaseline?: boolean
   readonly json?: boolean
   readonly output?: string
   readonly failOn?: FailOn
@@ -59,14 +68,23 @@ export const reviewCommand = (flags: ReviewCliFlags) =>
 
     const fileConfig = yield* loadFileConfig({ cwd: repoRoot, configPath: flags.config })
     const runFlags: RunFlags = {
+      profile: flags.profile,
       reviewers: flags.reviewers?.split(",").map((id) => id.trim()).filter(Boolean),
       model: flags.model,
       engine: flags.engine,
+      verify: flags.verify,
       concurrency: flags.concurrency,
       timeoutSeconds: flags.timeout,
       failOn: flags.failOn
     }
-    const resolved = yield* resolveRun(fileConfig, runFlags, changedFiles)
+    const projectInfo: ProjectInfo = yield* Effect.sync(() => {
+      try {
+        return { frameworks: detectFrameworks(JSON.parse(readFileSync(path.join(repoRoot, "package.json"), "utf8"))) }
+      } catch {
+        return { frameworks: [] }
+      }
+    })
+    const resolved = yield* resolveRun(fileConfig, runFlags, changedFiles, projectInfo)
 
     if (resolved.reviewers.length === 0) {
       console.error("沒有啟用的 reviewer。")
@@ -89,12 +107,49 @@ export const reviewCommand = (flags: ReviewCliFlags) =>
       concurrency: resolved.defaults.concurrency
     })
 
+    // thorough：跨模型同意的 findings 信心加成
+    let findings =
+      resolved.profile === "thorough" ? boostCrossModelAgreement(outcome.findings) : [...outcome.findings]
+    const reviewerRuns = [...outcome.reviewerRuns]
+
+    // verify pass：便宜模型裁決剔誤報（引擎全掛就不必浪費額度）
+    let droppedByVerify = 0
+    if (resolved.verify && findings.length > 0 && !outcome.allFailed) {
+      console.error(`verifying ${findings.length} finding(s) with ${resolved.verify.model.provider}/${resolved.verify.model.modelId} …`)
+      const verified = yield* verifyFindings({
+        findings,
+        diff,
+        model: resolved.verify.model,
+        engine: resolved.verify.engine,
+        timeoutMs: resolved.defaults.timeoutMs
+      })
+      findings = verified.kept
+      droppedByVerify = verified.droppedCount
+      reviewerRuns.push(verified.run)
+    }
+
+    // baseline：--update-baseline 寫快照；否則濾掉已知 findings
+    const baseline = loadBaseline(repoRoot)
+    let suppressedCount = 0
+    if (flags.updateBaseline) {
+      const baselinePath = saveBaseline(repoRoot, findings)
+      console.error(`baseline 已更新（${findings.length} 條 fingerprints）：${baselinePath}`)
+    } else if (baseline.size > 0) {
+      const partitioned = partitionByBaseline(findings, baseline)
+      findings = partitioned.fresh
+      suppressedCount = partitioned.suppressed.length
+    }
+
     const report = assembleReport({
       scope,
       files: changedFiles,
-      outcome,
+      reviewerRuns,
+      findings,
+      allFailed: outcome.allFailed,
       failOn: resolved.defaults.failOn,
-      startedAt
+      startedAt,
+      suppressedCount,
+      droppedByVerify
     })
 
     if (flags.output) {

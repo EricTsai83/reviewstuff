@@ -70,9 +70,16 @@ export const renderTerminal = (report: Report): string => {
     bySeverity.info ? pc.blue(`info ${bySeverity.info}`) : ""
   ].filter(Boolean)
 
+  const extras = [
+    report.summary.suppressed ? pc.dim(`baseline 抑制 ${report.summary.suppressed}`) : "",
+    report.summary.droppedByVerify ? pc.dim(`verify 剔除 ${report.summary.droppedByVerify}`) : "",
+    report.summary.totalCostUsd ? pc.dim(`$${report.summary.totalCostUsd.toFixed(4)}`) : ""
+  ].filter(Boolean)
+
   out.push(
     pc.bold(`  ${total} finding(s)`) +
       (counts.length ? `  ${counts.join(" · ")}` : "") +
+      (extras.length ? `  ${extras.join(" · ")}` : "") +
       pc.dim(`  (${(report.durationMs / 1000).toFixed(1)}s)`)
   )
   out.push("")

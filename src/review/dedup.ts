@@ -45,3 +45,22 @@ export const dedupeFindings = (
     (a, b) => severityRank[b.severity] - severityRank[a.severity] || a.file.localeCompare(b.file)
   )
 }
+
+/**
+ * 純函式：thorough 雙模型互審的信心加成。
+ * reviewer id 形如 "correctness@openai-codex"——同一條 finding 被 ≥2 家 provider 同意 → confidence 加成。
+ */
+export const boostCrossModelAgreement = (
+  findings: readonly AggregatedFinding[],
+  bonus = 0.15
+): AggregatedFinding[] =>
+  findings.map((finding) => {
+    const providers = new Set(
+      finding.reviewers
+        .map((reviewer) => reviewer.split("@")[1])
+        .filter((provider): provider is string => provider !== undefined)
+    )
+    return providers.size >= 2
+      ? { ...finding, confidence: Math.min(1, finding.confidence + bonus) }
+      : finding
+  })

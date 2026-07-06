@@ -58,9 +58,19 @@ program
   .option("--staged", "只 review staged 變更")
   .option("--since <ref>", "review <ref>...HEAD 的變更（例：--since main）")
   .option("--file <glob>", "檔案過濾（可重複）", collect, [])
-  .option("--reviewers <ids>", "逗號分隔的 reviewer 子集（correctness,security,typescript）")
+  .addOption(
+    new Option("--profile <profile>", "quick=1 次呼叫省額度；standard=預設；thorough=全 reviewer 雙模型互審+verify").choices([
+      "quick",
+      "standard",
+      "thorough"
+    ])
+  )
+  .option("--reviewers <ids>", "逗號分隔的 reviewer 子集（correctness,security,typescript,architecture,performance,framework）")
+  .option("--verify", "啟用 verify pass（便宜模型剔誤報）")
+  .option("--no-verify", "停用 verify pass")
+  .option("--update-baseline", "把這輪 findings 寫成 baseline 快照（之後的 review 會濾掉這些存量問題）")
   .option("--model <provider/model>", "整輪覆寫模型（例：openai-codex/gpt-5.5）")
-  .addOption(new Option("--engine <engine>", "整輪覆寫引擎").choices(["pi", "claude"]))
+  .addOption(new Option("--engine <engine>", "整輪覆寫引擎").choices(["pi", "claude", "codex"]))
   .option("--json", "stdout 輸出機器可讀 JSON（人話報告改走 stderr）")
   .option("--output <path>", "同時把 JSON 報告寫到檔案")
   .addOption(
@@ -80,9 +90,12 @@ program
       staged: options.staged,
       since: options.since,
       file: options.file.length > 0 ? options.file : undefined,
+      profile: options.profile,
       reviewers: options.reviewers,
       model: options.model,
       engine: options.engine,
+      verify: options.verify,
+      updateBaseline: options.updateBaseline,
       json: options.json,
       output: options.output,
       failOn: options.failOn,

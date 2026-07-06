@@ -53,6 +53,16 @@ export const doctorCommand = () =>
       bad("claude CLI", "找不到 claude——安裝並登入 Claude Code 後 ClaudeEngine 才可用")
     }
 
+    // codex 引擎（官方 CLI，選配）
+    const codex = yield* runCommand("codex", ["login", "status"]).pipe(Effect.result)
+    if (codex._tag === "Success" && codex.success.exitCode === 0) {
+      ok("codex CLI", codex.success.stdout.trim().split("\n")[0] ?? "已登入")
+    } else if (codex._tag === "Success") {
+      bad("codex CLI", "未登入——codex login 後才可用 --engine codex（選配）")
+    } else {
+      console.log(`  ${pc.dim("○")} ${"codex CLI".padEnd(16)} ${pc.dim("未安裝（選配引擎）")}`)
+    }
+
     console.log("")
     if (!healthy) console.log(pc.yellow("  部分引擎不可用；可用 --engine 或 --reviewers 避開，或先完成登入。\n"))
     return healthy ? EXIT_CLEAN : EXIT_USAGE

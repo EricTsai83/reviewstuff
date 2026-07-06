@@ -6,10 +6,22 @@ import * as Schema from "effect/Schema"
 
 import { ConfigError } from "../domain/errors.ts"
 import type { FailOn } from "../domain/report.ts"
-import type { EngineId, ResolvedReviewer } from "../reviewers/registry.ts"
+import type { EngineId, ModelRef, ProjectInfo, ResolvedReviewer } from "../reviewers/registry.ts"
 import { BUILTIN_REVIEWERS, parseModelRef, routeEngine } from "../reviewers/registry.ts"
+import { QUICK_PROMPT } from "../reviewers/prompts/quick.ts"
 import type { FileConfig } from "./schema.ts"
 import { FileConfig as FileConfigSchema } from "./schema.ts"
+
+export type Profile = "quick" | "standard" | "thorough"
+
+const DEFAULT_QUICK_MODEL = "openai-codex/gpt-5.5"
+const DEFAULT_VERIFY_MODEL = "openai-codex/gpt-5.4-mini"
+
+/** thorough 雙模型互審：另一家的對照模型。 */
+const alternateModel = (model: ModelRef): ModelRef =>
+  model.provider === "anthropic"
+    ? { provider: "openai-codex", modelId: "gpt-5.5" }
+    : { provider: "anthropic", modelId: "claude-sonnet-5" }
 
 export const DEFAULT_CONFIG_FILENAME = "ai-review.config.json"
 
@@ -59,24 +71,31 @@ export const loadFileConfig = (options: {
   })
 
 export interface RunFlags {
+  readonly profile?: Profile
   readonly reviewers?: readonly string[]
   readonly model?: string
   readonly engine?: EngineId
+  readonly verify?: boolean
   readonly concurrency?: number
   readonly timeoutSeconds?: number
   readonly failOn?: FailOn
 }
 
 export interface ResolvedRun {
+  readonly profile: Profile
   readonly reviewers: readonly ResolvedReviewer[]
+  readonly verify: { readonly model: ModelRef; readonly engine: EngineId } | undefined
   readonly defaults: RunDefaults
 }
+
+const NO_PROJECT_INFO: ProjectInfo = { frameworks: [] }
 
 /** 純函式：registry 預設 + 檔案設定 + CLI flags → 這一輪要跑的 reviewers 與參數。 */
 export const resolveRun = (
   fileConfig: FileConfig,
   flags: RunFlags,
-  changedFiles: readonly string[]
+  changedFiles: readonly string[],
+  projectInfo: ProjectInfo = NO_PROJECT_INFO
 ): Effect.Effect<ResolvedRun, ConfigError> =>
   Effect.gen(function* () {
     const requested = flags.reviewers
@@ -89,31 +108,89 @@ export const resolveRun = (
       )
     }
 
-    const reviewers: ResolvedReviewer[] = []
-    for (const def of BUILTIN_REVIEWERS) {
-      const override = fileConfig.reviewers?.[def.id]
-      const enabled = requested ? requested.includes(def.id) : (override?.enabled ?? true)
-      if (!enabled) continue
-      if (!requested && !def.appliesTo(changedFiles)) continue
+    const profile: Profile = flags.profile ?? fileConfig.profile ?? "standard"
 
-      const modelString = flags.model ?? override?.model ?? def.defaultModel
+    let reviewers: ResolvedReviewer[] = []
+
+    if (profile === "quick" && !requested) {
+      const modelString = flags.model ?? DEFAULT_QUICK_MODEL
       const model = parseModelRef(modelString)
       if (!model) {
         return yield* Effect.fail(
           new ConfigError({ message: `模型格式錯誤："${modelString}"（需要 provider/modelId）` })
         )
       }
-
       reviewers.push({
-        id: def.id,
-        systemPrompt: def.systemPrompt,
+        id: "quick",
+        systemPrompt: QUICK_PROMPT,
         model,
-        engine: routeEngine(model, flags.engine ?? override?.engine)
+        engine: routeEngine(model, flags.engine)
       })
+    } else {
+      for (const def of BUILTIN_REVIEWERS) {
+        const override = fileConfig.reviewers?.[def.id]
+        const enabled = requested
+          ? requested.includes(def.id)
+          : (override?.enabled ?? (profile === "thorough" ? true : def.defaultEnabled))
+        if (!enabled) continue
+        if (!requested && !def.appliesTo(changedFiles)) continue
+
+        // 需要專案資訊的 reviewer（如 framework）：算不出 prompt 就跳過
+        const systemPrompt = def.promptFor ? def.promptFor(projectInfo) : def.systemPrompt
+        if (systemPrompt === undefined) continue
+
+        const modelString = flags.model ?? override?.model ?? def.defaultModel
+        const model = parseModelRef(modelString)
+        if (!model) {
+          return yield* Effect.fail(
+            new ConfigError({ message: `模型格式錯誤："${modelString}"（需要 provider/modelId）` })
+          )
+        }
+
+        reviewers.push({
+          id: def.id,
+          systemPrompt,
+          model,
+          engine: routeEngine(model, flags.engine ?? override?.engine)
+        })
+      }
+
+      // thorough：雙模型互審——每個 reviewer 加開另一家模型的對照實例
+      if (profile === "thorough") {
+        reviewers = reviewers.flatMap((reviewer) => {
+          const alt = alternateModel(reviewer.model)
+          if (alt.provider === reviewer.model.provider) return [reviewer]
+          return [
+            { ...reviewer, id: `${reviewer.id}@${reviewer.model.provider}` },
+            {
+              id: `${reviewer.id}@${alt.provider}`,
+              systemPrompt: reviewer.systemPrompt,
+              model: alt,
+              engine: routeEngine(alt)
+            }
+          ]
+        })
+      }
+    }
+
+    // verify：flag > config > profile 預設（thorough 開）
+    const verifyEnabled = flags.verify ?? fileConfig.verify?.enabled ?? (profile === "thorough")
+    let verify: ResolvedRun["verify"]
+    if (verifyEnabled) {
+      const verifyModelString = fileConfig.verify?.model ?? DEFAULT_VERIFY_MODEL
+      const verifyModel = parseModelRef(verifyModelString)
+      if (!verifyModel) {
+        return yield* Effect.fail(
+          new ConfigError({ message: `verify 模型格式錯誤："${verifyModelString}"` })
+        )
+      }
+      verify = { model: verifyModel, engine: routeEngine(verifyModel) }
     }
 
     return {
+      profile,
       reviewers,
+      verify,
       defaults: {
         concurrency: flags.concurrency ?? fileConfig.concurrency ?? DEFAULTS.concurrency,
         timeoutMs: (flags.timeoutSeconds ?? fileConfig.timeoutSeconds) !== undefined

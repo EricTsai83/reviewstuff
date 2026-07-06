@@ -35,6 +35,9 @@ export interface Report {
   readonly summary: {
     readonly total: number
     readonly bySeverity: Record<Severity, number>
+    readonly suppressed?: number
+    readonly droppedByVerify?: number
+    readonly totalCostUsd?: number
   }
   readonly exitCode: number
 }

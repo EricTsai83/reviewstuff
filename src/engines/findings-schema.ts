@@ -37,3 +37,61 @@ export const FINDINGS_TOOL_SCHEMA = Type.Object({
 })
 
 export const FINDINGS_JSON_SCHEMA_STRING = JSON.stringify(FINDINGS_TOOL_SCHEMA)
+
+const SEVERITIES = ["info", "warning", "error", "critical"]
+const CATEGORIES = ["correctness", "security", "architecture", "typescript", "performance", "testing", "style"]
+
+/**
+ * OpenAI strict structured-output 變體（codex exec --output-schema）：
+ * 所有欄位必須列在 required，可選欄位改為 nullable。
+ * 引擎收到後要先把 null 欄位剝掉再過 domain Schema。
+ */
+export const FINDINGS_STRICT_JSON_SCHEMA = {
+  type: "object",
+  properties: {
+    findings: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          file: { type: "string", description: "repo-relative file path" },
+          line: { type: ["integer", "null"], description: "line number in the NEW file" },
+          endLine: { type: ["integer", "null"] },
+          severity: { type: "string", enum: SEVERITIES },
+          category: { type: "string", enum: CATEGORIES },
+          title: { type: "string", description: "imperative, <= 80 chars" },
+          rationale: { type: "string", description: "why this is a problem; cite the code" },
+          suggestion: { type: ["string", "null"], description: "concrete fix" },
+          confidence: { type: "number", description: "0..1" }
+        },
+        required: [
+          "file",
+          "line",
+          "endLine",
+          "severity",
+          "category",
+          "title",
+          "rationale",
+          "suggestion",
+          "confidence"
+        ],
+        additionalProperties: false
+      }
+    }
+  },
+  required: ["findings"],
+  additionalProperties: false
+} as const
+
+/** 把 strict 模式回傳的 null 欄位剝掉，讓 domain Schema（optionalKey）能 decode。 */
+export const stripNullFields = (value: unknown): unknown => {
+  if (Array.isArray(value)) return value.map(stripNullFields)
+  if (value !== null && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>)
+        .filter(([, entryValue]) => entryValue !== null)
+        .map(([key, entryValue]) => [key, stripNullFields(entryValue)])
+    )
+  }
+  return value
+}
