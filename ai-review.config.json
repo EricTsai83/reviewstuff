@@ -1,0 +1,17 @@
+{
+  "concurrency": 3,
+  "timeoutSeconds": 180,
+  "failOn": "error",
+  "rulesFile": ".ai-review/rules.md",
+  "reviewers": {
+    "correctness": {
+      "model": "openai-codex/gpt-5.5"
+    },
+    "security": {
+      "model": "anthropic/claude-sonnet-5"
+    },
+    "typescript": {
+      "model": "openai-codex/gpt-5.5"
+    }
+  }
+}
