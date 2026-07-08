@@ -1,10 +1,10 @@
 {
-  "name": "ai-review",
+  "name": "reviewstuff",
   "version": "0.1.0",
   "description": "Local-first, cross-model AI code review CLI running on your existing subscriptions",
   "type": "module",
   "bin": {
-    "ai-review": "dist/cli.mjs"
+    "reviewstuff": "dist/cli.mjs"
   },
   "files": [
     "dist"

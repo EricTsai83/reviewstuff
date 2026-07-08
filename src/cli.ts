@@ -5,6 +5,8 @@ import { Command, Option } from "commander"
 import * as Effect from "effect/Effect"
 
 import { doctorCommand } from "./commands/doctor.ts"
+import { fixCommand } from "./commands/fix.ts"
+import type { FixCliFlags } from "./commands/fix.ts"
 import { loginCommand, logoutCommand } from "./commands/login.ts"
 import { initCommand, reviewersCommand } from "./commands/misc.ts"
 import { reviewCommand } from "./commands/review.ts"
@@ -52,7 +54,7 @@ const collect = (value: string, previous: string[]): string[] => [...previous, v
 const program = new Command()
 
 program
-  .name("ai-review")
+  .name("reviewstuff")
   .description("Local-first, cross-model AI code review on your existing subscriptions")
   .version(pkg.version)
   .option("--staged", "只 review staged 變更")
@@ -82,7 +84,7 @@ program
       "none"
     ])
   )
-  .option("--config <path>", "設定檔路徑（預設 ai-review.config.json）")
+  .option("--config <path>", "設定檔路徑（預設 reviewstuff.config.json）")
   .option("--timeout <seconds>", "單一 reviewer 逾時秒數", (value) => Number.parseInt(value, 10))
   .option("--concurrency <n>", "平行 reviewer 數", (value) => Number.parseInt(value, 10))
   .action(async (options) => {
@@ -104,6 +106,37 @@ program
       concurrency: options.concurrency
     }
     await execute(reviewCommand(flags).pipe(Effect.provide(AppLive)))
+  })
+
+program
+  .command("fix")
+  .description("對達門檻的 findings 產生修復，暫存 worktree 跑 gates 驗證後才建議套用")
+  .option("--staged")
+  .option("--since <ref>")
+  .option("--file <glob>", "檔案過濾（可重複）", collect, [])
+  .option("--model <provider/model>", "review 階段的模型覆寫")
+  .addOption(new Option("--engine <engine>", "引擎覆寫").choices(["pi", "claude", "codex"]))
+  .option("--fix-model <provider/model>", "修復生成用的模型（預設 anthropic/claude-sonnet-5）")
+  .addOption(new Option("--fix-severity <severity>", "修復的最低嚴重度門檻（預設 error）").choices(["critical", "error", "warning", "info"]))
+  .option("--apply", "驗證全綠後把修復寫回工作目錄")
+  .option("--dry-run", "只顯示修復與驗證結果，不寫入")
+  .option("--config <path>")
+  .option("--timeout <seconds>", "逾時秒數", (value) => Number.parseInt(value, 10))
+  .action(async (options) => {
+    const flags: FixCliFlags = {
+      staged: options.staged,
+      since: options.since,
+      file: options.file.length > 0 ? options.file : undefined,
+      model: options.model,
+      engine: options.engine,
+      fixModel: options.fixModel,
+      apply: options.apply,
+      dryRun: options.dryRun,
+      fixSeverity: options.fixSeverity,
+      config: options.config,
+      timeout: options.timeout
+    }
+    await execute(fixCommand(flags).pipe(Effect.provide(AppLive)))
   })
 
 program
@@ -131,7 +164,7 @@ program
 
 program
   .command("init")
-  .description("在目前目錄產生 ai-review.config.json")
+  .description("在目前目錄產生 reviewstuff.config.json")
   .action(async () => {
     await execute(initCommand())
   })

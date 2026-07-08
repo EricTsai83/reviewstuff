@@ -13,7 +13,7 @@ const git = (cwd: string, ...args: string[]) =>
   execFileSync("git", args, { cwd, encoding: "utf8", env: { ...process.env, GIT_CONFIG_GLOBAL: "/dev/null" } })
 
 export const makeFixtureRepo = (): FixtureRepo => {
-  const root = mkdtempSync(path.join(os.tmpdir(), "ai-review-e2e-"))
+  const root = mkdtempSync(path.join(os.tmpdir(), "reviewstuff-e2e-"))
 
   git(root, "init", "-b", "main")
   git(root, "config", "user.email", "test@example.com")

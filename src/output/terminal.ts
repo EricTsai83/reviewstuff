@@ -32,7 +32,7 @@ const renderFinding = (finding: AggregatedFinding): string => {
 export const renderTerminal = (report: Report): string => {
   const out: string[] = []
 
-  out.push(pc.bold(`\nai-review · ${report.scope.kind} · ${report.scope.files.length} file(s)`))
+  out.push(pc.bold(`\nreviewstuff · ${report.scope.kind} · ${report.scope.files.length} file(s)`))
   out.push("")
 
   for (const run of report.reviewers) {

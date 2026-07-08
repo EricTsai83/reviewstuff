@@ -1,7 +1,7 @@
 import * as Effect from "effect/Effect"
 import pc from "picocolors"
 
-import { AUTH_FILE, loggedInProviders } from "../engines/auth.ts"
+import { AUTH_FILE, hasEnvApiKey, loggedInProviders } from "../engines/auth.ts"
 import { GitService } from "../git/service.ts"
 import { EXIT_CLEAN, EXIT_USAGE } from "../output/json.ts"
 import { BUILTIN_REVIEWERS } from "../reviewers/registry.ts"
@@ -14,7 +14,7 @@ const bad = (label: string, detail: string) => console.log(`  ${pc.red("✗")} $
 export const doctorCommand = () =>
   Effect.gen(function* () {
     let healthy = true
-    console.log(pc.bold("\nai-review doctor\n"))
+    console.log(pc.bold("\nreviewstuff doctor\n"))
 
     // git repo
     const repoRoot = yield* GitService.pipe(
@@ -38,9 +38,11 @@ export const doctorCommand = () =>
     for (const provider of wanted) {
       if (providers.includes(provider)) {
         ok(`pi:${provider}`, `已登入（${AUTH_FILE}）`)
+      } else if (hasEnvApiKey(provider)) {
+        ok(`pi:${provider}`, "使用環境變數 API key")
       } else {
         healthy = false
-        bad(`pi:${provider}`, `未登入——跑 ai-review login ${provider}`)
+        bad(`pi:${provider}`, `未登入——跑 reviewstuff login ${provider}（或設定 API key 環境變數）`)
       }
     }
 

@@ -12,7 +12,7 @@ const SAMPLE_CONFIG = {
   concurrency: 3,
   timeoutSeconds: 180,
   failOn: "error",
-  rulesFile: ".ai-review/rules.md",
+  rulesFile: ".reviewstuff/rules.md",
   reviewers: {
     correctness: { model: "openai-codex/gpt-5.5" },
     security: { model: "anthropic/claude-sonnet-5" },
@@ -28,7 +28,7 @@ export const initCommand = () =>
     }
     writeFileSync(DEFAULT_CONFIG_FILENAME, `${JSON.stringify(SAMPLE_CONFIG, null, 2)}\n`)
     console.log(`${pc.green("✓")} 已建立 ${DEFAULT_CONFIG_FILENAME}`)
-    console.log(pc.dim("  下一步：ai-review doctor 檢查引擎登入狀態"))
+    console.log(pc.dim("  下一步：reviewstuff doctor 檢查引擎登入狀態"))
     return EXIT_CLEAN
   })
 

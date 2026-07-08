@@ -84,7 +84,7 @@ export const reviewCommand = (flags: ReviewCliFlags) =>
         return { frameworks: [] }
       }
     })
-    const resolved = yield* resolveRun(fileConfig, runFlags, changedFiles, projectInfo)
+    const resolved = yield* resolveRun(fileConfig, runFlags, changedFiles, projectInfo, repoRoot)
 
     if (resolved.reviewers.length === 0) {
       console.error("沒有啟用的 reviewer。")

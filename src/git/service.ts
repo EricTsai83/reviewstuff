@@ -19,6 +19,10 @@ export interface GitServiceShape {
     scope: ReviewScope,
     fileGlobs?: readonly string[]
   ) => Effect.Effect<readonly string[], GitError>
+  /** 建一個 detached worktree 指向 HEAD，回傳其路徑 */
+  readonly addWorktree: (worktreePath: string) => Effect.Effect<void, GitError>
+  /** 移除 worktree（force） */
+  readonly removeWorktree: (worktreePath: string) => Effect.Effect<void, GitError>
 }
 
 export class GitService extends Context.Service<GitService, GitServiceShape>()("GitService") {}
@@ -67,5 +71,11 @@ export const GitServiceLive = Layer.succeed(GitService, {
   changedFiles: (scope, fileGlobs) =>
     gitOk(withGlobs([...diffArgs(scope), "--name-only"], fileGlobs)).pipe(
       Effect.map((stdout) => stdout.split("\n").map((line) => line.trim()).filter(Boolean))
-    )
+    ),
+
+  addWorktree: (worktreePath) =>
+    gitOk(["worktree", "add", "--detach", worktreePath, "HEAD"]).pipe(Effect.asVoid),
+
+  removeWorktree: (worktreePath) =>
+    gitOk(["worktree", "remove", "--force", worktreePath]).pipe(Effect.asVoid)
 })

@@ -5,7 +5,7 @@ import type { AggregatedFinding } from "../domain/report.ts"
 
 /** 存量 findings 抑制：baseline 檔記 fingerprints，review 時濾掉已知項。 */
 
-export const BASELINE_RELATIVE_PATH = path.join(".ai-review", "baseline.json")
+export const BASELINE_RELATIVE_PATH = path.join(".reviewstuff", "baseline.json")
 
 interface BaselineFile {
   readonly version: 1

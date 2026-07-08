@@ -91,7 +91,7 @@ describe("detectFrameworks", () => {
 })
 
 describe("baseline", () => {
-  const tmp = mkdtempSync(path.join(os.tmpdir(), "ai-review-baseline-"))
+  const tmp = mkdtempSync(path.join(os.tmpdir(), "reviewstuff-baseline-"))
   afterAll(() => {
     rmSync(tmp, { recursive: true, force: true })
   })
@@ -185,7 +185,8 @@ describe("verifyFindings", () => {
                   readonly _tag = "EngineFailed"
                   readonly message = "judge down"
                 })() as never
-              )
+              ),
+            generateFixes: () => Effect.fail(undefined as never)
           })
         })
       )

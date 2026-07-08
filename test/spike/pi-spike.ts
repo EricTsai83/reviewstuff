@@ -2,7 +2,7 @@
  * Phase 0 Spike A：驗證 pi library 的關鍵假設
  *
  * 用法：
- *   pnpm spike:pi login <anthropic|openai-codex>   # 訂閱 OAuth 登入，存 ~/.config/ai-review/auth.json
+ *   pnpm spike:pi login <anthropic|openai-codex>   # 訂閱 OAuth 登入，存 ~/.config/reviewstuff/auth.json
  *   pnpm spike:pi models <provider>                # 列出該 provider 的內建模型
  *   pnpm spike:pi run <provider> <modelId>         # 用 record_findings 工具對內建 buggy diff 跑一次迷你 review
  *
@@ -23,7 +23,7 @@ import { builtinModels } from "@earendil-works/pi-ai/providers/all"
 import { agentLoop } from "@earendil-works/pi-agent-core"
 import type { AgentMessage, AgentTool } from "@earendil-works/pi-agent-core"
 
-const AUTH_DIR = path.join(os.homedir(), ".config", "ai-review")
+const AUTH_DIR = path.join(os.homedir(), ".config", "reviewstuff")
 const AUTH_FILE = path.join(AUTH_DIR, "auth.json")
 
 type AuthFile = Record<string, OAuthCredentials>

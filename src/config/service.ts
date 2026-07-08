@@ -23,7 +23,7 @@ const alternateModel = (model: ModelRef): ModelRef =>
     ? { provider: "openai-codex", modelId: "gpt-5.5" }
     : { provider: "anthropic", modelId: "claude-sonnet-5" }
 
-export const DEFAULT_CONFIG_FILENAME = "ai-review.config.json"
+export const DEFAULT_CONFIG_FILENAME = "reviewstuff.config.json"
 
 export interface RunDefaults {
   readonly concurrency: number
@@ -36,7 +36,7 @@ export const DEFAULTS: RunDefaults = {
   concurrency: 3,
   timeoutMs: 180_000,
   failOn: "error",
-  rulesFile: ".ai-review/rules.md"
+  rulesFile: ".reviewstuff/rules.md"
 }
 
 /** 讀取設定檔：指定路徑必須存在；預設路徑不存在時回空設定。 */
@@ -90,20 +90,68 @@ export interface ResolvedRun {
 
 const NO_PROJECT_INFO: ProjectInfo = { frameworks: [] }
 
-/** 純函式：registry 預設 + 檔案設定 + CLI flags → 這一輪要跑的 reviewers 與參數。 */
+interface CustomReviewerDef {
+  readonly id: string
+  readonly systemPrompt: string
+  readonly defaultModel: string
+  readonly engine?: EngineId
+}
+
+/** 讀取 config 裡非內建 id 的自訂 reviewer（讀 prompt 檔）。 */
+const loadCustomReviewers = (
+  fileConfig: FileConfig,
+  repoRoot: string
+): Effect.Effect<readonly CustomReviewerDef[], ConfigError> =>
+  Effect.gen(function* () {
+    const entries = Object.entries(fileConfig.reviewers ?? {}).filter(
+      ([id]) => !BUILTIN_REVIEWERS.some((def) => def.id === id)
+    )
+    const customs: CustomReviewerDef[] = []
+    for (const [id, config] of entries) {
+      if (!config.prompt) {
+        return yield* Effect.fail(
+          new ConfigError({ message: `自訂 reviewer "${id}" 必須指定 prompt 檔（reviewers.${id}.prompt）` })
+        )
+      }
+      let systemPrompt: string
+      try {
+        systemPrompt = readFileSync(path.resolve(repoRoot, config.prompt), "utf8").trim()
+      } catch {
+        return yield* Effect.fail(
+          new ConfigError({ message: `自訂 reviewer "${id}" 的 prompt 檔讀不到：${config.prompt}` })
+        )
+      }
+      if (!systemPrompt) {
+        return yield* Effect.fail(new ConfigError({ message: `自訂 reviewer "${id}" 的 prompt 檔是空的` }))
+      }
+      customs.push({
+        id,
+        systemPrompt,
+        defaultModel: config.model ?? "openai-codex/gpt-5.5",
+        engine: config.engine
+      })
+    }
+    return customs
+  })
+
+/** registry 預設 + 檔案設定（含自訂 reviewer）+ CLI flags → 這一輪要跑的 reviewers 與參數。 */
 export const resolveRun = (
   fileConfig: FileConfig,
   flags: RunFlags,
   changedFiles: readonly string[],
-  projectInfo: ProjectInfo = NO_PROJECT_INFO
+  projectInfo: ProjectInfo = NO_PROJECT_INFO,
+  repoRoot: string = process.cwd()
 ): Effect.Effect<ResolvedRun, ConfigError> =>
   Effect.gen(function* () {
+    const customReviewers = yield* loadCustomReviewers(fileConfig, repoRoot)
+    const knownIds = new Set([...BUILTIN_REVIEWERS.map((def) => def.id), ...customReviewers.map((def) => def.id)])
+
     const requested = flags.reviewers
-    const unknown = requested?.filter((id) => !BUILTIN_REVIEWERS.some((def) => def.id === id)) ?? []
+    const unknown = requested?.filter((id) => !knownIds.has(id)) ?? []
     if (unknown.length > 0) {
       return yield* Effect.fail(
         new ConfigError({
-          message: `未知的 reviewer：${unknown.join(", ")}（可用：${BUILTIN_REVIEWERS.map((d) => d.id).join(", ")}）`
+          message: `未知的 reviewer：${unknown.join(", ")}（可用：${[...knownIds].join(", ")}）`
         })
       )
     }
@@ -152,6 +200,24 @@ export const resolveRun = (
           systemPrompt,
           model,
           engine: routeEngine(model, flags.engine ?? override?.engine)
+        })
+      }
+
+      // 自訂 reviewer（config 裡非內建 id + prompt 檔）
+      for (const def of customReviewers) {
+        if (requested && !requested.includes(def.id)) continue
+        const modelString = flags.model ?? def.defaultModel
+        const model = parseModelRef(modelString)
+        if (!model) {
+          return yield* Effect.fail(
+            new ConfigError({ message: `自訂 reviewer "${def.id}" 模型格式錯誤："${modelString}"` })
+          )
+        }
+        reviewers.push({
+          id: def.id,
+          systemPrompt: def.systemPrompt,
+          model,
+          engine: routeEngine(model, flags.engine ?? def.engine)
         })
       }
 
