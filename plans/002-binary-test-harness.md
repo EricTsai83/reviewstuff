@@ -6,7 +6,7 @@
 
 ## Working State
 
-完成後 `pnpm test` 會先 build binary，再用 `execFileSync(dist/reviewstuff, args)` 測試 CLI。
+完成後 `bun run test` 會先 build binary，再用 `execFileSync(dist/reviewstuff, args)` 測試 CLI。
 
 ## Scope
 
@@ -40,9 +40,9 @@
 ## Verification
 
 ```bash
-pnpm typecheck
-pnpm build
-pnpm test
+bun run typecheck
+bun run build
+bun run test
 ```
 
 ## Acceptance Criteria
@@ -50,4 +50,3 @@ pnpm test
 - e2e 不呼叫 `node dist/...`。
 - binary smoke tests 穩定通過。
 - 測試失敗時能清楚看到 stdout/stderr/exit code。
-

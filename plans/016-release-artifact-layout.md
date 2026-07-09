@@ -50,8 +50,8 @@ interface ReleaseManifestV1 {
 ## Verification
 
 ```bash
-pnpm build
-pnpm package:release
+bun run build
+bun run package:release
 shasum -a 256 dist/release/*.tar.gz
 tar -tzf dist/release/*.tar.gz
 ```
@@ -61,4 +61,3 @@ tar -tzf dist/release/*.tar.gz
 - tarball 裡有 executable。
 - checksum 可驗。
 - manifest 可供後續 install channels 使用。
-

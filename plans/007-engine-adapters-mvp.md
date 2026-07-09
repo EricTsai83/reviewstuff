@@ -35,7 +35,7 @@
 ## Verification
 
 ```bash
-pnpm test
+bun run test
 AI_REVIEW_FAKE_ENGINE=1 ./dist/reviewstuff review --staged --json
 ```
 
@@ -50,4 +50,3 @@ reviewstuff review --staged --engine claude
 - fake engine deterministic。
 - provider failure 不會 crash 整個 review。
 - structured output parse 失敗會被清楚回報。
-

@@ -39,7 +39,7 @@
 ## Verification
 
 ```bash
-pnpm test
+bun run test
 AI_REVIEW_FAKE_ENGINE=1 ./dist/reviewstuff review --staged --json
 find .reviewstuff/sessions -type f
 ```
@@ -49,4 +49,3 @@ find .reviewstuff/sessions -type f
 - session 可用 id 和 latest 載入。
 - partial reviewer failure 仍保存成功 findings。
 - storage schema 有 version。
-

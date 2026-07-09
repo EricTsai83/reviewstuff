@@ -9,8 +9,8 @@
 完成後可以執行：
 
 ```bash
-pnpm build
-pnpm install:local
+bun run build
+bun run install:local
 reviewstuff --help
 ```
 
@@ -19,7 +19,7 @@ reviewstuff --help
 包含：
 
 - `scripts/install-local.mjs`
-- `pnpm install:local`
+- `bun run install:local`
 - symlink 到 `~/.local/bin/reviewstuff`
 - PATH guidance
 
@@ -40,8 +40,8 @@ reviewstuff --help
 ## Verification
 
 ```bash
-pnpm build
-pnpm install:local
+bun run build
+bun run install:local
 ~/.local/bin/reviewstuff --version
 reviewstuff --help
 ```
@@ -51,4 +51,3 @@ reviewstuff --help
 - local install 可重複執行。
 - 不覆蓋 unrelated file。
 - 使用者可以用 `reviewstuff` 指令跑本機 binary。
-

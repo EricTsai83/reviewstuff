@@ -35,8 +35,8 @@
 ## Verification
 
 ```bash
-pnpm typecheck
-pnpm test
+bun run typecheck
+bun run test
 ./dist/reviewstuff review --staged --profile quick --json
 ./dist/reviewstuff review --staged --reviewers correctness,security --json
 ```
@@ -46,4 +46,3 @@ pnpm test
 - 無 config 時使用安全預設值。
 - config error 有清楚 message。
 - prompt registry 可單元測試。
-

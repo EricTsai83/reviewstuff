@@ -35,7 +35,7 @@
 ## Verification
 
 ```bash
-pnpm test
+bun run test
 AI_REVIEW_FAKE_ENGINE=1 ./dist/reviewstuff review --staged --json
 ```
 
@@ -53,4 +53,3 @@ rust-basic
 - TypeScript review 不回歸。
 - non-TypeScript file 不 crash。
 - stored findings 有 language metadata。
-

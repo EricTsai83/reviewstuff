@@ -9,7 +9,7 @@
 完成後可以執行：
 
 ```bash
-pnpm build
+bun run build
 ./dist/reviewstuff --version
 ./dist/reviewstuff --help
 ```
@@ -21,6 +21,7 @@ pnpm build
 包含：
 
 - `package.json`
+- `bun.lock`
 - `tsconfig.json`
 - `.gitignore`
 - `src/cli.ts`
@@ -40,7 +41,7 @@ pnpm build
 
 ## Implementation Steps
 
-1. 建立 TypeScript/Bun 專案設定。
+1. 建立 TypeScript/Bun 專案設定，`package.json` 設定 `packageManager` 為 Bun。
 2. 使用 `commander` 建立 CLI。
 3. 用 JSON import 讀 package version，不使用 runtime `createRequire("../package.json")`。
 4. 新增 build script：
@@ -54,9 +55,9 @@ bun build src/cli.ts --compile --target=bun-darwin-arm64 --outfile=dist/reviewst
 ## Verification
 
 ```bash
-pnpm install
-pnpm typecheck
-pnpm build
+bun install
+bun run typecheck
+bun run build
 ./dist/reviewstuff --version
 ./dist/reviewstuff --help
 file dist/reviewstuff
@@ -68,4 +69,3 @@ file dist/reviewstuff
 - `file dist/reviewstuff` 顯示 macOS arm64 executable。
 - CLI 不需要透過 `node` 啟動。
 - 這階段沒有 review 行為，只建立可執行骨架。
-

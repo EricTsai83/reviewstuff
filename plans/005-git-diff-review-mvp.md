@@ -45,8 +45,8 @@ reviewstuff review --json
 ## Verification
 
 ```bash
-pnpm test
-pnpm build
+bun run test
+bun run build
 AI_REVIEW_FAKE_ENGINE=1 ./dist/reviewstuff review --staged --json
 ```
 
@@ -56,4 +56,3 @@ AI_REVIEW_FAKE_ENGINE=1 ./dist/reviewstuff review --staged --json
 - 無變更時 clean exit。
 - 有 marker diff 時產生 finding。
 - JSON output 穩定、可測。
-

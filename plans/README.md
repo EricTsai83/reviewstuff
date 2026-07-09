@@ -10,6 +10,7 @@
 - 外部 command 必須有 timeout、output limit、exit-code mapping。
 - 預設 review 要快且可預測；慢的 deep review 必須 opt-in。
 - TypeScript 是實作語言，不是 review 能力邊界。
+- Repo package management 使用 Bun；開發指令一律用 `bun install` / `bun run ...`。
 - Release 的 source of truth 是 standalone binary；npm/Homebrew 只是安裝通道。
 
 ## 順序
@@ -37,10 +38,9 @@
 
 ## 每個 plan 完成前檢查
 
-- `pnpm typecheck`
-- `pnpm test`
-- `pnpm build`
+- `bun run typecheck`
+- `bun run test`
+- `bun run build`
 - `./dist/reviewstuff --version`
 - `./dist/reviewstuff --help`
 - 該 plan 自己列出的驗收指令
-

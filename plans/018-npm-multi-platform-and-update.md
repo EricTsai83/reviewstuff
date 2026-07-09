@@ -47,13 +47,13 @@ reviewstuff
 
 - Homebrew install: 指引用 `brew upgrade`。
 - npm install: 指引用 package manager update。
-- local symlink: 指引用 `pnpm build`。
+- local symlink: 指引用 `bun run build`。
 - direct tarball install: 可 self-update，且必須驗 checksum。
 
 ## Verification
 
 ```bash
-pnpm package:release
+bun run package:release
 npm install -g ./packages/npm/reviewstuff/*.tgz
 reviewstuff --version
 reviewstuff update --check
@@ -64,4 +64,3 @@ reviewstuff update --check
 - npm 執行同一份 standalone binary。
 - 多平台 manifest 正確。
 - self-update replacement atomic 且 checksum verified。
-

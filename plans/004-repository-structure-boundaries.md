@@ -48,9 +48,9 @@ src/
 ## Verification
 
 ```bash
-pnpm typecheck
-pnpm test
-pnpm build
+bun run typecheck
+bun run test
+bun run build
 ./dist/reviewstuff review --help
 ```
 
@@ -59,4 +59,3 @@ pnpm build
 - `commands/` 沒有大型流程邏輯。
 - `docs/repository-structure.md` 清楚描述 module ownership。
 - 後續 plan 有明確落點。
-
