@@ -20,6 +20,7 @@
 
 - WebSocket。
 - remote server。
+- Deep review tool-loop semantics；017 extends this protocol with bounded agent/tool events.
 
 ## Review Events
 

@@ -27,6 +27,7 @@ TypeScript 可以是第一個成熟 adapter，但不能是 core abstraction。
 - Tree-sitter deep parsing。
 - LSP integration。
 - MCP server。
+- Agentic tool loop；deep review agent 由 017 實作。
 
 ## Core Architecture
 
@@ -141,6 +142,8 @@ Unknown files should still be reviewable with generic text/diff context.
 ## Prompt Rule
 
 Prompts should be built from normalized context. A TypeScript-specific prompt section may exist, but it must be contributed by the TypeScript adapter, not hard-coded in the core review engine.
+
+017 can reuse the same normalized context for deep review. The language core should not know whether findings came from deterministic review or agentic deep review.
 
 ## Verification
 

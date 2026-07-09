@@ -12,6 +12,8 @@
 - TypeScript 是 implementation language，不是 review domain boundary；review core 必須能支援非 TypeScript 專案。
 - 正式 release 的 source of truth 是 compiled standalone binary；npm、Homebrew、install script 都只是安裝管道，不應各自產生不同 runtime artifact。
 - 外部語言工具必須透過 adapters 接入；core schema 不可綁定 `tsc`、ESLint、Vitest 或 Node 專案假設。
+- Agentic review 可以作為 opt-in deep mode，但預設 pre-push review 必須維持快速、可預測、可重現。
+- Deep review 的 agent 必須輸出 ReviewStuff structured findings；不能只產生自然語言 comment。
 
 ## Plans
 
@@ -33,6 +35,7 @@
 | 014 | [NPM Binary Wrapper](./014-npm-binary-wrapper.md) | 讓 npm/pnpm/yarn 成為 binary 安裝通道 | 008 |
 | 015 | [Language Agnostic Review Core](./015-language-agnostic-review-core.md) | 讓 review core 不綁定 TypeScript | 004, 007 |
 | 016 | [External Analyzer Adapters](./016-external-analyzer-adapters.md) | 接入 TypeScript/Python/Go/Rust 等語言工具 | 015 |
+| 017 | [Agentic Deep Review](./017-agentic-deep-review.md) | 引入 OpenReview-style bounded tool-using review agent | 004, 007, 015, 016 |
 
 ## 建議里程碑
 
@@ -71,7 +74,13 @@
 
 結果：ReviewStuff 的 core review/fix/session protocol 不再假設專案是 TypeScript，後續可以逐步加入 Python、Go、Rust、Java 等 adapters。
 
-### Milestone 5: Platform Expansion
+### Milestone 5: Agentic Deep Review
+
+- 017
+
+結果：可用 `reviewstuff review --deep` 做較慢但更完整的本機 deep review，agent 可以讀相關檔案、搜尋 repo、跑受控 analyzers、載入 skills，但最後仍保存 structured findings。
+
+### Milestone 6: Platform Expansion
 
 - 012
 
