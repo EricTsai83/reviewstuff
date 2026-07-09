@@ -2,70 +2,40 @@
 
 ## Goal
 
-讓開發者可以把本機 build 出來的 binary 安裝成 Terminal 指令：
-
-```bash
-reviewstuff --help
-```
+讓開發者可以把本機 build 出來的 binary 安裝成 terminal command。
 
 ## Working State
 
-做完這份 plan 後，開發者可以透過 `pnpm install:local` 把目前 repo build 出來的 binary 安裝到 PATH，日常用 `reviewstuff` 指令做本機 pre-push review。
-
-## Depends On
-
-- 001 - Bun Standalone MVP
-
-## Scope
-
-包含：
-
-- 新增 local install script。
-- symlink 到 `~/.local/bin/reviewstuff`。
-- README 文件。
-
-不包含：
-
-- npm global install。
-- Homebrew。
-- auto-update。
-
-## Implementation
-
-### 1. Add `scripts/install-local.mjs`
-
-流程：
-
-1. Resolve repo root from script location.
-2. Verify `dist/reviewstuff` exists.
-3. Verify executable bit.
-4. Create `~/.local/bin`.
-5. Replace existing symlink/file only if:
-   - it is already symlink to this repo, or
-   - user passes `--force`.
-6. Create symlink:
-
-```text
-~/.local/bin/reviewstuff -> <repo>/dist/reviewstuff
-```
-
-7. Print PATH guidance if `~/.local/bin` is not in `PATH`.
-
-### 2. Add Package Script
-
-```json
-"install:local": "bun run scripts/install-local.mjs"
-```
-
-### 3. README
-
-Add:
+完成後可以執行：
 
 ```bash
 pnpm build
 pnpm install:local
 reviewstuff --help
 ```
+
+## Scope
+
+包含：
+
+- `scripts/install-local.mjs`
+- `pnpm install:local`
+- symlink 到 `~/.local/bin/reviewstuff`
+- PATH guidance
+
+不包含：
+
+- Homebrew
+- npm global install
+- auto-update
+
+## Implementation Steps
+
+1. 確認 `dist/reviewstuff` 存在且可執行。
+2. 建立 `~/.local/bin`。
+3. 建立 symlink。
+4. 若目標已存在且不是指向此 repo，除非 `--force` 否則拒絕覆蓋。
+5. 若 `~/.local/bin` 不在 PATH，印出修正建議。
 
 ## Verification
 
@@ -73,11 +43,12 @@ reviewstuff --help
 pnpm build
 pnpm install:local
 ~/.local/bin/reviewstuff --version
+reviewstuff --help
 ```
 
 ## Acceptance Criteria
 
-- `pnpm install:local` creates a symlink.
-- Re-running it is idempotent.
-- It does not overwrite unrelated files unless `--force`.
-- It prints clear PATH guidance.
+- local install 可重複執行。
+- 不覆蓋 unrelated file。
+- 使用者可以用 `reviewstuff` 指令跑本機 binary。
+
