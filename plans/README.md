@@ -58,6 +58,7 @@ Effect 的採用節奏要保守：先建立 runtime entrypoint 和必要 service
 - 可 build 成 Bun standalone binary。
 - 有 binary e2e tests、本機 symlink 安裝、Homebrew formula、npm darwin-arm64 wrapper。
 - 可用真實 AI provider review staged git diff，產生 structured findings/report。
+- provider/model 可切換：cloud API provider、本機 CLI provider、不同模型字串都走同一個 engine contract。
 - fake engine 仍可做 deterministic tests。
 - 有 config/profile、session storage、findings 查詢、prompt replay、fix dry-run、NDJSON agent output。
 - 有 TypeScript/Python/unknown 的 language-neutral schema。

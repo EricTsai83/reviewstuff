@@ -6,7 +6,7 @@
 
 ## Working State
 
-完成後可以用 `reviewstuff.config.json` 控制預設 profile、timeout、concurrency。
+完成後可以用 `reviewstuff.config.json` 控制預設 profile、engine、provider、model、timeout、concurrency。
 
 ## Scope
 
@@ -16,6 +16,7 @@
 - `src/config/service.ts`
 - versioned config schema
 - profiles：`quick`、`standard`
+- default engine/provider/model selection
 - config error rendering
 
 不包含：
@@ -31,8 +32,28 @@
 1. 定義 versioned config schema。
 2. 實作 config loading 與 validation。
 3. 建立 `quick`、`standard` 兩個 profile。
-4. review use-case 根據 config/profile 決定 timeout/concurrency 與 fake reviewer behavior。
+4. review use-case 根據 config/profile 決定 engine/provider/model、timeout/concurrency 與 fake reviewer behavior。
 5. config 錯誤轉成 usage error，不印 stack trace。
+
+## Config Shape
+
+最小 config 先支援：
+
+```json
+{
+  "schemaVersion": 1,
+  "review": {
+    "profile": "standard",
+    "engine": "fake",
+    "provider": "fake",
+    "model": "fake-reviewer-v1",
+    "timeoutMs": 120000,
+    "concurrency": 2
+  }
+}
+```
+
+CLI flags 優先於 config，例如 `--engine openai --model <model-id>`。
 
 ## Verification
 
@@ -40,13 +61,14 @@
 bun run typecheck
 bun run test
 ./dist/reviewstuff review --staged --profile quick --json
+./dist/reviewstuff review --staged --engine fake --model fake-reviewer-v1 --json
 ```
 
 ## Acceptance Criteria
 
 - 無 config 時使用安全預設值。
 - config error 有清楚 message。
-- profile resolution 可單元測試。
+- profile 與 engine/provider/model resolution 可單元測試。
 
 ## Learning Focus
 
