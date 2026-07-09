@@ -49,3 +49,8 @@ find .reviewstuff/sessions -type f
 - session 可用 id 和 latest 載入。
 - partial reviewer failure 仍保存成功 findings。
 - storage schema 有 version。
+
+## Learning Focus
+
+- versioned persisted schema。
+- atomic file writes 與 repo-root path containment。

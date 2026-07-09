@@ -10,8 +10,7 @@
 
 ```bash
 reviewstuff review --staged
-reviewstuff review --since main
-reviewstuff review --json
+reviewstuff review --staged --json
 ```
 
 這階段不呼叫 AI，只用 fake/deterministic reviewer 驗證整條 pipeline。
@@ -26,10 +25,14 @@ reviewstuff review --json
 - `src/domain/report.ts`
 - `src/use-cases/run-review.ts`
 - terminal/json output
-- changed file filtering
+- staged diff reading
+- minimal changed file filtering
+- git subprocess 透過 `src/platform/command-runner.ts`，不得直接使用 `child_process`、`Bun.spawn` 或 shell string
 
 不包含：
 
+- `--since <ref>`
+- full working tree scope
 - real provider engine
 - session storage
 - fix workflow
@@ -37,8 +40,8 @@ reviewstuff review --json
 ## Implementation Steps
 
 1. 實作 git repo detection。
-2. 支援 scopes：`--staged`、`--since <ref>`、working tree default。
-3. 讀 changed files 與 unified diff。
+2. 支援第一個 scope：`--staged`。
+3. 讀 staged changed files 與 unified diff。
 4. deterministic reviewer 對特定 marker 產生 finding，例如 `REVIEWSTUFF_FAKE_FINDING`。
 5. 產生 versioned report。
 
@@ -56,3 +59,10 @@ AI_REVIEW_FAKE_ENGINE=1 ./dist/reviewstuff review --staged --json
 - 無變更時 clean exit。
 - 有 marker diff 時產生 finding。
 - JSON output 穩定、可測。
+- git command timeout、output limit、exit-code mapping 有測試覆蓋。
+
+## Learning Focus
+
+- 用 Effect use-case 編排第一條完整 pipeline。
+- 透過 command runner 受控執行 `git`。
+- 先用 deterministic reviewer 驗證資料流，不引入 AI 變因。

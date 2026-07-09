@@ -2,11 +2,11 @@
 
 ## Goal
 
-讓 review core 不綁 TypeScript，為 Python、Go、Rust、Java 等語言預留 extension points。
+讓 review core 不綁 TypeScript，先為 TypeScript 與 Python 建立 language-neutral extension points。
 
 ## Working State
 
-完成後 TypeScript 和非 TypeScript 檔案都能用同一套 schema 表示。
+完成後 TypeScript、Python、unknown files 都能用同一套 schema 表示。
 
 ## Scope
 
@@ -17,9 +17,11 @@
 - `LanguageId`
 - language-neutral context/finding schema
 - generic fallback adapter
+- TypeScript/Python basic fixtures
 
 不包含：
 
+- Go/Rust adapters
 - 實作所有 analyzer
 - Tree-sitter deep parsing
 - LSP integration
@@ -44,8 +46,7 @@ fixture:
 ```text
 typescript-basic
 python-basic
-go-basic
-rust-basic
+unknown-basic
 ```
 
 ## Acceptance Criteria
@@ -53,3 +54,8 @@ rust-basic
 - TypeScript review 不回歸。
 - non-TypeScript file 不 crash。
 - stored findings 有 language metadata。
+
+## Learning Focus
+
+- 把 domain schema 從單一語言假設中解耦。
+- 先做 extension point，不急著接所有語言工具。

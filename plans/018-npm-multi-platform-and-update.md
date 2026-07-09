@@ -1,8 +1,8 @@
-# 018 - NPM Multi Platform And Update
+# 018 - NPM First Platform Package
 
 ## Goal
 
-補齊 npm 安裝通道、多平台 binaries、direct install update policy。
+補齊 npm 安裝通道的第一個平台 package，multi-platform 與 update policy 留到後續 hardening。
 
 ## Working State
 
@@ -10,23 +10,24 @@
 
 ```bash
 npm install -g reviewstuff
-reviewstuff update --check
 ```
 
-並能發佈多平台 release artifacts。
+並能從 npm wrapper 執行同一份 release binary。
 
 ## Scope
 
 包含：
 
 - npm meta package
-- npm platform packages
-- multi-platform build targets
-- update manifest policy
+- first platform package：`@reviewstuff/darwin-arm64`
 - install type detection
 
 不包含：
 
+- Linux packages
+- macOS x64 package
+- update command
+- update manifest policy
 - background daemon
 - silent update
 - rebuilding from source during npm install
@@ -36,9 +37,6 @@ reviewstuff update --check
 ```text
 reviewstuff
 @reviewstuff/darwin-arm64
-@reviewstuff/darwin-x64
-@reviewstuff/linux-x64
-@reviewstuff/linux-arm64
 ```
 
 主 package 只做 platform selection；實際執行 release binary。
@@ -48,7 +46,7 @@ reviewstuff
 - Homebrew install: 指引用 `brew upgrade`。
 - npm install: 指引用 package manager update。
 - local symlink: 指引用 `bun run build`。
-- direct tarball install: 可 self-update，且必須驗 checksum。
+- direct tarball install: 先只提示手動下載新版；self-update 留到後續 plan。
 
 ## Verification
 
@@ -56,11 +54,15 @@ reviewstuff
 bun run package:release
 npm install -g ./packages/npm/reviewstuff/*.tgz
 reviewstuff --version
-reviewstuff update --check
 ```
 
 ## Acceptance Criteria
 
 - npm 執行同一份 standalone binary。
-- 多平台 manifest 正確。
-- self-update replacement atomic 且 checksum verified。
+- unsupported platform 有清楚錯誤。
+- npm wrapper 不從 source rebuild。
+
+## Learning Focus
+
+- npm meta package + optional platform package pattern。
+- 先做單平台閉環，再擴展 multi-platform matrix。

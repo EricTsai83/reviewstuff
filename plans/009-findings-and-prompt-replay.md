@@ -50,3 +50,7 @@ AI_REVIEW_FAKE_ENGINE=1 ./dist/reviewstuff review --staged --json
 - JSON output 穩定。
 - missing session 有清楚錯誤。
 
+## Learning Focus
+
+- 從 persisted session 建立 read-only commands。
+- 將 prompt generation 做成可重播、可測試的純流程。

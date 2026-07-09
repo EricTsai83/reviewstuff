@@ -61,3 +61,8 @@ tar -tzf dist/release/*.tar.gz
 - tarball 裡有 executable。
 - checksum 可驗。
 - manifest 可供後續 install channels 使用。
+
+## Learning Focus
+
+- release artifact layout。
+- checksum 與 manifest 如何支撐 Homebrew/npm wrapper。

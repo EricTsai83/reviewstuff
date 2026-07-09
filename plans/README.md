@@ -5,6 +5,7 @@
 ## 原則
 
 - 每個階段只做該 plan 的 scope，不提前做後續功能。
+- 每個 plan 只引入一個主要新概念；如果同時需要新 schema、新 command、新 storage、新外部 integration，必須切小。
 - `commands/` 保持薄，核心流程放在 `use-cases/` 或 service。
 - 所有 schema 要 versioned；所有檔案寫入要 atomic。
 - 外部 command 必須有 timeout、output limit、exit-code mapping。
@@ -12,6 +13,41 @@
 - TypeScript 是實作語言，不是 review 能力邊界。
 - Repo package management 使用 Bun；開發指令一律用 `bun install` / `bun run ...`。
 - Release 的 source of truth 是 standalone binary；npm/Homebrew 只是安裝通道。
+
+## Long-Term Architecture
+
+長期方向是 thin CLI + Effect application core + controlled platform layer：
+
+- CLI command 只解析 flags、呼叫 use-case、render output。
+- Use-case 編排流程，但不直接碰 subprocess、filesystem、provider SDK。
+- Domain 放 versioned schema、純型別、純規則。
+- Platform layer 集中副作用，尤其是 command execution、filesystem、clock、environment。
+- Git、analyzer、engine、storage 都是 service boundary，透過 Effect dependency 注入。
+- 測試優先測純 domain/use-case；需要驗證 CLI 行為時才跑 compiled binary。
+
+Effect 的採用節奏要保守：先建立 runtime entrypoint 和必要 service interface，等功能真的需要 timeout/concurrency/error mapping 時再加 Layer 組合。不要為尚未出現的需求提前建立抽象。
+
+## Tech Stack
+
+- Runtime/package manager/build target: Bun。
+- Language: TypeScript strict mode。
+- CLI parsing/help: `commander`。
+- Application runtime: `effect`；use-cases、services、error mapping、timeouts、concurrency 使用 Effect 表達。
+- Platform abstraction: `@effect/platform` + `@effect/platform-bun`。
+- External processes: 一律經由 `@effect/platform/Command`，不得直接在 feature code 使用 `child_process`、`Bun.spawn` 或 shell string。
+- Runtime validation: 使用 Effect schema API；所有 persisted/public schema 都要 versioned。
+- Test runner: Bun test，透過 `bun run test` 執行。
+
+## Plan Sizing Checklist
+
+每個 plan 開始前先確認：
+
+- 是否能在 1-2 個 focused sessions 內完成。
+- 是否有單一主要學習主題。
+- 是否能用 fake/deterministic dependency 驗證。
+- 是否保留 working binary。
+- 是否避免同時新增多個外部 integration。
+- 是否有清楚的「不包含」項目。
 
 ## 順序
 
@@ -22,19 +58,19 @@
 | 003 | [Local Install Workflow](./003-local-install-workflow.md) | 本機 `reviewstuff` 指令可用 |
 | 004 | [Repository Structure Boundaries](./004-repository-structure-boundaries.md) | module 邊界固定 |
 | 005 | [Git Diff Review MVP](./005-git-diff-review-mvp.md) | 可 review git diff 並輸出 deterministic report |
-| 006 | [Config Profiles And Prompts](./006-config-profiles-and-prompts.md) | 可用 config/profile/reviewer prompts 控制 review |
+| 006 | [Config Profiles](./006-config-profiles-and-prompts.md) | 可用 config/profile 控制 review |
 | 007 | [Engine Adapters MVP](./007-engine-adapters-mvp.md) | fake engine 穩定，provider adapters 有清楚邊界 |
 | 008 | [Review Session Storage](./008-review-session-storage.md) | review 結果可保存並載入 |
 | 009 | [Findings And Prompt Replay](./009-findings-and-prompt-replay.md) | 可查 findings、重播修復 prompt |
-| 010 | [Fix Iteration Workflow](./010-fix-iteration-workflow.md) | 可 dry-run/apply 修復並驗證 |
+| 010 | [Fix Iteration Workflow](./010-fix-iteration-workflow.md) | 可 dry-run 修復候選並驗證 |
 | 011 | [Agent JSON Protocol](./011-agent-json-protocol.md) | `--agent` 輸出 NDJSON |
 | 012 | [Doctor And Supportability](./012-doctor-and-supportability.md) | 可診斷本機環境 |
 | 013 | [Language Agnostic Review Core](./013-language-agnostic-review-core.md) | review schema 不綁 TypeScript |
-| 014 | [External Analyzer Adapters](./014-external-analyzer-adapters.md) | 可接入 TypeScript/Python/Go/Rust 工具 |
+| 014 | [External Analyzer Adapters](./014-external-analyzer-adapters.md) | 可接入第一個 TypeScript analyzer |
 | 015 | [Agentic Deep Review](./015-agentic-deep-review.md) | opt-in deep review agent 可用 |
 | 016 | [Release Artifact Layout](./016-release-artifact-layout.md) | 可產生 release tarball/checksum/manifest |
-| 017 | [macOS Signing And Homebrew](./017-macos-signing-and-homebrew.md) | macOS 發佈與 Homebrew 安裝路徑可用 |
-| 018 | [NPM Multi Platform And Update](./018-npm-multi-platform-and-update.md) | npm/multi-platform/update policy 有落地路徑 |
+| 017 | [Homebrew Install Path](./017-macos-signing-and-homebrew.md) | Homebrew 安裝路徑可用 |
+| 018 | [NPM First Platform Package](./018-npm-multi-platform-and-update.md) | npm 單平台安裝通道有落地路徑 |
 
 ## 每個 plan 完成前檢查
 

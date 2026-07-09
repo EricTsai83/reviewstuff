@@ -17,6 +17,7 @@ src/
   git/
   engines/
   review/
+  platform/
   output/
   config/
   shared/
@@ -28,6 +29,7 @@ src/
 
 - `docs/repository-structure.md`
 - `src/use-cases/`
+- `src/platform/command-runner.ts`
 - command/use-case/domain/service 邊界說明
 - 將最小 `review` command 委派給 use-case，即使 use-case 暫時只回傳 placeholder
 
@@ -43,7 +45,8 @@ src/
 - `commands/`: 只處理 CLI flags、usage errors、rendering。
 - `use-cases/`: 負責 application flow。
 - `domain/`: 純型別、schema、domain rules。
-- `git/`, `engines/`, `storage/`: 外部系統邊界。
+- `platform/`: Effect platform services、Command runner、filesystem/time abstractions。
+- `git/`, `engines/`, `storage/`: 外部系統邊界，只透過 `platform/` 的受控 wrapper 執行副作用。
 
 ## Verification
 
@@ -57,5 +60,11 @@ bun run build
 ## Acceptance Criteria
 
 - `commands/` 沒有大型流程邏輯。
+- 外部 command runner 邊界存在，且以 `@effect/platform/Command` 為實作方向。
 - `docs/repository-structure.md` 清楚描述 module ownership。
 - 後續 plan 有明確落點。
+
+## Learning Focus
+
+- thin command / use-case / domain / platform 的責任切分。
+- 在還沒有大量功能前先固定 module ownership。

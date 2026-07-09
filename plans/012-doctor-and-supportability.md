@@ -22,10 +22,10 @@ reviewstuff doctor --json
 - storage checks
 - provider checks
 - config checks
-- language/tool availability summary
 
 不包含：
 
+- analyzer/language tool checks
 - telemetry
 - remote log upload
 
@@ -49,7 +49,6 @@ reviewstuff doctor --json
 inside git repo
 outside git repo
 missing credentials
-missing optional tools
 ```
 
 ## Acceptance Criteria
@@ -58,3 +57,7 @@ missing optional tools
 - doctor 不要求 AI credentials。
 - JSON schema 穩定。
 
+## Learning Focus
+
+- supportability checks 的資料模型。
+- 將環境問題轉成可行的 remediation message。

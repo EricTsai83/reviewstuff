@@ -1,12 +1,12 @@
-# 006 - Config Profiles And Prompts
+# 006 - Config Profiles
 
 ## Goal
 
-加入 config、profiles、reviewer prompt registry，讓 review 行為可以被設定控制。
+加入 config 與最小 profile 機制，讓 review 行為開始可以被設定控制。
 
 ## Working State
 
-完成後可以用 `reviewstuff.config.json` 控制 reviewers、profiles、timeout、concurrency。
+完成後可以用 `reviewstuff.config.json` 控制預設 profile、timeout、concurrency。
 
 ## Scope
 
@@ -14,23 +14,25 @@
 
 - `src/config/schema.ts`
 - `src/config/service.ts`
-- `src/prompts/reviewers/`
-- reviewer registry
-- profiles：`quick`、`standard`、`thorough`
+- versioned config schema
+- profiles：`quick`、`standard`
+- config error rendering
 
 不包含：
 
 - real provider calls
 - multi-language adapters
+- reviewer prompt registry
 - prompt replay command
+- `thorough` profile
 
 ## Implementation Steps
 
 1. 定義 versioned config schema。
 2. 實作 config loading 與 validation。
-3. 建立 reviewer ids：`correctness`、`security`、`architecture`、`performance`、`typescript`、`framework`。
-4. prompt registry 只負責 prompt text，不跑模型。
-5. review use-case 根據 config/profile 決定 reviewers。
+3. 建立 `quick`、`standard` 兩個 profile。
+4. review use-case 根據 config/profile 決定 timeout/concurrency 與 fake reviewer behavior。
+5. config 錯誤轉成 usage error，不印 stack trace。
 
 ## Verification
 
@@ -38,11 +40,15 @@
 bun run typecheck
 bun run test
 ./dist/reviewstuff review --staged --profile quick --json
-./dist/reviewstuff review --staged --reviewers correctness,security --json
 ```
 
 ## Acceptance Criteria
 
 - 無 config 時使用安全預設值。
 - config error 有清楚 message。
-- prompt registry 可單元測試。
+- profile resolution 可單元測試。
+
+## Learning Focus
+
+- Effect schema / validation。
+- config defaults 與 usage error mapping。

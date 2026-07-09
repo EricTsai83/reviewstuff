@@ -51,3 +51,8 @@ reviewstuff --help
 - local install 可重複執行。
 - 不覆蓋 unrelated file。
 - 使用者可以用 `reviewstuff` 指令跑本機 binary。
+
+## Learning Focus
+
+- 本機 CLI symlink 安裝流程。
+- 安全處理既有檔案與 PATH guidance。

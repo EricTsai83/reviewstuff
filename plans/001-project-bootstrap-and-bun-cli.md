@@ -31,6 +31,8 @@ bun run build
 - `reviewstuff --help`
 - `reviewstuff review --help`
 - `reviewstuff doctor --help`
+- baseline dependencies: `commander`, `effect`, `@effect/platform`, `@effect/platform-bun`
+- baseline dev dependencies: `typescript`, `@types/bun`
 
 不包含：
 
@@ -42,15 +44,17 @@ bun run build
 ## Implementation Steps
 
 1. 建立 TypeScript/Bun 專案設定，`package.json` 設定 `packageManager` 為 Bun。
-2. 使用 `commander` 建立 CLI。
-3. 用 JSON import 讀 package version，不使用 runtime `createRequire("../package.json")`。
-4. 新增 build script：
+2. 安裝並固定 baseline tech stack dependencies。
+3. 使用 `commander` 建立 CLI；command handler 可以很薄，但要預留呼叫 Effect program 的入口。
+4. 新增最小 Effect runtime bootstrap，讓後續 use-case/service 以 Effect 實作。
+5. 用 JSON import 讀 package version，不使用 runtime `createRequire("../package.json")`。
+6. 新增 build script：
 
 ```bash
 bun build src/cli.ts --compile --target=bun-darwin-arm64 --outfile=dist/reviewstuff
 ```
 
-5. build script 要執行 smoke check：`--version`、`--help`。
+7. build script 要執行 smoke check：`--version`、`--help`。
 
 ## Verification
 
@@ -68,4 +72,10 @@ file dist/reviewstuff
 - `dist/reviewstuff` 存在且可執行。
 - `file dist/reviewstuff` 顯示 macOS arm64 executable。
 - CLI 不需要透過 `node` 啟動。
+- `package.json` 內有 Bun package manager 與 baseline Effect/platform dependencies。
 - 這階段沒有 review 行為，只建立可執行骨架。
+
+## Learning Focus
+
+- Bun standalone executable 的基本發佈模型。
+- CLI entrypoint 與 Effect runtime bootstrap 的最小接法。

@@ -52,3 +52,7 @@ AI_REVIEW_FAKE_ENGINE=1 ./dist/reviewstuff fix --dry-run --agent | jq -c .
 - events 包含 session id。
 - human output 不污染 stdout。
 
+## Learning Focus
+
+- CLI human output 與 machine-readable output 分離。
+- NDJSON event schema 與 long-running command heartbeat。

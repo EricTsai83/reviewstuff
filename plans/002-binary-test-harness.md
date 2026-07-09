@@ -12,7 +12,7 @@
 
 包含：
 
-- Vitest 設定。
+- Bun test 設定。
 - e2e helper。
 - `--version`、`--help` smoke tests。
 - non-git / unknown command 基本測試。
@@ -25,15 +25,14 @@
 
 ## Implementation Steps
 
-1. 新增 `vitest.config.ts`。
-2. 新增 `test/e2e/cli.e2e.test.ts`。
-3. 測試 helper 必須直接執行 `dist/reviewstuff`。
-4. package scripts 加入：
+1. 新增 `test/e2e/cli.e2e.test.ts`，使用 Bun test。
+2. 測試 helper 必須直接執行 `dist/reviewstuff`。
+3. package scripts 加入：
 
 ```json
 {
   "typecheck": "tsc --noEmit",
-  "test": "vitest run"
+  "test": "bun test"
 }
 ```
 
@@ -50,3 +49,8 @@ bun run test
 - e2e 不呼叫 `node dist/...`。
 - binary smoke tests 穩定通過。
 - 測試失敗時能清楚看到 stdout/stderr/exit code。
+
+## Learning Focus
+
+- Bun test 基礎。
+- 為 compiled CLI 寫 e2e 測試。

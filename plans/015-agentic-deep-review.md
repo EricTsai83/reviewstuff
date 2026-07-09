@@ -2,7 +2,7 @@
 
 ## Goal
 
-引入 OpenReview-style bounded tool-using agent，作為 opt-in deep review。
+引入最小 bounded tool-using agent，作為 opt-in deep review 的第一步。
 
 ## Working State
 
@@ -10,7 +10,6 @@
 
 ```bash
 reviewstuff review --staged --deep
-reviewstuff review --since main --deep
 ```
 
 ## Scope
@@ -19,12 +18,15 @@ reviewstuff review --since main --deep
 
 - `--deep`
 - bounded tool loop
-- progressive skills
 - `proposeFinding` structured output
 - deep review NDJSON events
+- readonly tools：`gitDiff`、`listChangedFiles`、`readFile`、`search`
 
 不包含：
 
+- progressive skills
+- `runAnalyzer`
+- `runGate`
 - GitHub App
 - Vercel Sandbox
 - auto commit/push
@@ -39,11 +41,10 @@ gitDiff
 listChangedFiles
 readFile
 search
-runAnalyzer
-runGate
-loadSkill
 proposeFinding
 ```
+
+後續若加入 `runAnalyzer` 與 `runGate`，必須走既有 `src/platform/command-runner.ts`，不得提供任意 shell 執行能力。
 
 ## Guardrails
 
@@ -67,3 +68,7 @@ AI_REVIEW_FAKE_ENGINE=1 ./dist/reviewstuff review --staged --deep --agent | jq -
 - findings 仍保存到正常 session。
 - budget 用完時回 partial result，不整體 crash。
 
+## Learning Focus
+
+- agent loop 的最小控制面。
+- 先做 readonly tools，避免一開始引入 command execution 風險。

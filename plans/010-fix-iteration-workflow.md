@@ -2,7 +2,7 @@
 
 ## Goal
 
-從 stored findings 產生修復候選，先 dry-run，再驗證後 apply。
+從 stored findings 產生修復候選，先完成 dry-run 與驗證流程。
 
 ## Working State
 
@@ -10,7 +10,6 @@
 
 ```bash
 reviewstuff fix --dry-run
-reviewstuff fix --apply
 ```
 
 ## Scope
@@ -21,10 +20,11 @@ reviewstuff fix --apply
 - temp worktree
 - gates validation
 - preimage hash check
-- apply status update
+- dry-run report
 
 不包含：
 
+- `--apply`
 - interactive TUI
 - conflict resolver
 - auto commit
@@ -36,19 +36,22 @@ reviewstuff fix --apply
 3. engine 回傳候選 file edits。
 4. 在 temp worktree 套用並跑 gates。
 5. 保存 fix attempt。
-6. `--apply` 前確認 current file hash 沒變。
+6. dry-run 輸出會改哪些檔案、哪些 gates 通過或失敗。
 
 ## Verification
 
 ```bash
 AI_REVIEW_FAKE_ENGINE=1 ./dist/reviewstuff review --staged --json
 AI_REVIEW_FAKE_ENGINE=1 ./dist/reviewstuff fix --dry-run
-AI_REVIEW_FAKE_ENGINE=1 ./dist/reviewstuff fix --apply
 ```
 
 ## Acceptance Criteria
 
 - dry-run 不改 source files。
-- apply 只在驗證通過後寫回。
-- hash mismatch 時拒絕 apply。
+- fix attempt 被保存。
+- preimage hash mismatch 會在 dry-run report 中標示，不寫回。
 
+## Learning Focus
+
+- 安全地在 temp worktree 驗證修改。
+- 將「產生修復」和「套用修復」拆成兩個風險層級。

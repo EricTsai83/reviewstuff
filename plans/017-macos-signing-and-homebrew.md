@@ -1,8 +1,8 @@
-# 017 - macOS Signing And Homebrew
+# 017 - Homebrew Install Path
 
 ## Goal
 
-讓 macOS 使用者能信任並方便地安裝 release binary。
+先建立 Homebrew 安裝路徑，macOS signing/notarization 留到 release hardening。
 
 ## Working State
 
@@ -17,36 +17,39 @@ reviewstuff --version
 
 包含：
 
-- macOS codesign script
-- notarization script
 - Homebrew formula
 - formula test
+- checksum pinning
 
 不包含：
 
+- macOS codesign
+- notarization
 - Windows signing
 - npm distribution
 - auto-update
 
 ## Implementation Steps
 
-1. `scripts/sign-macos.mjs` 檢查 Apple env vars。
-2. 對 binary codesign。
-3. notarize release artifact。
-4. Formula 下載 016 的 tarball，驗 sha256，`bin.install "reviewstuff"`。
-5. `brew test` 跑 `reviewstuff --version`。
+1. Formula 下載 016 的 tarball。
+2. Formula 驗 sha256。
+3. Formula 使用 `bin.install "reviewstuff"`。
+4. `brew test` 跑 `reviewstuff --version`。
+5. 文件說明 unsigned binary 的 macOS Gatekeeper 注意事項。
 
 ## Verification
 
 ```bash
-codesign --verify --deep --strict --verbose=2 dist/reviewstuff
-spctl --assess --type execute --verbose dist/reviewstuff
 brew test reviewstuff
 ```
 
 ## Acceptance Criteria
 
 - unsigned local dev build 仍可用。
-- signed release 通過 Gatekeeper assessment。
 - Homebrew 不重新 build source。
+- Formula 使用 release tarball 與 checksum。
 
+## Learning Focus
+
+- Homebrew formula 的最小 binary distribution。
+- 先驗證安裝通道，再處理 Apple signing/notarization。
