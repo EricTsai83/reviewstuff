@@ -6,6 +6,10 @@
 
 這讓 ReviewStuff 能支援多語言 repo，而不是自己重寫每種語言的 compiler 或 static analyzer。
 
+## Working State
+
+做完這份 plan 後，ReviewStuff 可以偵測並呼叫已存在的語言工具，把 diagnostics 正規化進 review context。缺少工具時只降級，不中斷基本 review。
+
 ## Depends On
 
 - 015 - Language Agnostic Review Core

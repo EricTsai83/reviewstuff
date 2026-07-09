@@ -6,6 +6,10 @@
 
 Prompt replay 要從 stored finding 產生，不應假設 finding 來自 TypeScript。語言特定上下文應由 015 的 language adapter 補充。
 
+## Working State
+
+做完這份 plan 後，使用者可以在不重跑模型的情況下查看上一輪 review findings，並為單一 finding 產生可交給 coding agent 的修復 prompt。
+
 ## Depends On
 
 - 004 - Review Session Storage

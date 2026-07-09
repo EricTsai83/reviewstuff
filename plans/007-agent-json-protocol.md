@@ -4,6 +4,10 @@
 
 提供 agent-friendly NDJSON output，讓 Claude Code/Codex/其他 agent 可以穩定解析 review/fix 進度與 findings。
 
+## Working State
+
+做完這份 plan 後，`--agent` mode 的 stdout 每一行都是合法 JSON。其他 agent 或 CI 可以串接 ReviewStuff，而不用解析 human-readable terminal text。
+
 ## Depends On
 
 - 004 - Review Session Storage

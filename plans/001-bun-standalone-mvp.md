@@ -18,6 +18,10 @@ dist/reviewstuff
 ./dist/reviewstuff --help
 ```
 
+## Working State
+
+做完這份 plan 後，本機可以直接執行 `./dist/reviewstuff`。這個 binary 不需要用 `node` 或 `bun` 啟動，至少 `--help`、`--version` 和 fake-engine review path 要能正常運作。
+
 ## Scope
 
 包含：

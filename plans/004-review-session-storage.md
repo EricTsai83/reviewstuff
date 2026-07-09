@@ -6,6 +6,10 @@
 
 Storage schema 必須能保存非 TypeScript findings。任何欄位命名都不應假設 findings 只來自 `tsc`、ESLint、Vitest 或 Node 專案。
 
+## Working State
+
+做完這份 plan 後，每次非 skipped review 都會產生 repo-local session。CLI 原本的 review output 仍可用，同時後續 command 可以用 session id 或 latest 載入 diff/findings。
+
 ## Depends On
 
 - 001 - Bun Standalone MVP

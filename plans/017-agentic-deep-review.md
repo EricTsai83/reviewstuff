@@ -11,6 +11,10 @@ reviewstuff review --since main --deep
 
 這個 mode 用於重要 PR、複雜跨檔案變更、或需要看周邊程式碼與跑工具的 review。預設 `reviewstuff review` 仍應走較快、可預測的 deterministic review path。
 
+## Working State
+
+做完這份 plan 後，使用者可以 opt-in 執行 `reviewstuff review --deep`。Deep review 可以讀相關檔案、搜尋 repo、跑受控 analyzers、載入 skills，但最後仍輸出並保存 ReviewStuff structured findings。
+
 ## Reference
 
 參考 `vercel-labs/openreview` commit:

@@ -8,6 +8,10 @@
 reviewstuff --help
 ```
 
+## Working State
+
+做完這份 plan 後，開發者可以透過 `pnpm install:local` 把目前 repo build 出來的 binary 安裝到 PATH，日常用 `reviewstuff` 指令做本機 pre-push review。
+
 ## Depends On
 
 - 001 - Bun Standalone MVP

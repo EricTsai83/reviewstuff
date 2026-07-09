@@ -6,6 +6,10 @@
 
 多平台 build 的目標是讓非 TypeScript/Node 生態的使用者也能用同一個 CLI。每個 target 都應該產生可直接執行的 standalone artifact，再由 Homebrew/npm/install script 選擇正確平台。
 
+## Working State
+
+做完這份 plan 後，release pipeline 可以產生多個 OS/CPU target 的 standalone binaries，manifest 可以描述每個 artifact，且每個可執行 target 至少通過 smoke test。
+
 ## Depends On
 
 - 008 - Release Artifact Layout
@@ -48,6 +52,19 @@ reviewstuff --version
 reviewstuff --help
 AI_REVIEW_FAKE_ENGINE=1 reviewstuff --staged --json
 ```
+
+## Verification
+
+On the host platform:
+
+```bash
+bun run scripts/build-bun.mjs --target bun-darwin-arm64
+dist/reviewstuff-darwin-arm64 --version
+dist/reviewstuff-darwin-arm64 --help
+file dist/reviewstuff-darwin-arm64
+```
+
+In CI, run the same smoke test on each supported OS/CPU target. Cross-compiled artifacts that cannot execute on the current host still need checksum, manifest, and file extension validation.
 
 ## Acceptance Criteria
 

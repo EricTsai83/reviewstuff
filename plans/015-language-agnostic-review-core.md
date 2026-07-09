@@ -6,6 +6,10 @@
 
 TypeScript 可以是第一個成熟 adapter，但不能是 core abstraction。
 
+## Working State
+
+做完這份 plan 後，ReviewStuff 的 session、finding、prompt context 可以表示多語言檔案。TypeScript review 仍然可用，非 TypeScript 檔案至少能走 generic review context。
+
 ## Depends On
 
 - 004 - Review Session Storage

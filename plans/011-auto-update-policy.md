@@ -4,6 +4,10 @@
 
 規劃 binary 自我更新，但不在早期 MVP 強制加入。這是 production convenience，不是 local dev 必要能力。
 
+## Working State
+
+做完這份 plan 後，direct release install 可以檢查更新並安全替換 binary；Homebrew 和 local symlink install 只會收到正確指引，不會被 CLI 自行改動。
+
 ## Depends On
 
 - 008 - Release Artifact Layout
@@ -26,6 +30,7 @@
 ```bash
 reviewstuff update
 reviewstuff update --check
+reviewstuff update --dry-run
 ```
 
 ## Policy
@@ -59,6 +64,22 @@ Use `manifest.json` from plan 008:
     }
   ]
 }
+```
+
+## Verification
+
+```bash
+reviewstuff update --check
+REVIEWSTUFF_UPDATE_MANIFEST_URL=http://127.0.0.1:<port>/manifest.json reviewstuff update --check
+REVIEWSTUFF_UPDATE_MANIFEST_URL=http://127.0.0.1:<port>/manifest.json reviewstuff update --dry-run
+```
+
+Test installation detection cases:
+
+```text
+local symlink install
+Homebrew install
+direct tarball install
 ```
 
 ## Acceptance Criteria

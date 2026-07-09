@@ -4,6 +4,10 @@
 
 讓現有 e2e 測試直接執行 Bun standalone binary，而不是用 `node dist/cli.mjs`。
 
+## Working State
+
+做完這份 plan 後，`pnpm test` 會驗證實際 shipping binary。未來只要 binary build 壞掉，e2e 測試要能抓到，不再只測 Node-style output。
+
 ## Depends On
 
 - 001 - Bun Standalone MVP

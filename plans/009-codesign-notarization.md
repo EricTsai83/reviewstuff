@@ -4,6 +4,10 @@
 
 讓 macOS production binary 避免 Gatekeeper 阻擋，支援正式下載或 Homebrew 以外的安裝方式。
 
+## Working State
+
+做完這份 plan 後，macOS release artifact 可以被簽章與 notarize。使用者從 GitHub Release 下載後，不應遇到一般 unsigned binary 的 Gatekeeper 阻擋。local unsigned dev build 仍然維持可用。
+
 ## Depends On
 
 - 008 - Release Artifact Layout
@@ -62,6 +66,25 @@ The script must:
 - Verify signature with:
 
 ```bash
+codesign --verify --deep --strict --verbose=2 dist/reviewstuff
+spctl --assess --type execute --verbose dist/reviewstuff
+```
+
+## Verification
+
+Local unsigned path:
+
+```bash
+pnpm build
+./dist/reviewstuff --version
+```
+
+Signed release path with Apple secrets available:
+
+```bash
+pnpm build
+pnpm package:release
+bun run scripts/sign-macos.mjs
 codesign --verify --deep --strict --verbose=2 dist/reviewstuff
 spctl --assess --type execute --verbose dist/reviewstuff
 ```

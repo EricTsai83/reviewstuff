@@ -6,6 +6,10 @@
 
 Doctor 必須適用於多語言 repo；它可以回報 TypeScript tooling 狀態，但不能把 TypeScript tooling 缺失視為全域 failure。
 
+## Working State
+
+做完這份 plan 後，使用者可以用 `reviewstuff doctor` 快速判斷本機環境是否能 review。Doctor 不需要 AI credentials 才能跑，並且能用 JSON 給 agent/CI 消費。
+
 ## Depends On
 
 - 001 - Bun Standalone MVP
@@ -80,6 +84,24 @@ interface DoctorReportV1 {
     remediation?: string
   }>
 }
+```
+
+## Verification
+
+```bash
+pnpm build
+./dist/reviewstuff doctor
+./dist/reviewstuff doctor --json | jq .
+```
+
+Run at least these scenarios:
+
+```text
+inside a git repo
+outside a git repo
+missing AI credentials
+repo with TypeScript files
+repo with non-TypeScript files
 ```
 
 ## Acceptance Criteria

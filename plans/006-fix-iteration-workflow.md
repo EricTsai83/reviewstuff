@@ -6,6 +6,10 @@
 
 Fix workflow 必須以 stored finding 的 language/context 為輸入。TypeScript-specific fix behavior 可以由 TypeScript adapter 提供，但 core `fix` command 不能硬編碼 Node/TS assumptions。
 
+## Working State
+
+做完這份 plan 後，使用者可以從 stored findings 進入修復迭代：先 `fix --dry-run` 產生候選修復與驗證結果，再用 `fix --apply` 安全套用。
+
 ## Depends On
 
 - 004 - Review Session Storage

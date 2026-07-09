@@ -10,6 +10,10 @@ brew install reviewstuff
 
 Homebrew 是安裝管道，不是另一套 build system。Formula 必須下載 008 定義的 GitHub Release tarball，驗 sha256，然後安裝其中的 standalone binary。
 
+## Working State
+
+做完這份 plan 後，macOS 使用者可以透過 Homebrew 安裝 ReviewStuff，且安裝後執行的是同一份 release binary，不是 Homebrew 重新 build 出來的另一份 artifact。
+
 ## Depends On
 
 - 008 - Release Artifact Layout
@@ -49,6 +53,18 @@ class Reviewstuff < Formula
   end
 end
 ```
+
+## Verification
+
+```bash
+pnpm package:release
+brew install --formula ./Formula/reviewstuff.rb
+reviewstuff --version
+reviewstuff --help
+brew test reviewstuff
+```
+
+If this is implemented in a tap repo, run the equivalent formula path from that tap.
 
 ## Acceptance Criteria
 

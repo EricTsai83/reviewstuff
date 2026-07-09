@@ -6,6 +6,10 @@
 
 這份 plan 也定義一個長期原則：GitHub Release 上的 standalone binary/tarball 是唯一正式 runtime artifact。Homebrew、npm wrapper、curl install script 都必須安裝同一份 artifact 或從同一個 release pipeline 產物派生，不各自打包 Node-style runtime。
 
+## Working State
+
+做完這份 plan 後，可以產生一份可手動下載、校驗、解壓、執行的 release tarball。這還不是完整產品化發佈，但已經有穩定 artifact layout 供後續安裝通道使用。
+
 ## Depends On
 
 - 001 - Bun Standalone MVP

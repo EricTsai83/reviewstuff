@@ -4,6 +4,10 @@
 
 讓 npm/pnpm/yarn 成為 ReviewStuff 的安裝管道，但不改變 runtime artifact 策略：正式執行檔仍然是 Bun standalone binary。
 
+## Working State
+
+做完這份 plan 後，使用者可以透過 npm ecosystem 安裝 `reviewstuff`，但實際執行的仍是 release pipeline 產生的 standalone binary。
+
 目標使用方式：
 
 ```bash
