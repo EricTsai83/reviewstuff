@@ -1,4 +1,4 @@
-# 013 - Doctor And Supportability
+# 014 - Doctor And Supportability
 
 ## Goal
 
@@ -13,7 +13,7 @@ Doctor 必須適用於多語言 repo；它可以回報 TypeScript tooling 狀態
 ## Depends On
 
 - 001 - Bun Standalone MVP
-- 004 - Review Session Storage
+- 005 - Review Session Storage
 
 ## Scope
 

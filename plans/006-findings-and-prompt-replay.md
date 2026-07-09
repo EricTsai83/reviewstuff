@@ -1,10 +1,10 @@
-# 005 - Findings And Prompt Replay
+# 006 - Findings And Prompt Replay
 
 ## Goal
 
 提供 CodeRabbit-like 的 local review iteration：review 完後可以重新查看 findings，也可以重播每個 finding 的修復 prompt。
 
-Prompt replay 要從 stored finding 產生，不應假設 finding 來自 TypeScript。語言特定上下文應由 015 的 language adapter 補充。
+Prompt replay 要從 stored finding 產生，不應假設 finding 來自 TypeScript。語言特定上下文應由 016 的 language adapter 補充。
 
 ## Working State
 
@@ -12,7 +12,7 @@ Prompt replay 要從 stored finding 產生，不應假設 finding 來自 TypeScr
 
 ## Depends On
 
-- 004 - Review Session Storage
+- 005 - Review Session Storage
 
 ## Scope
 

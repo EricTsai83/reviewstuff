@@ -1,4 +1,4 @@
-# 004 - Review Session Storage
+# 005 - Review Session Storage
 
 ## Goal
 
@@ -13,6 +13,7 @@ Storage schema 必須能保存非 TypeScript findings。任何欄位命名都不
 ## Depends On
 
 - 001 - Bun Standalone MVP
+- 004 - Repository Structure Boundaries
 
 ## Scope
 
@@ -99,7 +100,7 @@ interface ToolDiagnosticSnapshot {
 }
 ```
 
-`language` starts as a string for schema compatibility. 015 can tighten it to `LanguageId` after the language-agnostic core exists.
+`language` starts as a string for schema compatibility. 016 can tighten it to `LanguageId` after the language-agnostic core exists.
 
 ## Implementation
 

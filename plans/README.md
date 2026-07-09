@@ -47,20 +47,21 @@
 | 001 | [Bun Standalone MVP](./001-bun-standalone-mvp.md) | 先把 runtime artifact 變成 standalone binary | `./dist/reviewstuff --help` 和 `--version` 可直接跑，不需要 Node/Bun runtime |
 | 002 | [Binary Test Harness](./002-binary-test-harness.md) | 讓測試真正驗 compiled binary | e2e 測試直接跑 `dist/reviewstuff`，避免 Node build 和 binary build 行為分裂 |
 | 003 | [Local Install Workflow](./003-local-install-workflow.md) | 讓本機開發者能用 terminal command | `reviewstuff --help` 可從 PATH 執行，適合日常 pre-push 使用 |
-| 004 | [Review Session Storage](./004-review-session-storage.md) | 保存 review 結果，支撐後續迭代 | 每次 review 會產生 repo-local session，可查 latest，可保存 diff/findings |
-| 005 | [Findings And Prompt Replay](./005-findings-and-prompt-replay.md) | 不重跑模型也能看 findings/prompts | `reviewstuff findings` 和 `reviewstuff prompts` 可操作上一輪 review |
-| 006 | [Fix Iteration Workflow](./006-fix-iteration-workflow.md) | 從 findings 進入修復迭代 | `reviewstuff fix --dry-run` 可產生修復方案，`--apply` 在驗證後套用 |
-| 007 | [Agent JSON Protocol](./007-agent-json-protocol.md) | 讓其他 agent/CI 能穩定解析 CLI | `--agent` 輸出合法 NDJSON，human logs 不污染 stdout |
-| 008 | [Release Artifact Layout](./008-release-artifact-layout.md) | 定義正式 binary artifact | 可產生 tarball、checksum、manifest，使用者可手動下載執行 |
-| 009 | [Codesign And Notarization](./009-codesign-notarization.md) | 讓 macOS release 可被信任執行 | release binary 可通過 codesign/notarization；local unsigned build 不受影響 |
-| 010 | [Homebrew Distribution](./010-homebrew-distribution.md) | 提供 macOS 安裝通道 | `brew install` 可安裝同一份 release binary |
-| 011 | [Auto Update Policy](./011-auto-update-policy.md) | 提供 direct-install 的更新策略 | `reviewstuff update --check` 可辨識 direct/Homebrew/local install 並安全處理 |
-| 012 | [Multi Platform Builds](./012-multi-platform-builds.md) | 擴展到更多 OS/CPU | release manifest 可描述多平台 binary；每個 target 有 smoke test |
-| 013 | [Doctor And Supportability](./013-doctor-and-supportability.md) | 提供診斷與支援資訊 | `reviewstuff doctor` 可檢查 runtime、git、storage、provider、language tools |
-| 014 | [NPM Binary Wrapper](./014-npm-binary-wrapper.md) | 讓 npm/pnpm/yarn 成為安裝通道 | `npm install -g reviewstuff` 執行同一份 standalone binary |
-| 015 | [Language Agnostic Review Core](./015-language-agnostic-review-core.md) | 讓 review schema 不綁 TypeScript | TS 與非 TS 檔案都能被同一套 schema/session 表示 |
-| 016 | [External Analyzer Adapters](./016-external-analyzer-adapters.md) | 接入各語言既有工具 | TS/Python/Go/Rust analyzers 可選擇性提供 diagnostics；缺工具不會中斷 review |
-| 017 | [Agentic Deep Review](./017-agentic-deep-review.md) | 引入 opt-in deep review agent | `reviewstuff review --deep` 可用 bounded tools 深度檢查並輸出 structured findings |
+| 004 | [Repository Structure Boundaries](./004-repository-structure-boundaries.md) | 先固定 module 邊界，避免 commands 變胖 | CLI 行為不變，但 review 主流程開始移到 `use-cases/` |
+| 005 | [Review Session Storage](./005-review-session-storage.md) | 保存 review 結果，支撐後續迭代 | 每次 review 會產生 repo-local session，可查 latest，可保存 diff/findings |
+| 006 | [Findings And Prompt Replay](./006-findings-and-prompt-replay.md) | 不重跑模型也能看 findings/prompts | `reviewstuff findings` 和 `reviewstuff prompts` 可操作上一輪 review |
+| 007 | [Fix Iteration Workflow](./007-fix-iteration-workflow.md) | 從 findings 進入修復迭代 | `reviewstuff fix --dry-run` 可產生修復方案，`--apply` 在驗證後套用 |
+| 008 | [Agent JSON Protocol](./008-agent-json-protocol.md) | 讓其他 agent/CI 能穩定解析 CLI | `--agent` 輸出合法 NDJSON，human logs 不污染 stdout |
+| 009 | [Release Artifact Layout](./009-release-artifact-layout.md) | 定義正式 binary artifact | 可產生 tarball、checksum、manifest，使用者可手動下載執行 |
+| 010 | [Codesign And Notarization](./010-codesign-notarization.md) | 讓 macOS release 可被信任執行 | release binary 可通過 codesign/notarization；local unsigned build 不受影響 |
+| 011 | [Homebrew Distribution](./011-homebrew-distribution.md) | 提供 macOS 安裝通道 | `brew install` 可安裝同一份 release binary |
+| 012 | [Auto Update Policy](./012-auto-update-policy.md) | 提供 direct-install 的更新策略 | `reviewstuff update --check` 可辨識 direct/Homebrew/local install 並安全處理 |
+| 013 | [Multi Platform Builds](./013-multi-platform-builds.md) | 擴展到更多 OS/CPU | release manifest 可描述多平台 binary；每個 target 有 smoke test |
+| 014 | [Doctor And Supportability](./014-doctor-and-supportability.md) | 提供診斷與支援資訊 | `reviewstuff doctor` 可檢查 runtime、git、storage、provider、language tools |
+| 015 | [NPM Binary Wrapper](./015-npm-binary-wrapper.md) | 讓 npm/pnpm/yarn 成為安裝通道 | `npm install -g reviewstuff` 執行同一份 standalone binary |
+| 016 | [Language Agnostic Review Core](./016-language-agnostic-review-core.md) | 讓 review schema 不綁 TypeScript | TS 與非 TS 檔案都能被同一套 schema/session 表示 |
+| 017 | [External Analyzer Adapters](./017-external-analyzer-adapters.md) | 接入各語言既有工具 | TS/Python/Go/Rust analyzers 可選擇性提供 diagnostics；缺工具不會中斷 review |
+| 018 | [Agentic Deep Review](./018-agentic-deep-review.md) | 引入 opt-in deep review agent | `reviewstuff review --deep` 可用 bounded tools 深度檢查並輸出 structured findings |
 
 ## 建議里程碑
 
@@ -69,39 +70,40 @@
 - 001
 - 002
 - 003
+- 004
 
-結果：可以用 `./dist/reviewstuff` 或 `reviewstuff` 在本機跑 CLI，並且 e2e 測試覆蓋 compiled binary。
+結果：可以用 `./dist/reviewstuff` 或 `reviewstuff` 在本機跑 CLI，e2e 測試覆蓋 compiled binary，且後續功能有清楚 module 邊界。
 
 ### Milestone 2: Review/Fix Iteration
 
-- 004
 - 005
 - 006
 - 007
+- 008
 
 結果：可以在 push 前做本地 review，保存 findings，重播 prompts，並在 review/fix 之間迭代。
 
 ### Milestone 3: Release And Distribution
 
-- 008
 - 009
 - 010
 - 011
 - 012
 - 013
 - 014
+- 015
 
 結果：可以開始穩定分發給其他使用者；GitHub Release 是 source of truth，Homebrew/npm 只是安裝通道。
 
 ### Milestone 4: Multi-Language Review
 
-- 015
 - 016
+- 017
 
 結果：ReviewStuff 的 core review/fix/session protocol 不再假設專案是 TypeScript，後續可以逐步加入 Python、Go、Rust、Java 等 adapters。
 
 ### Milestone 5: Agentic Deep Review
 
-- 017
+- 018
 
 結果：可用 `reviewstuff review --deep` 做較慢但更完整的本機 deep review，agent 可以讀相關檔案、搜尋 repo、跑受控 analyzers、載入 skills，但最後仍保存 structured findings。

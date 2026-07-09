@@ -1,4 +1,4 @@
-# 014 - NPM Binary Wrapper
+# 015 - NPM Binary Wrapper
 
 ## Goal
 
@@ -23,7 +23,7 @@ pnpm dlx reviewstuff --help
 
 ## Depends On
 
-- 008 - Release Artifact Layout
+- 009 - Release Artifact Layout
 
 ## Scope
 

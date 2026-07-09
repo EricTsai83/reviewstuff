@@ -1,4 +1,4 @@
-# 015 - Language Agnostic Review Core
+# 016 - Language Agnostic Review Core
 
 ## Goal
 
@@ -12,8 +12,8 @@ TypeScript 可以是第一個成熟 adapter，但不能是 core abstraction。
 
 ## Depends On
 
-- 004 - Review Session Storage
-- 007 - Agent JSON Protocol
+- 005 - Review Session Storage
+- 008 - Agent JSON Protocol
 
 ## Scope
 
@@ -31,7 +31,7 @@ TypeScript 可以是第一個成熟 adapter，但不能是 core abstraction。
 - Tree-sitter deep parsing。
 - LSP integration。
 - MCP server。
-- Agentic tool loop；deep review agent 由 017 實作。
+- Agentic tool loop；deep review agent 由 018 實作。
 
 ## Core Architecture
 
@@ -147,7 +147,7 @@ Unknown files should still be reviewable with generic text/diff context.
 
 Prompts should be built from normalized context. A TypeScript-specific prompt section may exist, but it must be contributed by the TypeScript adapter, not hard-coded in the core review engine.
 
-017 can reuse the same normalized context for deep review. The language core should not know whether findings came from deterministic review or agentic deep review.
+018 can reuse the same normalized context for deep review. The language core should not know whether findings came from deterministic review or agentic deep review.
 
 ## Verification
 

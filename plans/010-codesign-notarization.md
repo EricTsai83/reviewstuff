@@ -1,4 +1,4 @@
-# 009 - Codesign And Notarization
+# 010 - Codesign And Notarization
 
 ## Goal
 
@@ -10,7 +10,7 @@
 
 ## Depends On
 
-- 008 - Release Artifact Layout
+- 009 - Release Artifact Layout
 
 ## Scope
 

@@ -1,4 +1,4 @@
-# 017 - Agentic Deep Review
+# 018 - Agentic Deep Review
 
 ## Goal
 
@@ -40,14 +40,14 @@ reviewstuff review --since main --deep
 - 自動 commit/push。
 - 任意 unrestricted shell。
 
-ReviewStuff 的 deep review 產物必須是 structured findings，並保存到 004 的 session storage。
+ReviewStuff 的 deep review 產物必須是 structured findings，並保存到 005 的 session storage。
 
 ## Depends On
 
-- 004 - Review Session Storage
-- 007 - Agent JSON Protocol
-- 015 - Language Agnostic Review Core
-- 016 - External Analyzer Adapters
+- 005 - Review Session Storage
+- 008 - Agent JSON Protocol
+- 016 - Language Agnostic Review Core
+- 017 - External Analyzer Adapters
 
 ## Scope
 
@@ -136,7 +136,7 @@ Tool behavior:
 - `listChangedFiles`: returns changed files with language metadata.
 - `readFile`: reads repo files with file size and path safety limits.
 - `search`: runs bounded `rg` searches.
-- `runAnalyzer`: calls 016 analyzer adapters.
+- `runAnalyzer`: calls 017 analyzer adapters.
 - `runGate`: runs configured validation gates with timeout.
 - `loadSkill`: loads full skill text by name.
 - `proposeFinding`: submits a structured finding candidate.

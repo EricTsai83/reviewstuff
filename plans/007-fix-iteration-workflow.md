@@ -1,4 +1,4 @@
-# 006 - Fix Iteration Workflow
+# 007 - Fix Iteration Workflow
 
 ## Goal
 
@@ -12,8 +12,8 @@ Fix workflow 必須以 stored finding 的 language/context 為輸入。TypeScrip
 
 ## Depends On
 
-- 004 - Review Session Storage
-- 005 - Findings And Prompt Replay
+- 005 - Review Session Storage
+- 006 - Findings And Prompt Replay
 
 ## Scope
 

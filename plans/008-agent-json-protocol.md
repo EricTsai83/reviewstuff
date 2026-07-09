@@ -1,4 +1,4 @@
-# 007 - Agent JSON Protocol
+# 008 - Agent JSON Protocol
 
 ## Goal
 
@@ -10,7 +10,7 @@
 
 ## Depends On
 
-- 004 - Review Session Storage
+- 005 - Review Session Storage
 
 ## Scope
 
@@ -24,7 +24,7 @@
 
 - WebSocket。
 - remote server。
-- Deep review tool-loop semantics；017 extends this protocol with bounded agent/tool events.
+- Deep review tool-loop semantics；018 extends this protocol with bounded agent/tool events.
 
 ## Review Events
 

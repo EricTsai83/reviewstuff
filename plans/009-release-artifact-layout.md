@@ -1,4 +1,4 @@
-# 008 - Release Artifact Layout
+# 009 - Release Artifact Layout
 
 ## Goal
 

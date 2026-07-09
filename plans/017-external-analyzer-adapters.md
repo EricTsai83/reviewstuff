@@ -1,4 +1,4 @@
-# 016 - External Analyzer Adapters
+# 017 - External Analyzer Adapters
 
 ## Goal
 
@@ -12,7 +12,7 @@
 
 ## Depends On
 
-- 015 - Language Agnostic Review Core
+- 016 - Language Agnostic Review Core
 
 ## Scope
 
@@ -30,7 +30,7 @@
 - 自動修改使用者 package manager config。
 - 完整 LSP integration。
 - Full Semgrep ruleset management。
-- Agent tool orchestration；017 may call these adapters through `runAnalyzer`.
+- Agent tool orchestration；018 may call these adapters through `runAnalyzer`.
 
 ## Adapter Model
 
@@ -88,7 +88,7 @@ Multi-language optional:
 - Apply per-tool timeout.
 - Cache analyzer result by commit hash, command, config file hash, and changed file set.
 - Never block basic AI review solely because an optional analyzer is missing.
-- 017 deep review may call analyzers repeatedly, so analyzer results must be cacheable and side-effect free unless a gate is explicitly configured to mutate nothing.
+- 018 deep review may call analyzers repeatedly, so analyzer results must be cacheable and side-effect free unless a gate is explicitly configured to mutate nothing.
 
 ## Failure Rules
 

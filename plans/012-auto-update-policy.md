@@ -1,4 +1,4 @@
-# 011 - Auto Update Policy
+# 012 - Auto Update Policy
 
 ## Goal
 
@@ -10,7 +10,7 @@
 
 ## Depends On
 
-- 008 - Release Artifact Layout
+- 009 - Release Artifact Layout
 
 ## Scope
 
@@ -51,7 +51,7 @@ This appears to be a local development install. Rebuild with: pnpm build
 
 ## Manifest
 
-Use `manifest.json` from plan 008:
+Use `manifest.json` from plan 009:
 
 ```json
 {

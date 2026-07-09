@@ -1,4 +1,4 @@
-# 010 - Homebrew Distribution
+# 011 - Homebrew Distribution
 
 ## Goal
 
@@ -8,7 +8,7 @@
 brew install reviewstuff
 ```
 
-Homebrew 是安裝管道，不是另一套 build system。Formula 必須下載 008 定義的 GitHub Release tarball，驗 sha256，然後安裝其中的 standalone binary。
+Homebrew 是安裝管道，不是另一套 build system。Formula 必須下載 009 定義的 GitHub Release tarball，驗 sha256，然後安裝其中的 standalone binary。
 
 ## Working State
 
@@ -16,8 +16,8 @@ Homebrew 是安裝管道，不是另一套 build system。Formula 必須下載 0
 
 ## Depends On
 
-- 008 - Release Artifact Layout
-- 009 - Codesign And Notarization
+- 009 - Release Artifact Layout
+- 010 - Codesign And Notarization
 
 ## Scope
 

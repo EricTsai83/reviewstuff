@@ -1,4 +1,4 @@
-# 012 - Multi Platform Builds
+# 013 - Multi Platform Builds
 
 ## Goal
 
@@ -12,7 +12,7 @@
 
 ## Depends On
 
-- 008 - Release Artifact Layout
+- 009 - Release Artifact Layout
 
 ## Scope
 
@@ -72,5 +72,5 @@ In CI, run the same smoke test on each supported OS/CPU target. Cross-compiled a
 - Release manifest supports multiple targets.
 - Platform-specific file extensions are correct.
 - Windows console behavior is explicitly tested before release.
-- Every platform artifact follows the 008 release manifest schema.
+- Every platform artifact follows the 009 release manifest schema.
 - Platform selection is based on OS/CPU metadata, not on language ecosystem assumptions.
