@@ -1,4 +1,4 @@
-# 018 - Homebrew Install Path
+# 020 - Homebrew Install Path
 
 ## Goal
 
@@ -31,7 +31,7 @@ reviewstuff --version
 
 ## Implementation Steps
 
-1. Formula 下載 016 的 tarball。
+1. Formula 下載 019 的 release tarball。
 2. Formula 驗 sha256。
 3. Formula 使用 `bin.install "reviewstuff"`。
 4. `brew test` 跑 `reviewstuff --version`。

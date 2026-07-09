@@ -1,8 +1,8 @@
-# 028 - Multi Platform Packages And Update
+# 033 - Multi Platform Packages And Update Check
 
 ## Goal
 
-補齊 production 安裝通道：多平台 npm packages、update check、direct install update policy。
+補齊 production 安裝通道：多平台 npm packages、update check、install channel detection。
 
 ## Working State
 
@@ -24,10 +24,11 @@ reviewstuff update --check
 - update manifest
 - `reviewstuff update --check`
 - install type detection
-- direct tarball self-update with checksum verification
+- update guidance per install channel
 
 不包含：
 
+- direct tarball self-update
 - silent background update
 - Windows packages
 - rebuilding from source during npm install
@@ -38,7 +39,8 @@ reviewstuff update --check
 2. 建立 npm platform packages。
 3. npm meta package 做 platform selection。
 4. 實作 install type detection。
-5. 實作 update check 與 direct tarball self-update。
+5. 實作 update check。
+6. 根據 install channel 顯示更新建議：npm 用 package manager、Homebrew 用 brew、direct tarball 指向 034。
 
 ## Verification
 
@@ -54,7 +56,8 @@ reviewstuff update --check
 - npm 執行同一份 standalone binary。
 - macOS/Linux supported platforms 可安裝。
 - unsupported platform 有清楚錯誤。
-- self-update 驗 checksum 且 atomic replacement。
+- update check 不會靜默修改使用者系統。
+- install channel detection 可被 doctor 使用。
 
 ## Learning Focus
 

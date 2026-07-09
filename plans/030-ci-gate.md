@@ -1,28 +1,31 @@
-# 026 - CI And Release Automation
+# 030 - CI Gate
 
 ## Goal
 
-建立可重複、可驗證的 CI 與 release pipeline。
+建立可重複、可驗證的 PR/branch CI gate。
 
 ## Working State
 
-完成後 main branch 和 release tag 都會自動跑完整驗證；release artifacts 可由 CI 產生。
+完成後 PR 和 main branch 都會自動跑 typecheck、test、build、binary e2e。
 
 ## Scope
 
 包含：
 
-- GitHub Actions CI
+- GitHub Actions CI for PR/main
 - Bun install with frozen lockfile
 - typecheck/test/build
 - binary e2e tests
+- CI cache policy
+- artifact upload for failed test diagnostics
+
+不包含：
+
+- release tag workflow
 - multi-platform build matrix
 - release artifact upload
 - checksum verification
 - smoke install tests
-
-不包含：
-
 - production telemetry
 - automatic npm publish without approval
 - automatic Homebrew tap push without approval
@@ -30,10 +33,10 @@
 ## Implementation Steps
 
 1. 新增 CI workflow。
-2. 新增 release workflow draft。
+2. 設定 Bun install with frozen lockfile。
 3. 將 plan verification commands 映射到 CI jobs。
-4. matrix build macOS/Linux targets。
-5. artifacts 上傳前驗 checksum 和 tarball layout。
+4. 執行 typecheck/test/build/binary e2e。
+5. 上傳失敗時的 stdout/stderr/test artifacts 方便診斷。
 
 ## Verification
 
@@ -41,16 +44,15 @@
 bun run typecheck
 bun run test
 bun run build
-bun run package:release
 ```
 
 ## Acceptance Criteria
 
 - PR/branch CI 穩定。
-- release artifacts 由 CI 產生且 checksums 一致。
-- smoke install 在 CI 跑過。
+- CI 失敗時能定位是 typecheck、unit、build 或 binary e2e。
+- CI 不需要 provider credentials。
 
 ## Learning Focus
 
 - production CLI 的 CI gate。
-- release artifact reproducibility。
+- 把本機驗收指令變成可重複的 automation。

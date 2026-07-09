@@ -1,4 +1,4 @@
-# 030 - Production Readiness Gate
+# 036 - Production Readiness Gate
 
 ## Goal
 
@@ -19,6 +19,8 @@
 - privacy/security audit
 - performance limits
 - backward compatibility checks
+- schema compatibility checks
+- agent protocol smoke
 - known issues / release notes
 
 不包含：
@@ -35,6 +37,8 @@
 - binary e2e tests
 - provider live smoke：OpenAI、Anthropic、local CLI
 - privacy local-only smoke
+- session cleanup / retention smoke
+- agent NDJSON smoke：success、no changes、provider error、interrupted
 - analyzer smoke：TypeScript、Python、Go、Rust
 - Homebrew install smoke
 - npm install smoke on supported platforms
@@ -59,6 +63,8 @@ bun run package:release
 - no known data-loss bugs。
 - no known secret leakage path in default config。
 - install/update docs 和實際 artifacts 一致。
+- current and previous schema fixtures can be read or produce clear migration errors。
+- agent output contract is stable for success/no-change/error cases。
 - production release notes 完成。
 
 ## Learning Focus

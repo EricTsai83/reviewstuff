@@ -1,4 +1,4 @@
-# 027 - macOS Signing And Notarization
+# 032 - macOS Signing And Notarization
 
 ## Goal
 

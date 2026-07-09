@@ -1,4 +1,4 @@
-# 010 - Findings And Prompt Replay
+# 011 - Findings And Prompt Replay
 
 ## Goal
 
@@ -10,7 +10,9 @@
 
 ```bash
 reviewstuff findings
+reviewstuff review findings
 reviewstuff prompts --finding <id>
+reviewstuff review --show-prompts
 ```
 
 ## Scope
@@ -18,7 +20,9 @@ reviewstuff prompts --finding <id>
 包含：
 
 - `reviewstuff findings`
+- `reviewstuff review findings`
 - `reviewstuff prompts`
+- `reviewstuff review --show-prompts`
 - status/severity filters
 - JSON output
 - per-finding prompt file
@@ -32,16 +36,20 @@ reviewstuff prompts --finding <id>
 
 1. 從 latest session 讀 findings。
 2. 實作 filters：status、severity、session id。
-3. prompt 從 stored finding + current file context 產生。
-4. `prompts` 不呼叫 AI engine。
-5. prompt 也存回 session 方便重用。
+3. 實作 `review findings` 作為 canonical namespace；top-level `findings` 保留 alias。
+4. prompt 從 stored finding + current file context 產生。
+5. 實作 `review --show-prompts` 作為 canonical prompt replay；top-level `prompts` 保留 alias。
+6. prompt replay 不呼叫 AI engine。
+7. prompt 也存回 session 方便重用。
 
 ## Verification
 
 ```bash
 AI_REVIEW_FAKE_ENGINE=1 ./dist/reviewstuff review --json
 ./dist/reviewstuff findings --json
+./dist/reviewstuff review findings --json
 ./dist/reviewstuff prompts --finding <id>
+./dist/reviewstuff review --show-prompts
 ```
 
 ## Acceptance Criteria
@@ -49,6 +57,7 @@ AI_REVIEW_FAKE_ENGINE=1 ./dist/reviewstuff review --json
 - findings/prompts 不呼叫模型。
 - JSON output 穩定。
 - missing session 有清楚錯誤。
+- `review findings` / `review --show-prompts` 是文件建議用法，top-level commands 是相容 alias。
 
 ## Learning Focus
 

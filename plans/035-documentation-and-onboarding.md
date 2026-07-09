@@ -1,4 +1,4 @@
-# 029 - Documentation And Onboarding
+# 035 - Documentation And Onboarding
 
 ## Goal
 
@@ -20,6 +20,7 @@
 - troubleshooting guide
 - example reports
 - migration/update notes
+- agent workflow recipes
 
 不包含：
 
@@ -34,7 +35,8 @@
 3. 新增 `docs/configuration.md`。
 4. 新增 `docs/privacy.md`。
 5. 新增 `docs/troubleshooting.md`。
-6. 確保所有 docs commands 在 smoke test 中可跑或明確標示需要 credentials。
+6. 新增 `docs/agent-workflows.md`，示範 `review --agent`、修 major/critical、二次 review、iteration limit。
+7. 確保所有 docs commands 在 smoke test 中可跑或明確標示需要 credentials。
 
 ## Verification
 
@@ -49,6 +51,8 @@ bun run test
 - 使用者不看 source 也能完成 first review。
 - provider setup 失敗有對應 troubleshooting。
 - privacy docs 與實際資料流一致。
+- agent workflow docs 不要求解析 human output，只使用 NDJSON events。
+- docs 明確說明 `--fast` / `--light`、`review findings`、`review --show-prompts`。
 
 ## Learning Focus
 

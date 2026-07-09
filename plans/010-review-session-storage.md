@@ -1,4 +1,4 @@
-# 009 - Review Session Storage
+# 010 - Review Session Storage
 
 ## Goal
 
@@ -21,12 +21,14 @@
 - session id / latest lookup
 - atomic JSON writes
 - `.reviewstuff/` gitignore guidance
+- retention metadata and safe cleanup hooks
 
 不包含：
 
 - findings command
 - prompts command
 - fix workflow
+- privacy redaction policy implementation
 
 ## Implementation Steps
 
@@ -35,6 +37,8 @@
 3. 所有寫入使用 temp file + rename。
 4. 路徑限制在 repo root。
 5. review command 完成後寫 session。
+6. session metadata 記錄 createdAt、schemaVersion、redaction status、provider/model/scope summary。
+7. 預留 safe cleanup API，供 029 data retention policy 使用。
 
 ## Verification
 
@@ -49,6 +53,7 @@ find .reviewstuff/sessions -type f
 - session 可用 id 和 latest 載入。
 - partial reviewer failure 仍保存成功 findings。
 - storage schema 有 version。
+- session storage 不保存 secrets；若 request/prompt 尚未有完整 redaction policy，metadata 要標示 redaction status。
 
 ## Learning Focus
 
