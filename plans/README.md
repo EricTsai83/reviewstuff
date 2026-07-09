@@ -49,6 +49,34 @@ Effect 的採用節奏要保守：先建立 runtime entrypoint 和必要 service
 - 是否避免同時新增多個外部 integration。
 - 是否有清楚的「不包含」項目。
 
+## Product Completeness
+
+完成 001-019 後，目標狀態是可以本機使用的 AI code review MVP，不是完整商用品質 release。
+
+已具備：
+
+- 可 build 成 Bun standalone binary。
+- 有 binary e2e tests、本機 symlink 安裝、Homebrew formula、npm darwin-arm64 wrapper。
+- 可用真實 AI provider review staged git diff，產生 structured findings/report。
+- fake engine 仍可做 deterministic tests。
+- 有 config/profile、session storage、findings 查詢、prompt replay、fix dry-run、NDJSON agent output。
+- 有 TypeScript/Python/unknown 的 language-neutral schema。
+- 有第一個 TypeScript analyzer adapter。
+- 有最小 readonly deep review loop。
+
+尚未具備：
+
+- `--since <ref>`、完整 working tree scope。
+- `fix --apply`。
+- Python/Go/Rust analyzers、Semgrep、LSP 或 Tree-sitter。
+- deep review 的 `runAnalyzer`、`runGate`、progressive skills。
+- macOS codesign/notarization。
+- Linux/macOS x64 npm packages。
+- update command/self-update。
+- CI release automation、telemetry/privacy policy、完整產品文件。
+
+因此 019 之後可以真的拿本機 codebase 做 staged diff AI review，並作為 dogfood/internal beta 使用；若要稱為完整產品，應再追加 post-019 hardening/release plans。
+
 ## 順序
 
 | Order | Plan | Working State |
@@ -60,17 +88,18 @@ Effect 的採用節奏要保守：先建立 runtime entrypoint 和必要 service
 | 005 | [Git Diff Review MVP](./005-git-diff-review-mvp.md) | 可 review git diff 並輸出 deterministic report |
 | 006 | [Config Profiles](./006-config-profiles-and-prompts.md) | 可用 config/profile 控制 review |
 | 007 | [Engine Adapters MVP](./007-engine-adapters-mvp.md) | fake engine 穩定，provider adapters 有清楚邊界 |
-| 008 | [Review Session Storage](./008-review-session-storage.md) | review 結果可保存並載入 |
-| 009 | [Findings And Prompt Replay](./009-findings-and-prompt-replay.md) | 可查 findings、重播修復 prompt |
-| 010 | [Fix Iteration Workflow](./010-fix-iteration-workflow.md) | 可 dry-run 修復候選並驗證 |
-| 011 | [Agent JSON Protocol](./011-agent-json-protocol.md) | `--agent` 輸出 NDJSON |
-| 012 | [Doctor And Supportability](./012-doctor-and-supportability.md) | 可診斷本機環境 |
-| 013 | [Language Agnostic Review Core](./013-language-agnostic-review-core.md) | review schema 不綁 TypeScript |
-| 014 | [External Analyzer Adapters](./014-external-analyzer-adapters.md) | 可接入第一個 TypeScript analyzer |
-| 015 | [Agentic Deep Review](./015-agentic-deep-review.md) | opt-in deep review agent 可用 |
-| 016 | [Release Artifact Layout](./016-release-artifact-layout.md) | 可產生 release tarball/checksum/manifest |
-| 017 | [Homebrew Install Path](./017-macos-signing-and-homebrew.md) | Homebrew 安裝路徑可用 |
-| 018 | [NPM First Platform Package](./018-npm-multi-platform-and-update.md) | npm 單平台安裝通道有落地路徑 |
+| 008 | [Real AI Review Provider](./008-real-ai-review-provider.md) | 可用真實 provider review staged diff |
+| 009 | [Review Session Storage](./009-review-session-storage.md) | review 結果可保存並載入 |
+| 010 | [Findings And Prompt Replay](./010-findings-and-prompt-replay.md) | 可查 findings、重播修復 prompt |
+| 011 | [Fix Iteration Workflow](./011-fix-iteration-workflow.md) | 可 dry-run 修復候選並驗證 |
+| 012 | [Agent JSON Protocol](./012-agent-json-protocol.md) | `--agent` 輸出 NDJSON |
+| 013 | [Doctor And Supportability](./013-doctor-and-supportability.md) | 可診斷本機環境 |
+| 014 | [Language Agnostic Review Core](./014-language-agnostic-review-core.md) | review schema 不綁 TypeScript |
+| 015 | [External Analyzer Adapters](./015-external-analyzer-adapters.md) | 可接入第一個 TypeScript analyzer |
+| 016 | [Agentic Deep Review](./016-agentic-deep-review.md) | opt-in deep review agent 可用 |
+| 017 | [Release Artifact Layout](./017-release-artifact-layout.md) | 可產生 release tarball/checksum/manifest |
+| 018 | [Homebrew Install Path](./018-homebrew-install-path.md) | Homebrew 安裝路徑可用 |
+| 019 | [NPM First Platform Package](./019-npm-first-platform-package.md) | npm 單平台安裝通道有落地路徑 |
 
 ## 每個 plan 完成前檢查
 

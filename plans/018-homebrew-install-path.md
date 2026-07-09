@@ -1,4 +1,4 @@
-# 017 - Homebrew Install Path
+# 018 - Homebrew Install Path
 
 ## Goal
 
