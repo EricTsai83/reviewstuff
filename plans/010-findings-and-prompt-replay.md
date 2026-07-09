@@ -39,7 +39,7 @@ reviewstuff prompts --finding <id>
 ## Verification
 
 ```bash
-AI_REVIEW_FAKE_ENGINE=1 ./dist/reviewstuff review --staged --json
+AI_REVIEW_FAKE_ENGINE=1 ./dist/reviewstuff review --json
 ./dist/reviewstuff findings --json
 ./dist/reviewstuff prompts --finding <id>
 ```

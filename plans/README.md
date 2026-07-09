@@ -27,6 +27,18 @@
 
 Effect 的採用節奏要保守：先建立 runtime entrypoint 和必要 service interface，等功能真的需要 timeout/concurrency/error mapping 時再加 Layer 組合。不要為尚未出現的需求提前建立抽象。
 
+## CLI Review UX
+
+參考 CodeRabbit CLI 的 local-review UX，但保留本專案的 provider-agnostic/local-first 設計：
+
+- `reviewstuff review` 是主入口，預設 review 目前 local changes，不要求 `git add`。
+- no changes 時不呼叫 provider；human mode 印出 no-change message，agent mode 輸出 `review_skipped` event。
+- `--agent` 輸出 structured JSON/NDJSON，給 coding agents 自動修復迭代使用。
+- `--light` 提供較快、較便宜的 local development review policy。
+- `--base <branch>` / `--since <ref>` 提供 branch comparison。
+- path filters 預設略過 lock files、generated files、build outputs、binary/media files；使用者可 override。
+- `fix --dry-run` 和 `fix --apply` 是獨立命令；`review` 本身不改 source files。
+
 ## Tech Stack
 
 - Runtime/package manager/build target: Bun。
@@ -51,13 +63,13 @@ Effect 的採用節奏要保守：先建立 runtime entrypoint 和必要 service
 
 ## Product Completeness
 
-完成 001-019 後，目標狀態是可以本機使用的 AI code review MVP，不是完整商用品質 release。
+完成 001-019 後，目標狀態是可以本機使用的 AI code review MVP，不是完整商用品質 release。完成 001-030 後，目標狀態才是 production-ready CLI。
 
-已具備：
+001-019 已具備：
 
 - 可 build 成 Bun standalone binary。
 - 有 binary e2e tests、本機 symlink 安裝、Homebrew formula、npm darwin-arm64 wrapper。
-- 可用真實 AI provider review staged git diff，產生 structured findings/report。
+- 可用真實 AI provider review current working tree / branch diff，產生 structured findings/report。
 - provider/model 可切換：cloud API provider、本機 CLI provider、不同模型字串都走同一個 engine contract。
 - fake engine 仍可做 deterministic tests。
 - 有 config/profile、session storage、findings 查詢、prompt replay、fix dry-run、NDJSON agent output。
@@ -65,9 +77,9 @@ Effect 的採用節奏要保守：先建立 runtime entrypoint 和必要 service
 - 有第一個 TypeScript analyzer adapter。
 - 有最小 readonly deep review loop。
 
-尚未具備：
+020-030 補齊 production-ready 所需能力：
 
-- `--since <ref>`、完整 working tree scope。
+- `--since <ref>`、current branch vs base 的完整 scope。
 - `fix --apply`。
 - Python/Go/Rust analyzers、Semgrep、LSP 或 Tree-sitter。
 - deep review 的 `runAnalyzer`、`runGate`、progressive skills。
@@ -75,8 +87,11 @@ Effect 的採用節奏要保守：先建立 runtime entrypoint 和必要 service
 - Linux/macOS x64 npm packages。
 - update command/self-update。
 - CI release automation、telemetry/privacy policy、完整產品文件。
+- provider reliability/cost controls。
+- privacy/security data policy。
+- final production readiness gate。
 
-因此 019 之後可以真的拿本機 codebase 做 staged diff AI review，並作為 dogfood/internal beta 使用；若要稱為完整產品，應再追加 post-019 hardening/release plans。
+因此 019 之後可以真的拿本機 codebase 做 local changes AI review，並作為 dogfood/internal beta 使用；030 之後才應標記 production-ready release。
 
 ## 順序
 
@@ -89,7 +104,7 @@ Effect 的採用節奏要保守：先建立 runtime entrypoint 和必要 service
 | 005 | [Git Diff Review MVP](./005-git-diff-review-mvp.md) | 可 review git diff 並輸出 deterministic report |
 | 006 | [Config Profiles](./006-config-profiles-and-prompts.md) | 可用 config/profile 控制 review |
 | 007 | [Engine Adapters MVP](./007-engine-adapters-mvp.md) | fake engine 穩定，provider adapters 有清楚邊界 |
-| 008 | [Real AI Review Provider](./008-real-ai-review-provider.md) | 可用真實 provider review staged diff |
+| 008 | [Real AI Review Provider](./008-real-ai-review-provider.md) | 可用真實 provider review local changes |
 | 009 | [Review Session Storage](./009-review-session-storage.md) | review 結果可保存並載入 |
 | 010 | [Findings And Prompt Replay](./010-findings-and-prompt-replay.md) | 可查 findings、重播修復 prompt |
 | 011 | [Fix Iteration Workflow](./011-fix-iteration-workflow.md) | 可 dry-run 修復候選並驗證 |
@@ -101,6 +116,17 @@ Effect 的採用節奏要保守：先建立 runtime entrypoint 和必要 service
 | 017 | [Release Artifact Layout](./017-release-artifact-layout.md) | 可產生 release tarball/checksum/manifest |
 | 018 | [Homebrew Install Path](./018-homebrew-install-path.md) | Homebrew 安裝路徑可用 |
 | 019 | [NPM First Platform Package](./019-npm-first-platform-package.md) | npm 單平台安裝通道有落地路徑 |
+| 020 | [Review Scopes And Filters](./020-review-scopes-and-filters.md) | 常用 diff scope 與 filters 可用 |
+| 021 | [Fix Apply Workflow](./021-fix-apply-workflow.md) | 可安全 apply 修復候選 |
+| 022 | [Multi Language Analyzers](./022-multi-language-analyzers.md) | Python/Go/Rust/Semgrep analyzer 可用 |
+| 023 | [Deep Review Tools And Skills](./023-deep-review-tools-and-skills.md) | deep review 可安全使用 tools/skills |
+| 024 | [Provider Reliability And Cost Controls](./024-provider-reliability-and-cost-controls.md) | provider 成本、retry、metrics 可控 |
+| 025 | [Security Privacy And Data Policy](./025-security-privacy-and-data-policy.md) | AI review 資料流有安全與隱私預設 |
+| 026 | [CI And Release Automation](./026-ci-and-release-automation.md) | CI/release pipeline 可重複產生 artifacts |
+| 027 | [macOS Signing And Notarization](./027-macos-signing-and-notarization.md) | macOS release 可被信任執行 |
+| 028 | [Multi Platform Packages And Update](./028-multi-platform-packages-and-update.md) | 多平台 npm/update policy 可用 |
+| 029 | [Documentation And Onboarding](./029-documentation-and-onboarding.md) | 使用者可完成安裝、設定、first review |
+| 030 | [Production Readiness Gate](./030-production-readiness-gate.md) | 可標記 production-ready release |
 
 ## 每個 plan 完成前檢查
 

@@ -9,7 +9,7 @@
 完成後可用：
 
 ```bash
-reviewstuff review --staged --deep
+reviewstuff review --deep
 ```
 
 ## Scope
@@ -59,7 +59,7 @@ proposeFinding
 ## Verification
 
 ```bash
-AI_REVIEW_FAKE_ENGINE=1 ./dist/reviewstuff review --staged --deep --agent | jq -c .
+AI_REVIEW_FAKE_ENGINE=1 ./dist/reviewstuff review --deep --agent | jq -c .
 ```
 
 ## Acceptance Criteria

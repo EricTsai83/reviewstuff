@@ -60,8 +60,8 @@ CLI flags 優先於 config，例如 `--engine openai --model <model-id>`。
 ```bash
 bun run typecheck
 bun run test
-./dist/reviewstuff review --staged --profile quick --json
-./dist/reviewstuff review --staged --engine fake --model fake-reviewer-v1 --json
+./dist/reviewstuff review --profile quick --json
+./dist/reviewstuff review --engine fake --model fake-reviewer-v1 --json
 ```
 
 ## Acceptance Criteria

@@ -9,7 +9,7 @@
 完成後可用：
 
 ```bash
-reviewstuff review --staged --agent
+reviewstuff review --agent
 reviewstuff fix --dry-run --agent
 ```
 
@@ -42,7 +42,7 @@ stdout 每一行都是 JSON。
 ## Verification
 
 ```bash
-AI_REVIEW_FAKE_ENGINE=1 ./dist/reviewstuff review --staged --agent | jq -c .
+AI_REVIEW_FAKE_ENGINE=1 ./dist/reviewstuff review --agent | jq -c .
 AI_REVIEW_FAKE_ENGINE=1 ./dist/reviewstuff fix --dry-run --agent | jq -c .
 ```
 

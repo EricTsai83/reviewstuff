@@ -52,7 +52,7 @@ interface EngineSelectionV1 {
 
 ```bash
 bun run test
-AI_REVIEW_FAKE_ENGINE=1 ./dist/reviewstuff review --staged --json
+AI_REVIEW_FAKE_ENGINE=1 ./dist/reviewstuff review --json
 ```
 
 ## Acceptance Criteria

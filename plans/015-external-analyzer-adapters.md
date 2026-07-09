@@ -36,7 +36,7 @@
 ```bash
 bun run test
 reviewstuff doctor --json
-AI_REVIEW_FAKE_ENGINE=1 ./dist/reviewstuff review --staged --json
+AI_REVIEW_FAKE_ENGINE=1 ./dist/reviewstuff review --json
 ```
 
 ## Acceptance Criteria

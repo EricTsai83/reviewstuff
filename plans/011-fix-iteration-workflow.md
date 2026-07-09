@@ -41,7 +41,7 @@ reviewstuff fix --dry-run
 ## Verification
 
 ```bash
-AI_REVIEW_FAKE_ENGINE=1 ./dist/reviewstuff review --staged --json
+AI_REVIEW_FAKE_ENGINE=1 ./dist/reviewstuff review --json
 AI_REVIEW_FAKE_ENGINE=1 ./dist/reviewstuff fix --dry-run
 ```
 

@@ -9,8 +9,9 @@
 完成後可以執行：
 
 ```bash
+reviewstuff review
+reviewstuff review --json
 reviewstuff review --staged
-reviewstuff review --staged --json
 ```
 
 這階段不呼叫 AI，只用 fake/deterministic reviewer 驗證整條 pipeline。
@@ -25,14 +26,15 @@ reviewstuff review --staged --json
 - `src/domain/report.ts`
 - `src/use-cases/run-review.ts`
 - terminal/json output
-- staged diff reading
+- default working tree diff reading，包括 staged、unstaged tracked、untracked text files
+- optional staged diff reading
 - minimal changed file filtering
 - git subprocess 透過 `src/platform/command-runner.ts`，不得直接使用 `child_process`、`Bun.spawn` 或 shell string
 
 不包含：
 
 - `--since <ref>`
-- full working tree scope
+- branch-vs-base committed changes
 - real provider engine
 - session storage
 - fix workflow
@@ -40,8 +42,8 @@ reviewstuff review --staged --json
 ## Implementation Steps
 
 1. 實作 git repo detection。
-2. 支援第一個 scope：`--staged`。
-3. 讀 staged changed files 與 unified diff。
+2. 支援預設 scope：working tree changes，也就是 staged + unstaged tracked changes + untracked text files。
+3. 支援 optional scope：`--staged` 只 review index。
 4. deterministic reviewer 對特定 marker 產生 finding，例如 `REVIEWSTUFF_FAKE_FINDING`。
 5. 產生 versioned report。
 
@@ -50,6 +52,7 @@ reviewstuff review --staged --json
 ```bash
 bun run test
 bun run build
+AI_REVIEW_FAKE_ENGINE=1 ./dist/reviewstuff review --json
 AI_REVIEW_FAKE_ENGINE=1 ./dist/reviewstuff review --staged --json
 ```
 
@@ -58,6 +61,8 @@ AI_REVIEW_FAKE_ENGINE=1 ./dist/reviewstuff review --staged --json
 - 非 git repo 回傳 usage exit code。
 - 無變更時 clean exit。
 - 有 marker diff 時產生 finding。
+- 預設不要求 `git add`。
+- 預設會納入 untracked text files，並略過 binary/large files。
 - JSON output 穩定、可測。
 - git command timeout、output limit、exit-code mapping 有測試覆蓋。
 
