@@ -51,12 +51,3 @@ do not include `~/.opensrc` in review, build, test, or format scopes.
 If `opensrc` is unavailable, use `node_modules` or official docs as a fallback
 and say so.
 
-## Effect Style
-
-Keep the architecture simple:
-
-- CLI commands parse flags, call use-cases, and render output.
-- Use-cases coordinate services.
-- Filesystem, subprocesses, environment, timeouts, and provider calls stay
-  behind service boundaries.
-- Add advanced Effect patterns only when there is a concrete need.
