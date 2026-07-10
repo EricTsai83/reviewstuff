@@ -23,31 +23,13 @@ When uncertain, prefer: Tailwind, TypeScript, Bun, Convex, Clerk, Vercel.
 - If asked to do too much work at once, stop and state that clearly.
 - If computer use is helpful for completing or verifying work, shell out to gpt-5.5 with Codex for it.
 
-## Dependency Source
+## Source Code Reference
 
-When dependency behavior matters, especially for Effect, read the real source
-instead of guessing from memory.
+Source code for dependencies is cached at `~/.opensrc/`.
 
-Use `opensrc path` to find the source for the version used by this project:
+Use `opensrc path` inside other commands to read source:
 
-```bash
-opensrc path effect --cwd .
-opensrc path @effect/platform --cwd .
-opensrc path @effect/platform-bun --cwd .
-```
-
-Do not hard-code paths under `~/.opensrc`. Always ask `opensrc path <pkg>
---cwd .` for the current path, then search or read that path with normal tools:
-
-```bash
-rg "runPromise" $(opensrc path effect --cwd .)
-rg "Command" $(opensrc path @effect/platform --cwd .)
-```
-
-`opensrc` is only a local read-only source cache. It is not MCP, not RAG, and
-not summarized source. Do not copy cached dependency source into this repo, and
-do not include `~/.opensrc` in review, build, test, or format scopes.
-
-If `opensrc` is unavailable, use `node_modules` or official docs as a fallback
-and say so.
-
+\`\`\`bash
+rg "pattern" $(opensrc path <package>)
+cat $(opensrc path <package>)/path/to/file
+\`\`\`
