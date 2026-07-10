@@ -72,7 +72,7 @@ Effect 的採用節奏要保守：先建立 runtime entrypoint 和必要 service
 
 - Runtime/package manager/build target: Bun。
 - Language: TypeScript strict mode。
-- CLI parsing/help: `commander`。
+- CLI parsing/help: `@effect/cli`。
 - Application runtime: `effect`；use-cases、services、error mapping、timeouts、concurrency 使用 Effect 表達。
 - Platform abstraction: `@effect/platform` + `@effect/platform-bun`。
 - External processes: 一律經由 `@effect/platform/Command`，不得直接在 feature code 使用 `child_process`、`Bun.spawn` 或 shell string。
