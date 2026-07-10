@@ -31,7 +31,7 @@ bun run build
 - `reviewstuff --help`
 - `reviewstuff review --help`
 - `reviewstuff doctor --help`
-- baseline dependencies: `commander`, `effect`, `@effect/platform`, `@effect/platform-bun`
+- baseline dependencies: `@effect/cli`, `@effect/platform`, `@effect/platform-bun`, `@effect/printer`, `@effect/printer-ansi`, `effect`
 - baseline dev dependencies: `typescript`, `@types/bun`
 
 不包含：
@@ -45,7 +45,7 @@ bun run build
 
 1. 建立 TypeScript/Bun 專案設定，`package.json` 設定 `packageManager` 為 Bun。
 2. 安裝並固定 baseline tech stack dependencies。
-3. 使用 `commander` 建立 CLI；command handler 可以很薄，但要預留呼叫 Effect program 的入口。
+3. 使用 `@effect/cli` 建立 CLI；command handler 可以很薄，但要預留呼叫 Effect program 的入口。
 4. 新增最小 Effect runtime bootstrap，讓後續 use-case/service 以 Effect 實作。
 5. 用 JSON import 讀 package version，不使用 runtime `createRequire("../package.json")`。
 6. 新增 build script：
