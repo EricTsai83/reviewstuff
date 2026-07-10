@@ -175,44 +175,46 @@ Effect 的採用節奏要保守：先建立 runtime entrypoint 和必要 service
 
 ## 順序
 
-| Order | Plan | Working State |
-| --- | --- | --- |
-| 001 | [Project Bootstrap And Bun CLI](./001-project-bootstrap-and-bun-cli.md) | 最小 Bun standalone CLI 可 build/run |
-| 002 | [Binary Test Harness](./002-binary-test-harness.md) | 測試直接跑 compiled binary |
-| 003 | [Local Install Workflow](./003-local-install-workflow.md) | 本機 `reviewstuff` 指令可用 |
-| 004 | [Repository Structure Boundaries](./004-repository-structure-boundaries.md) | module 邊界固定 |
-| 005 | [Git Diff Review MVP](./005-git-diff-review-mvp.md) | 可 review git diff 並輸出 deterministic report |
-| 006 | [Config Profiles](./006-config-profiles-and-prompts.md) | 可用 config/profile 控制 review |
-| 007 | [Engine Adapters MVP](./007-engine-adapters-mvp.md) | fake engine 穩定，provider adapters 有清楚邊界 |
-| 008 | [Real AI Review Provider](./008-real-ai-review-provider.md) | 第一個真實 cloud provider 可 review local changes |
-| 009 | [Additional Provider Adapters](./009-additional-provider-adapters.md) | Anthropic 與 local CLI provider 接上同一 contract |
-| 010 | [Review Session Storage](./010-review-session-storage.md) | review 結果可保存並載入 |
-| 011 | [Findings And Prompt Replay](./011-findings-and-prompt-replay.md) | 可查 findings、重播修復 prompt |
-| 012 | [Review Stats](./012-review-stats.md) | 可從 local sessions 彙整 review statistics |
-| 013 | [Fix Iteration Workflow](./013-fix-iteration-workflow.md) | 可 dry-run 修復候選並驗證 |
-| 014 | [Agent JSON Protocol](./014-agent-json-protocol.md) | `--agent` 輸出 NDJSON |
-| 015 | [Doctor And Supportability](./015-doctor-and-supportability.md) | 可診斷本機環境 |
-| 016 | [Language Agnostic Review Core](./016-language-agnostic-review-core.md) | review schema 不綁 TypeScript |
-| 017 | [External Analyzer Adapters](./017-external-analyzer-adapters.md) | 可接入第一個 TypeScript analyzer |
-| 018 | [Agentic Deep Review](./018-agentic-deep-review.md) | opt-in deep review agent 可用 |
-| 019 | [Release Artifact Layout](./019-release-artifact-layout.md) | 可產生 release tarball/checksum/manifest |
-| 020 | [Homebrew Install Path](./020-homebrew-install-path.md) | Homebrew 安裝路徑可用 |
-| 021 | [NPM First Platform Package](./021-npm-first-platform-package.md) | npm 單平台安裝通道有落地路徑 |
-| 022 | [Review Scopes](./022-review-scopes.md) | 常用 diff scope 可用 |
-| 023 | [Review Filters And Skip Policy](./023-review-filters-and-skip-policy.md) | path filters 與 skip reasons 可用 |
-| 024 | [Fix Apply Workflow](./024-fix-apply-workflow.md) | 可安全 apply 修復候選 |
-| 025 | [Python Analyzers](./025-python-analyzers.md) | Python analyzer adapters 可用 |
-| 026 | [Go Rust And Semgrep Analyzers](./026-go-rust-and-semgrep-analyzers.md) | Go/Rust/Semgrep analyzer 可用 |
-| 027 | [Deep Review Tools And Skills](./027-deep-review-tools-and-skills.md) | deep review 可安全使用 tools/skills |
-| 028 | [Provider Reliability And Cost Controls](./028-provider-reliability-and-cost-controls.md) | provider 成本、retry、metrics 可控 |
-| 029 | [Security Privacy And Data Policy](./029-security-privacy-and-data-policy.md) | AI review 資料流有安全與隱私預設 |
-| 030 | [CI Gate](./030-ci-gate.md) | PR/branch CI 穩定跑 typecheck/test/build/e2e |
-| 031 | [Release Automation](./031-release-automation.md) | release pipeline 可重複產生 artifacts |
-| 032 | [macOS Signing And Notarization](./032-macos-signing-and-notarization.md) | macOS release 可被信任執行 |
-| 033 | [Multi Platform Packages And Update Check](./033-multi-platform-packages-and-update-check.md) | 多平台 npm 與 update check 可用 |
-| 034 | [Direct Tarball Self Update](./034-direct-tarball-self-update.md) | direct tarball self-update 可安全執行 |
-| 035 | [Documentation And Onboarding](./035-documentation-and-onboarding.md) | 使用者可完成安裝、設定、first review |
-| 036 | [Production Readiness Gate](./036-production-readiness-gate.md) | 可標記 production-ready release |
+每完成一個 plan 後，必須回到這張表把對應列的 `Status` 從 `[ ] TODO` 改成 `[x] DONE`。只有在該 plan 的 verification commands 跑完、acceptance criteria 都符合、且專案仍可繼續往下一個 plan 開發時，才能標註 DONE。
+
+| Status | Order | Plan | Working State |
+| --- | --- | --- | --- |
+| [x] DONE | 001 | [Project Bootstrap And Bun CLI](./001-project-bootstrap-and-bun-cli.md) | 最小 Bun standalone CLI 可 build/run |
+| [ ] TODO | 002 | [Binary Test Harness](./002-binary-test-harness.md) | 測試直接跑 compiled binary |
+| [ ] TODO | 003 | [Local Install Workflow](./003-local-install-workflow.md) | 本機 `reviewstuff` 指令可用 |
+| [ ] TODO | 004 | [Repository Structure Boundaries](./004-repository-structure-boundaries.md) | module 邊界固定 |
+| [ ] TODO | 005 | [Git Diff Review MVP](./005-git-diff-review-mvp.md) | 可 review git diff 並輸出 deterministic report |
+| [ ] TODO | 006 | [Config Profiles](./006-config-profiles-and-prompts.md) | 可用 config/profile 控制 review |
+| [ ] TODO | 007 | [Engine Adapters MVP](./007-engine-adapters-mvp.md) | fake engine 穩定，provider adapters 有清楚邊界 |
+| [ ] TODO | 008 | [Real AI Review Provider](./008-real-ai-review-provider.md) | 第一個真實 cloud provider 可 review local changes |
+| [ ] TODO | 009 | [Additional Provider Adapters](./009-additional-provider-adapters.md) | Anthropic 與 local CLI provider 接上同一 contract |
+| [ ] TODO | 010 | [Review Session Storage](./010-review-session-storage.md) | review 結果可保存並載入 |
+| [ ] TODO | 011 | [Findings And Prompt Replay](./011-findings-and-prompt-replay.md) | 可查 findings、重播修復 prompt |
+| [ ] TODO | 012 | [Review Stats](./012-review-stats.md) | 可從 local sessions 彙整 review statistics |
+| [ ] TODO | 013 | [Fix Iteration Workflow](./013-fix-iteration-workflow.md) | 可 dry-run 修復候選並驗證 |
+| [ ] TODO | 014 | [Agent JSON Protocol](./014-agent-json-protocol.md) | `--agent` 輸出 NDJSON |
+| [ ] TODO | 015 | [Doctor And Supportability](./015-doctor-and-supportability.md) | 可診斷本機環境 |
+| [ ] TODO | 016 | [Language Agnostic Review Core](./016-language-agnostic-review-core.md) | review schema 不綁 TypeScript |
+| [ ] TODO | 017 | [External Analyzer Adapters](./017-external-analyzer-adapters.md) | 可接入第一個 TypeScript analyzer |
+| [ ] TODO | 018 | [Agentic Deep Review](./018-agentic-deep-review.md) | opt-in deep review agent 可用 |
+| [ ] TODO | 019 | [Release Artifact Layout](./019-release-artifact-layout.md) | 可產生 release tarball/checksum/manifest |
+| [ ] TODO | 020 | [Homebrew Install Path](./020-homebrew-install-path.md) | Homebrew 安裝路徑可用 |
+| [ ] TODO | 021 | [NPM First Platform Package](./021-npm-first-platform-package.md) | npm 單平台安裝通道有落地路徑 |
+| [ ] TODO | 022 | [Review Scopes](./022-review-scopes.md) | 常用 diff scope 可用 |
+| [ ] TODO | 023 | [Review Filters And Skip Policy](./023-review-filters-and-skip-policy.md) | path filters 與 skip reasons 可用 |
+| [ ] TODO | 024 | [Fix Apply Workflow](./024-fix-apply-workflow.md) | 可安全 apply 修復候選 |
+| [ ] TODO | 025 | [Python Analyzers](./025-python-analyzers.md) | Python analyzer adapters 可用 |
+| [ ] TODO | 026 | [Go Rust And Semgrep Analyzers](./026-go-rust-and-semgrep-analyzers.md) | Go/Rust/Semgrep analyzer 可用 |
+| [ ] TODO | 027 | [Deep Review Tools And Skills](./027-deep-review-tools-and-skills.md) | deep review 可安全使用 tools/skills |
+| [ ] TODO | 028 | [Provider Reliability And Cost Controls](./028-provider-reliability-and-cost-controls.md) | provider 成本、retry、metrics 可控 |
+| [ ] TODO | 029 | [Security Privacy And Data Policy](./029-security-privacy-and-data-policy.md) | AI review 資料流有安全與隱私預設 |
+| [ ] TODO | 030 | [CI Gate](./030-ci-gate.md) | PR/branch CI 穩定跑 typecheck/test/build/e2e |
+| [ ] TODO | 031 | [Release Automation](./031-release-automation.md) | release pipeline 可重複產生 artifacts |
+| [ ] TODO | 032 | [macOS Signing And Notarization](./032-macos-signing-and-notarization.md) | macOS release 可被信任執行 |
+| [ ] TODO | 033 | [Multi Platform Packages And Update Check](./033-multi-platform-packages-and-update-check.md) | 多平台 npm 與 update check 可用 |
+| [ ] TODO | 034 | [Direct Tarball Self Update](./034-direct-tarball-self-update.md) | direct tarball self-update 可安全執行 |
+| [ ] TODO | 035 | [Documentation And Onboarding](./035-documentation-and-onboarding.md) | 使用者可完成安裝、設定、first review |
+| [ ] TODO | 036 | [Production Readiness Gate](./036-production-readiness-gate.md) | 可標記 production-ready release |
 
 ## 每個 plan 完成前檢查
 
