@@ -117,9 +117,9 @@ pre {
 
 - Links: `--clay`, underlined, visible underline offset.
 - Inline code: `--gray-100` background, `--oat` border, `--radius-sm`, wraps safely on mobile.
-- Code blocks: use a quiet dark surface with thin-weight monospace, low-contrast borders, restrained syntax colors, and no toolbar. Keep horizontal scrolling on `pre code`, not the whole `pre`.
+- Code blocks: use a quiet dark surface with thin-weight monospace, low-contrast borders, restrained syntax colors, and no toolbar. Keep horizontal scrolling on `pre code`, not the whole `pre`, and style the scrollbar as thin, low-contrast, and consistent with the dark code surface.
 - Code block labels: keep `.label` in the markup for tooling context, but hide it by default. If a page truly needs visible language labels, show them as a small unobtrusive corner pill, never as a full-height toolbar.
-- Copy buttons: add a small top-right icon-only `.copy-code` button to each code block with local JS; copy only `pre code` text, keep `aria-label`, and use clipboard API with a textarea fallback.
+- Copy buttons: add a small top-right icon-only `.copy-code` button to each code block with local JS; copy only `pre code` text, keep `aria-label`, use clipboard API with a textarea fallback, and briefly switch the icon to a check mark after a successful click.
 - Tables: same width as prose, collapsed borders, `--gray-100` header, `--oat` borders, compact padding.
 - Callouts: `--gray-100` background, `--oat` border, left accent using `--clay`; warning callouts may use `--warning`.
 - Sources/reference sections: top border using `--oat`, smaller text.
@@ -128,7 +128,8 @@ Default code block CSS. Use this compact pattern rather than adding a toolbar:
 
 ```css
 pre { position: relative; width: 100%; margin: var(--space-lg) 0 var(--space-xl); border: 1px solid #26241f; border-radius: var(--radius-md); background: #11110f; color: #d8d4ca; overflow: hidden; }
-pre code { display: block; border: 0; background: transparent; padding: 18px 64px 18px 22px; color: inherit; overflow-x: auto; white-space: pre; font-size: 0.875rem; font-weight: 400; line-height: 1.62; }
+pre code { display: block; border: 0; background: transparent; padding: 18px 64px 18px 22px; color: inherit; overflow-x: auto; white-space: pre; font-size: 0.875rem; font-weight: 400; line-height: 1.62; scrollbar-width: none; }
+pre code::-webkit-scrollbar { width: 0; height: 0; }
 pre .label { display: none; }
 
 .copy-code {
@@ -143,8 +144,22 @@ pre .label { display: none; }
 }
 
 .copy-code:hover, .copy-code:focus-visible { border-color: rgba(250, 249, 245, 0.28); background: rgba(250, 249, 245, 0.12); color: var(--ivory); outline: none; }
-.copy-code svg { width: 15px; height: 15px; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; fill: none; pointer-events: none; }
+.copy-code.copied { border-color: rgba(143, 184, 106, 0.42); background: rgba(143, 184, 106, 0.14); color: #b8d99a; }
+.copy-code svg { width: 13px; height: 13px; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; fill: none; pointer-events: none; }
+
+.code-scrollbar { position: absolute; right: 0; bottom: 0; left: 0; height: 3px; border-radius: 999px; background: rgba(250, 249, 245, 0.1); cursor: pointer; }
+.code-scrollbar.hidden { display: none; }
+.code-scrollbar-thumb { height: 100%; border-radius: inherit; background: rgba(255, 148, 110, 0.82); transform: translateX(0); cursor: grab; }
+.code-scrollbar-thumb:active { cursor: grabbing; }
 ```
+
+When adding local copy-button JavaScript, use a copy icon initially and replace it with this check icon after a successful copy, then reset after roughly 1.4 seconds:
+
+```html
+<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"></path></svg>
+```
+
+For horizontal code scrolling, hide the native scrollbar and add a local `.code-scrollbar` with a draggable `.code-scrollbar-thumb` synchronized to `pre code.scrollLeft`. Native scrollbar thickness is not reliable across macOS, Chromium, Safari, and Firefox, so do not depend on `::-webkit-scrollbar` height for the final visual.
 
 ## Code Highlight Colors
 
