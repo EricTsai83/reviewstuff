@@ -117,32 +117,55 @@ pre {
 
 - Links: `--clay`, underlined, visible underline offset.
 - Inline code: `--gray-100` background, `--oat` border, `--radius-sm`, wraps safely on mobile.
-- Code blocks: `--slate` background, `--ivory` text, `--gray-700` border, `--radius-md`, `--space-lg`, horizontal scroll.
-- Code block labels: use a small uppercase `.label` inside `pre` before `code` for language or file context when highlighting is expected.
+- Code blocks: use a quiet dark surface with thin-weight monospace, low-contrast borders, restrained syntax colors, and no toolbar. Keep horizontal scrolling on `pre code`, not the whole `pre`.
+- Code block labels: keep `.label` in the markup for tooling context, but hide it by default. If a page truly needs visible language labels, show them as a small unobtrusive corner pill, never as a full-height toolbar.
+- Copy buttons: add a small top-right icon-only `.copy-code` button to each code block with local JS; copy only `pre code` text, keep `aria-label`, and use clipboard API with a textarea fallback.
 - Tables: same width as prose, collapsed borders, `--gray-100` header, `--oat` borders, compact padding.
 - Callouts: `--gray-100` background, `--oat` border, left accent using `--clay`; warning callouts may use `--warning`.
 - Sources/reference sections: top border using `--oat`, smaller text.
+
+Default code block CSS. Use this compact pattern rather than adding a toolbar:
+
+```css
+pre { position: relative; width: 100%; margin: var(--space-lg) 0 var(--space-xl); border: 1px solid #26241f; border-radius: var(--radius-md); background: #11110f; color: #d8d4ca; overflow: hidden; }
+pre code { display: block; border: 0; background: transparent; padding: 18px 64px 18px 22px; color: inherit; overflow-x: auto; white-space: pre; font-size: 0.875rem; font-weight: 400; line-height: 1.62; }
+pre .label { display: none; }
+
+.copy-code {
+  position: absolute; top: 9px; right: 9px; z-index: 1;
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 30px; height: 30px; padding: 0;
+  border: 1px solid rgba(250, 249, 245, 0.14);
+  border-radius: var(--radius-sm);
+  background: rgba(250, 249, 245, 0.06);
+  color: rgba(250, 249, 245, 0.72);
+  cursor: pointer;
+}
+
+.copy-code:hover, .copy-code:focus-visible { border-color: rgba(250, 249, 245, 0.28); background: rgba(250, 249, 245, 0.12); color: var(--ivory); outline: none; }
+.copy-code svg { width: 15px; height: 15px; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; fill: none; pointer-events: none; }
+```
 
 ## Code Highlight Colors
 
 The bundled highlighter emits static token spans. Style those classes; do not add a runtime highlighter.
 
 ```css
-pre code .k { color: #ffb182; font-weight: 650; }
-pre code .s { color: #bfe58b; }
+pre code .k { color: #ff946e; font-weight: 400; }
+pre code .s { color: #8fb86a; }
 pre code .n,
-pre code .p { color: #9fd0ff; }
-pre code .c { color: #9a9992; font-style: italic; }
-pre code .f { color: #ffd36e; }
-pre code .t { color: #f5d99b; font-weight: 650; }
-pre code .o { color: #d8d2c5; }
-pre.language-shell { background: #191815; }
-pre code .sh-command { color: #ffd36e; font-weight: 700; }
-pre code .sh-flag { color: #9fd0ff; font-weight: 650; }
-pre code .sh-string { color: #bfe58b; }
-pre code .sh-var { color: #f5d99b; }
-pre code .sh-comment { color: #9a9992; font-style: italic; }
-pre code .sh-prompt { color: #ffb182; font-weight: 700; }
+pre code .p { color: #d8d4ca; }
+pre code .c { color: #858177; font-style: italic; }
+pre code .f { color: #cfc6a2; }
+pre code .t { color: #cfc6a2; font-weight: 400; }
+pre code .o { color: #ff946e; }
+pre.language-shell { background: #11110f; }
+pre code .sh-command { color: #ff946e; font-weight: 400; }
+pre code .sh-flag { color: #cfc6a2; font-weight: 400; }
+pre code .sh-string { color: #8fb86a; }
+pre code .sh-var { color: #cfc6a2; }
+pre code .sh-comment { color: #858177; font-style: italic; }
+pre code .sh-prompt { color: #ff946e; font-weight: 400; }
 ```
 
 ## Mobile
