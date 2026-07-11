@@ -73,8 +73,20 @@ article {
 
 h1 {
   max-width: none;
+  font-size: 1.8rem;
+  line-height: 1.18;
   text-wrap: balance;
   overflow-wrap: normal;
+}
+
+h2 {
+  font-size: 1.22rem;
+  line-height: 1.25;
+}
+
+h3 {
+  font-size: 1rem;
+  line-height: 1.35;
 }
 
 p,
@@ -124,6 +136,13 @@ pre code .c { color: #9a9992; font-style: italic; }
 pre code .f { color: #ffd36e; }
 pre code .t { color: #f5d99b; font-weight: 650; }
 pre code .o { color: #d8d2c5; }
+pre.language-shell { background: #191815; }
+pre code .sh-command { color: #ffd36e; font-weight: 700; }
+pre code .sh-flag { color: #9fd0ff; font-weight: 650; }
+pre code .sh-string { color: #bfe58b; }
+pre code .sh-var { color: #f5d99b; }
+pre code .sh-comment { color: #9a9992; font-style: italic; }
+pre code .sh-prompt { color: #ffb182; font-weight: 700; }
 ```
 
 ## Mobile
@@ -131,6 +150,7 @@ pre code .o { color: #d8d2c5; }
 ```css
 @media (max-width: 640px) {
   body { font-size: 15px; }
+  h1 { font-size: 1.65rem; }
   main { padding: var(--space-xl); }
   pre code { font-size: 0.8125rem; line-height: 1.5; }
   p code,

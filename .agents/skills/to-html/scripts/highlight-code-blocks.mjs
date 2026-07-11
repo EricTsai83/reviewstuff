@@ -168,10 +168,85 @@ const highlightTypeScript = (code) => {
   return output
 }
 
-const highlightShell = (code) =>
-  escapeHtml(code).replace(/(^|\s)(--?[A-Za-z0-9-]+)/g, (_match, leading, flag) => {
-    return `${leading}${span("p", flag)}`
-  })
+const highlightShellLine = (line) => {
+  if (/^\s*#/.test(line)) return span("sh-comment", line)
+
+  let output = ""
+  let index = 0
+  let commandHighlighted = false
+
+  const emit = (value) => {
+    output += escapeHtml(value)
+  }
+  const emitSpan = (className, value) => {
+    output += span(className, value)
+  }
+
+  while (index < line.length) {
+    const char = line[index]
+
+    if (/\s/.test(char)) {
+      emit(char)
+      index += 1
+      continue
+    }
+
+    if (char === "#") {
+      emitSpan("sh-comment", line.slice(index))
+      break
+    }
+
+    if (char === "$" && line[index + 1] === " ") {
+      emitSpan("sh-prompt", "$")
+      emit(" ")
+      index += 2
+      continue
+    }
+
+    if (char === "\"" || char === "'") {
+      const quote = char
+      let end = index + 1
+      while (end < line.length) {
+        if (line[end] === "\\") {
+          end += 2
+          continue
+        }
+        if (line[end] === quote) {
+          end += 1
+          break
+        }
+        end += 1
+      }
+      emitSpan("sh-string", line.slice(index, end))
+      index = end
+      continue
+    }
+
+    let end = index + 1
+    while (end < line.length && !/\s/.test(line[end])) end += 1
+    const word = line.slice(index, end)
+
+    if (/^--?[A-Za-z0-9][A-Za-z0-9-]*/.test(word)) {
+      emitSpan("sh-flag", word)
+    } else if (/^\$[A-Za-z_][A-Za-z0-9_]*$/.test(word) || /^[A-Za-z_][A-Za-z0-9_]*=/.test(word)) {
+      emitSpan("sh-var", word)
+    } else if (!commandHighlighted && !/^[./~\w-]+=/.test(word)) {
+      emitSpan("sh-command", word)
+      commandHighlighted = true
+    } else if (!commandHighlighted) {
+      emitSpan("sh-command", word)
+      commandHighlighted = true
+    } else {
+      emit(word)
+    }
+
+    index = end
+  }
+
+  return output
+}
+
+const highlightShell = (code) => code.split("\n").map(highlightShellLine).join("\n")
 
 const inferLanguage = (label, code) => {
   const normalizedLabel = label.toLowerCase()
@@ -202,7 +277,7 @@ const inferLanguage = (label, code) => {
 }
 
 html = html.replace(
-  /<pre>(?:<span class="label">([^<]+)<\/span>)?<code>([\s\S]*?)<\/code><\/pre>/g,
+  /<pre(?:\s+[^>]*)?>(?:<span class="label">([^<]+)<\/span>)?<code>([\s\S]*?)<\/code><\/pre>/g,
   (_match, label = "", codeHtml) => {
     const raw = decodeHtml(codeHtml)
     const language = inferLanguage(label, raw)
@@ -214,7 +289,9 @@ html = html.replace(
 
     const renderedLabel = label ? `<span class="label">${label}</span>` : ""
 
-    return `<pre>${renderedLabel}<code>${highlighted}</code></pre>`
+    const preClass = language === "plain" ? "" : ` class="language-${language}"`
+
+    return `<pre${preClass}>${renderedLabel}<code>${highlighted}</code></pre>`
   }
 )
 
