@@ -16,6 +16,9 @@ When called from `to-html`, edit the file directly without asking for confirmati
    - Make sure concepts appear before ideas that depend on them.
    - Prefer one running example.
    - Remove duplicate, stale, or low-value sections.
+   - Check every example, command, code block, table, and callout against the article's stated topic. If an element does not directly explain, demonstrate, contrast, or support the core topic, remove it or replace it with a topic-specific example.
+   - Avoid generic setup or hello-world examples unless the article's purpose is explicitly introductory setup. Prefer examples whose names, commands, and values make the article's main distinction visible.
+   - After each command or code block, the surrounding prose should make clear why it exists. If the reason would be "shows how to run the sample" but running the sample is not the article's topic, omit it.
 
 2. Tighten the prose.
    - Keep paragraphs short and direct.
