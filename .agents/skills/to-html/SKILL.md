@@ -16,7 +16,7 @@ Turn the useful knowledge from the current context into a standalone `.html` art
 4. Choose the format:
    - Use a clean prose article by default.
    - If the content is easier to understand as a comparison, plan, report, code review, diagram, table, design sheet, or small interactive tool, read `HTML-ARTICLE-DESIGN-PATTERNS.md` and pick one primary pattern.
-   - If the content involves a workflow, pipeline, decision path, state transition, layer boundary, or arrows between concepts, read `HTML-SVG-FLOW-DIAGRAMS.md` and add a concise inline SVG diagram when it clarifies the article.
+   - If the content involves a workflow, pipeline, decision path, state transition, layer boundary, or arrows between concepts, read `HTML-SVG-FLOW-DIAGRAMS.md` and add a concise inline SVG diagram when it clarifies the article. For these diagrams, author Mermaid as an intermediate format and render it to inline SVG at build time; do not include Mermaid source or runtime Mermaid in the final HTML.
 5. Save the article under `./docs` from the current project root. Create the folder if needed.
 6. Use a concise topic filename, such as `effect-cli-command-guide.html`.
 7. After the first complete draft, read `IMPROVE-HTML-ARTICLE.md` and apply one revision pass directly to the file.
@@ -37,8 +37,20 @@ Turn the useful knowledge from the current context into a standalone `.html` art
 - Keep the HTML self-contained: inline CSS, inline SVG when useful, and only small local JavaScript when interaction is needed.
 - Do not rely on CDN assets, remote fonts, external images, runtime Mermaid, or browser-side syntax highlighters.
 - Make the article pleasant to read on mobile and desktop with clear hierarchy, readable line lengths, and intentional spacing.
-- Use visual elements only when they clarify the content. Prefer inline SVG over ASCII art or Mermaid for flow diagrams, request/data paths, state machines, layered boundaries, and other spatial or relational explanations.
+- Use visual elements only when they clarify the content. Prefer inline SVG over ASCII art. Mermaid may be used only as a temporary authoring format that is rendered and inlined before delivery.
 - By default, use `DESIGN-SYSTEM.md` for CSS tokens, typography, spacing, component styling, and final visual consistency.
+
+## Mermaid Rendering
+
+Mermaid is a skill/tooling dependency, not an application dependency for the current repository.
+
+- Do not add `@mermaid-js/mermaid-cli`, Mermaid runtime packages, Puppeteer, or diagram tooling to the project root `package.json`.
+- Do not leave `.mmd`, generated `.svg`, or other intermediate diagram files in the repository unless the user explicitly asks for retained sources.
+- Do not include Mermaid source, Mermaid scripts, CDN links, or browser-side Mermaid rendering in the final HTML.
+- Use `MERMAID_CLI_BIN` when the environment provides a pinned `mmdc` binary.
+- Otherwise use the bundled script, which invokes `bunx --package @mermaid-js/mermaid-cli mmdc` as a tool-scoped build step.
+- Render Mermaid to SVG, sanitize/post-process it, inline the final SVG inside the article, then delete temporary files.
+- If Mermaid rendering is unavailable and the diagram is small, fall back to a manually written inline SVG only after noting the fallback in your working update.
 
 ## Article Structure
 

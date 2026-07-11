@@ -10,7 +10,9 @@ Use this only when an article has a process, boundary, decision, or state change
 
 ## Shared Rules
 
-- Keep diagrams self-contained: inline `<svg>`, local CSS, no Mermaid, no screenshots, no remote assets, and no runtime diagram library.
+- Keep diagrams self-contained in the final article: inline `<svg>`, local CSS, no Mermaid source, no screenshots, no remote assets, and no runtime diagram library.
+- Use Mermaid as the default authoring format for flow, decision, state, boundary, and relationship diagrams. Render Mermaid to SVG during the skill run, sanitize/post-process the SVG, inline it into the HTML, and delete all intermediate `.mmd` and `.svg` files.
+- Do not add Mermaid or `@mermaid-js/mermaid-cli` to the project root dependencies. The renderer is a skill/tooling dependency only.
 - Place a diagram after the prose that introduces the concept, before detailed examples or checklists that depend on it.
 - Use one diagram for one idea. Split large processes instead of making one dense SVG.
 - Match `DESIGN-SYSTEM.md`: reuse article tokens, restrained color, readable type, and the same content width as tables and code blocks.
@@ -32,19 +34,64 @@ Prefer a table when the content is primarily comparison. Prefer an ordered list 
 
 1. Draft the article first.
 2. Identify one place where a reader would benefit from seeing direction, branching, or ownership.
-3. Add a `<figure class="flow-figure">` containing the SVG and an optional `<figcaption>`.
-4. Add only the CSS classes the SVG uses.
-5. Re-run the article's visual-system pass so the figure aligns with tables, callouts, and code blocks.
-6. Run code highlighting after diagram edits, as usual for `to-html`; do not let highlighting rewrite SVG markup.
+3. Write Mermaid source in memory or a temporary file. Keep labels short and use the article's primary language.
+4. Render Mermaid to SVG using `scripts/render-mermaid-svg.mjs`.
+5. Inline the sanitized SVG inside `<figure class="flow-figure">` with an optional `<figcaption>`.
+6. Delete temporary Mermaid and SVG files. Do not keep diagram source in the repository unless explicitly requested.
+7. Add only the CSS classes the figure uses.
+8. Re-run the article's visual-system pass so the figure aligns with tables, callouts, and code blocks.
+9. Run code highlighting after diagram edits, as usual for `to-html`; do not let highlighting rewrite SVG markup.
+
+## Mermaid Rendering
+
+Use Mermaid for the diagram source, then render it before delivery. The final HTML must contain only sanitized inline SVG.
+
+Example source:
+
+```mermaid
+flowchart LR
+  Command["Command<br/>動作"] --> Args["Args<br/>主要對象"]
+  Args --> Options["Options<br/>行為設定"]
+  Command -. "解析失敗" .-> ValidationError["ValidationError"]
+  Args -. "解析失敗" .-> ValidationError
+  Options -. "解析失敗" .-> ValidationError
+```
+
+Render through the skill script:
+
+```sh
+cat <<'EOF' | bun .agents/skills/to-html/scripts/render-mermaid-svg.mjs \
+  --title "CLI 輸入責任分界" \
+  --desc "Command、Args、Options 與 ValidationError 的責任邊界。" \
+  --caption "先分清動作、對象、設定，再判斷錯誤屬於 parser 還是 domain。" \
+  --figure
+flowchart LR
+  Command["Command<br/>動作"] --> Args["Args<br/>主要對象"]
+  Args --> Options["Options<br/>行為設定"]
+  Command -. "解析失敗" .-> ValidationError["ValidationError"]
+  Args -. "解析失敗" .-> ValidationError
+  Options -. "解析失敗" .-> ValidationError
+EOF
+```
+
+The script writes sanitized SVG or figure HTML to stdout unless `--out <file>` is provided. Prefer stdout for temporary use so no intermediate files remain in the repository.
+
+Renderer resolution:
+
+1. If `MERMAID_CLI_BIN` is set, the script uses that `mmdc` binary.
+2. Otherwise it invokes `bunx --package @mermaid-js/mermaid-cli mmdc`.
+
+This keeps Mermaid out of the current project's runtime and package manifest.
 
 ## SVG Requirements
 
-- Include `viewBox`, `role="img"`, `<title>`, `<desc>`, and `aria-labelledby`.
-- Use unique IDs for each diagram's title, description, marker, and clip/mask definitions.
-- Use real SVG primitives: `<g>`, `<rect>`, `<path>`, `<text>`, `<line>`, `<marker>`.
+- Include `viewBox`, `role="img"`, `<title>`, `<desc>`, and `aria-labelledby`. The render script adds or normalizes these.
+- Use unique IDs for each diagram's title, description, marker, and clip/mask definitions. The render script prefixes SVG IDs.
+- Use real SVG primitives in the final SVG. Mermaid output is acceptable after sanitization.
 - Give every node a short label. Give non-obvious arrows or branches a short label.
 - Do not rely on color alone. Shape, position, and text must carry the meaning.
 - Keep the SVG responsive with `width: 100%; height: auto;`.
+- The final SVG must not contain `<script>`, remote URLs, external fonts, or runtime Mermaid data.
 
 ## CSS Hooks
 
@@ -91,16 +138,17 @@ Use these class names unless the article already has equivalent figure styles:
 
 ## Text Fit
 
-SVG text does not wrap automatically.
+Mermaid improves layout compared with hand-authored SVG, but text can still overflow or produce cramped diagrams.
 
 - Keep labels to one or two short lines.
-- Use separate `<text>` elements for each line.
-- Use `<foreignObject>` only when a label is long or variable and wrapping is necessary.
-- Leave at least 8px padding inside nodes and 40px between adjacent nodes.
-- Put a background-colored rect behind edge labels that sit over a path.
-- Prefer wider nodes over smaller font sizes.
+- Prefer `<br/>` in Mermaid labels when a label needs two lines.
+- Split dense diagrams into multiple figures rather than forcing small text.
+- Prefer short nouns and verbs over explanatory sentences inside nodes.
+- Check the rendered SVG on mobile width before finishing.
 
-## Minimal Pattern
+## Fallback Inline SVG Pattern
+
+Use hand-authored SVG only for very small diagrams or when Mermaid rendering is unavailable. Keep the same final requirements: accessible inline SVG, responsive sizing, no runtime dependency, and no remote assets.
 
 Use this as a structure, not as fixed content:
 
@@ -136,6 +184,9 @@ Use this as a structure, not as fixed content:
 ## Quality Check
 
 - The diagram teaches a relationship the prose alone did not make easy to scan.
+- Mermaid source was used only as a temporary authoring format, unless the diagram was a documented small-SVG fallback.
+- No `.mmd` or generated `.svg` intermediate file remains in the repository.
+- The current project's root package manifest was not changed to add Mermaid tooling.
 - The figure aligns to the article's normal content width.
 - Labels do not overflow their boxes.
 - The diagram remains readable on mobile.
