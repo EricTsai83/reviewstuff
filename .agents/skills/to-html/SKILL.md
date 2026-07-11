@@ -24,6 +24,18 @@ Turn the useful knowledge from the current context into a standalone `.html` art
 9. Run `bun .agents/skills/to-html/scripts/highlight-code-blocks.mjs <html-file>` to apply deterministic static highlighting to code blocks.
 10. Verify the final file, then report the relative path and a short summary.
 
+## Visual QA For Figures
+
+When the article contains SVG diagrams, charts, figures, or other spatial layouts:
+
+1. After the design-system pass and code highlighting, render the final HTML in a browser or preview at desktop width and mobile/narrow width.
+2. Capture or inspect the rendered figure pixels, not only the SVG source or DOM bounding boxes.
+3. Check that labels are readable, labels stay inside their shapes, arrows do not run through text, nodes do not overlap, captions do not collide with the figure, and the figure is not cramped on mobile.
+4. If the figure fails visual QA, revise the layout and repeat the rendered check before delivery.
+5. Prefer simplifying the figure over forcing dense content into a small SVG: split it into two figures, convert it to a table, or use a vertical layout.
+
+Use the available browser preview/screenshot tooling when possible. If browser preview is unavailable, use the best concrete fallback available, such as a headless browser already present in the environment, PDF/image rendering, or explicit geometry checks. Do not add browser or diagram tooling to the project dependencies only for QA. State any verification limitation in the final response.
+
 ## Scope
 
 - Center the article on the useful knowledge from the current conversation thread.
@@ -98,3 +110,4 @@ Before finishing, confirm:
 - Code blocks, if present, preserve escaping, indentation, and static highlighting markup.
 - No prose Markdown artifacts remain, including inline-code backticks outside code blocks.
 - No default eyebrow/kicker, badge row, or decorative metadata appears above the title.
+- Any SVG diagrams or spatial figures have passed rendered visual QA at desktop and mobile/narrow widths, or the final response states the fallback verification limitation.

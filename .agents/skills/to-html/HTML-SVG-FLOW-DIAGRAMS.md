@@ -41,6 +41,7 @@ Prefer a table when the content is primarily comparison. Prefer an ordered list 
 7. Add only the CSS classes the figure uses.
 8. Re-run the article's visual-system pass so the figure aligns with tables, callouts, and code blocks.
 9. Run code highlighting after diagram edits, as usual for `to-html`; do not let highlighting rewrite SVG markup.
+10. Render the final article and visually inspect the diagram at desktop and mobile/narrow widths before delivery. Use screenshots or visible preview when possible; do not rely only on source inspection or node bounding boxes.
 
 ## Mermaid Rendering
 
@@ -93,6 +94,16 @@ This keeps Mermaid out of the current project's runtime and package manifest.
 - Keep the SVG responsive with `width: 100%; height: auto;`.
 - The final SVG must not contain `<script>`, remote URLs, external fonts, or runtime Mermaid data.
 
+## Layout Rules
+
+- Use horizontal flow only for simple linear diagrams with three to five compact nodes.
+- Use vertical or stepped layouts for decision flows, multiple diamond nodes, long labels, or diagrams with branch returns.
+- Keep at least one node-width of breathing room between decision diamonds and nearby rectangles when they are on different branches.
+- Avoid arrows that pass behind or through labels. Route arrows around nodes, or move labels outside the path.
+- If a label needs more than two short lines, shorten the label, move detail into the caption/prose, or replace the diagram with a table.
+- If the diagram requires more than one decision diamond and two outcomes, split it into multiple figures unless the rendered screenshot remains easy to read.
+- On narrow widths, the diagram may be taller, but it should not become a tiny compressed strip; prefer stacked layouts over wide layouts that scale text below readable size.
+
 ## CSS Hooks
 
 Use these class names unless the article already has equivalent figure styles:
@@ -144,7 +155,22 @@ Mermaid improves layout compared with hand-authored SVG, but text can still over
 - Prefer `<br/>` in Mermaid labels when a label needs two lines.
 - Split dense diagrams into multiple figures rather than forcing small text.
 - Prefer short nouns and verbs over explanatory sentences inside nodes.
-- Check the rendered SVG on mobile width before finishing.
+- Check the rendered SVG on desktop and mobile/narrow widths before finishing.
+
+## Rendered Visual QA
+
+For every final SVG figure, inspect the rendered article at approximately desktop width and mobile/narrow width. The check should use screenshots or an actual browser preview whenever available.
+
+Fail and revise the diagram if any of these are visible:
+
+- Text overlaps shapes, arrows, other labels, or adjacent prose.
+- Text is clipped, too small to read, or visually crowded inside a node.
+- Arrows cross through node labels or make the branch direction ambiguous.
+- Branch labels are detached from the branch they describe.
+- The diagram is much denser than the surrounding article, even if there is no literal overlap.
+- Mobile rendering makes the diagram unreadable or turns it into a thin scaled-down image.
+
+If screenshot tooling is unavailable, use a concrete fallback such as a headless browser already installed in the environment, rendered PDF/image output, or explicit geometry checks. Do not install project dependencies for this. Report the limitation in the final response.
 
 ## Fallback Inline SVG Pattern
 
@@ -189,6 +215,8 @@ Use this as a structure, not as fixed content:
 - The current project's root package manifest was not changed to add Mermaid tooling.
 - The figure aligns to the article's normal content width.
 - Labels do not overflow their boxes.
-- The diagram remains readable on mobile.
+- The diagram remains readable on mobile/narrow width.
+- A rendered visual check was performed at desktop and mobile/narrow widths, or the final response states the fallback verification limitation.
+- Nodes, labels, arrows, captions, and surrounding prose do not visibly overlap.
 - The article remains complete without remote dependencies.
 - The final file still passes the normal `to-html` final check.
