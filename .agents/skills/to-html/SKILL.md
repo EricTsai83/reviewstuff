@@ -6,40 +6,49 @@ disable-model-invocation: true
 
 # To HTML
 
-Create a self-contained `.html` article from the useful knowledge in the current context.
+Turn the useful knowledge from the current context into a standalone `.html` article.
 
-## Requirements
+## Workflow
 
-- Save the file under `./docs` from the current project root. Create the folder if needed.
-- Use a concise topic-based filename, such as `effect-cli-command-guide.html`.
-- Write a standalone article, not a transcript, Q&A log, or notes dump.
+1. Extract durable content: explanations, examples, tradeoffs, caveats, code, commands, links, and next steps worth rereading.
+2. Omit conversation noise: tool logs, hidden reasoning, acknowledgements, and irrelevant back-and-forth.
+3. Preserve the user's primary language unless they ask for another language.
+4. Choose the format:
+   - Use a clean prose article by default.
+   - If the content is easier to understand as a comparison, plan, report, code review, diagram, table, design sheet, or small interactive tool, read `HTML-ARTICLE-DESIGN-PATTERNS.md` and pick one primary pattern.
+5. Save the article under `./docs` from the current project root. Create the folder if needed.
+6. Use a concise topic filename, such as `effect-cli-command-guide.html`.
+7. After the first complete draft, read `IMPROVE-HTML-ARTICLE.md` and apply one revision pass directly to the file.
+8. Verify the final file, then report the relative path and a short summary.
+
+## Article Requirements
+
+- Write an article, not a transcript, Q&A log, or notes dump.
 - Do not mention that the article came from a conversation, thread, chat, user, or assistant unless explicitly requested.
-- Preserve the user's primary language unless they request otherwise.
-- Include only durable knowledge: explanations, examples, tradeoffs, caveats, code, commands, links, and next steps worth rereading.
-- Omit tool noise, hidden reasoning, acknowledgements, and irrelevant back-and-forth.
-- Make the HTML pleasant to read without external assets.
-- Style code blocks intentionally. Prefer language labels and static standalone syntax highlighting when code is important.
-- After creating the initial HTML file, apply the local sub skill `IMPROVE-HTML-ARTICLE.md` to revise the article and improve the visual design before final verification.
-- Verify the file exists, then report the relative path and a short summary.
+- Keep the HTML self-contained: inline CSS, inline SVG when useful, and only small local JavaScript when interaction is needed.
+- Do not rely on CDN assets, remote fonts, external images, runtime Mermaid, or browser-side syntax highlighters.
+- Make the article pleasant to read on mobile and desktop with clear hierarchy, readable line lengths, and intentional spacing.
+- Use visual elements only when they clarify the content.
 
-## Code Quality
+## Code Blocks
 
-- Do not rely on CDN assets or browser-default code styling.
-- Prefer static highlighting in the generated HTML, not a fragile runtime highlighter.
-- For code-heavy articles, use a local highlighter if available, such as Shiki or Pygments, and inline the resulting CSS/HTML.
-- If no highlighter is available, manually add simple token spans for important snippets.
-- Escape code correctly: `&` -> `&amp;`, `<` -> `&lt;`, `>` -> `&gt;`. Preserve backslashes as literal text.
-- Use `<pre><code>` with `white-space: pre` or equivalent so indentation, backslashes, and multiline syntax render exactly.
-- Before finishing, inspect at least one code block in the generated HTML and confirm highlighting markup exists.
+When code is important:
 
-## Required Post-Processing
+- Use `<pre><code>` and preserve indentation, backslashes, and multiline syntax.
+- Escape code correctly: `&` as `&amp;`, `<` as `&lt;`, and `>` as `&gt;`.
+- Add labels or captions for file paths, commands, or languages when helpful.
+- Prefer static syntax highlighting generated before saving the page:
+  1. Shiki, if available locally or easy to run with the project's package manager.
+  2. Pygments, if Shiki is unavailable.
+  3. Simple manual token spans for small snippets.
+- Keep highlighting markup in the saved HTML. Do not ship a runtime highlighter.
 
-After the first complete HTML draft is written:
+## Final Check
 
-1. Read `IMPROVE-HTML-ARTICLE.md` from this skill directory.
-2. Apply its article-improvement workflow directly to the generated HTML file.
-3. Treat this as an internal post-processing pass: do not pause for user confirmation unless the sub skill explicitly cannot be applied without missing information.
-4. Make the final saved HTML reflect both the original article requirements and the improvement pass.
-5. Re-verify the final file after the improvement pass, including code-block styling when applicable.
+Before finishing, confirm:
 
-Rely on your writing judgment for structure, section names, visual design, and what to include.
+- The file exists under `./docs`.
+- It is a complete standalone HTML document.
+- The original language is preserved.
+- There are no remote runtime dependencies.
+- Code blocks, if present, preserve escaping, indentation, and static highlighting markup.
