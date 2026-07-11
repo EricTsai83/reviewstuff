@@ -16,6 +16,7 @@ Turn the useful knowledge from the current context into a standalone `.html` art
 4. Choose the format:
    - Use a clean prose article by default.
    - If the content is easier to understand as a comparison, plan, report, code review, diagram, table, design sheet, or small interactive tool, read `HTML-ARTICLE-DESIGN-PATTERNS.md` and pick one primary pattern.
+   - If the content involves a workflow, pipeline, decision path, state transition, layer boundary, or arrows between concepts, read `HTML-SVG-FLOW-DIAGRAMS.md` and add a concise inline SVG diagram when it clarifies the article.
 5. Save the article under `./docs` from the current project root. Create the folder if needed.
 6. Use a concise topic filename, such as `effect-cli-command-guide.html`.
 7. After the first complete draft, read `IMPROVE-HTML-ARTICLE.md` and apply one revision pass directly to the file.
@@ -36,7 +37,7 @@ Turn the useful knowledge from the current context into a standalone `.html` art
 - Keep the HTML self-contained: inline CSS, inline SVG when useful, and only small local JavaScript when interaction is needed.
 - Do not rely on CDN assets, remote fonts, external images, runtime Mermaid, or browser-side syntax highlighters.
 - Make the article pleasant to read on mobile and desktop with clear hierarchy, readable line lengths, and intentional spacing.
-- Use visual elements only when they clarify the content.
+- Use visual elements only when they clarify the content. Prefer inline SVG over ASCII art or Mermaid for flow diagrams, request/data paths, state machines, layered boundaries, and other spatial or relational explanations.
 - By default, use `DESIGN-SYSTEM.md` for CSS tokens, typography, spacing, component styling, and final visual consistency.
 
 ## Article Structure
