@@ -1,6 +1,6 @@
 ---
 name: to-html
-description: Turn the current conversation thread into a polished, readable standalone HTML article and save it under the user's Documents folder.
+description: Turn the current conversation thread into a polished, readable standalone HTML article and save it under the current project's docs folder.
 disable-model-invocation: true
 ---
 
@@ -14,8 +14,9 @@ Create a self-contained HTML article that synthesizes the useful knowledge from 
 
 ## Output Location
 
-- Save the HTML file under `$HOME/docs` unless the user explicitly gives another folder.
-- Create the folder if it does not exist.
+- Save the HTML file under `./docs` at the current project root unless the user explicitly gives another folder.
+- Treat the current working directory as the project root.
+- Create `./docs` if it does not exist.
 - Use a concise, descriptive, filesystem-safe filename based on the topic, for example `thread-notes-typescript-generics.html`.
 - If the topic is unclear, use `thread-notes-YYYY-MM-DD.html`.
 
@@ -61,6 +62,6 @@ Adapt the section names to the actual topic. Keep the order dependency-aware: ex
 
 1. Inspect the available conversation context and identify the document topic.
 2. Draft the knowledge structure internally. Do not ask the user to confirm the outline unless the request is ambiguous or asks for confirmation.
-3. Create the standalone HTML file in `$HOME/docs`.
+3. Create the standalone HTML file in `./docs`.
 4. Verify the file exists.
 5. Tell the user the final file relative path and briefly summarize what the document contains.
