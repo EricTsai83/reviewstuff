@@ -122,7 +122,7 @@ pre {
 - Copy buttons: add a small top-right icon-only `.copy-code` button to each code block with local JS; copy only `pre code` text, keep `aria-label`, use clipboard API with a textarea fallback, and briefly switch the icon to a check mark after a successful click.
 - Tables: same width as prose, collapsed borders, `--gray-100` header, `--oat` borders, compact padding.
 - Callouts: `--gray-100` background, `--oat` border, left accent using `--clay`; warning callouts may use `--warning`.
-- Sources/reference sections: top border using `--oat`, smaller text.
+- Sources/reference sections: use a concise `<ul>` list by default; add a top border using `--oat` and smaller text.
 
 Default code block CSS. Use this compact pattern rather than adding a toolbar:
 

@@ -60,6 +60,7 @@ Use this default structure unless the content clearly needs a specialized patter
 2. One short deck paragraph that states what the article helps the reader understand or do.
 3. Body sections ordered from foundation to application to caveats or decision rules.
 4. A compact closing section only when it adds durable guidance, such as practical rules, checks, or references.
+5. If references are included, format them as a concise `<ul>` list.
 
 Avoid decorative article furniture:
 
@@ -78,6 +79,14 @@ When code is important:
 - Use the bundled `scripts/highlight-code-blocks.mjs` script for deterministic static highlighting after the article and design-system pass are complete.
 - Keep highlighting markup in the saved HTML. Do not ship a runtime highlighter.
 
+## Markdown Cleanup
+
+Before final delivery, convert prose Markdown artifacts to semantic HTML:
+
+- Inline code in prose must use `<code>...</code>`, not backticks.
+- Lists, emphasis, and headings must be real HTML elements, not Markdown syntax.
+- Backticks may remain only inside `<pre><code>` when they are valid source code, such as TypeScript template literals.
+
 ## Final Check
 
 Before finishing, confirm:
@@ -87,4 +96,5 @@ Before finishing, confirm:
 - The original language is preserved.
 - There are no remote runtime dependencies.
 - Code blocks, if present, preserve escaping, indentation, and static highlighting markup.
+- No prose Markdown artifacts remain, including inline-code backticks outside code blocks.
 - No default eyebrow/kicker, badge row, or decorative metadata appears above the title.
