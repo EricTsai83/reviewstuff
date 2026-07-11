@@ -63,4 +63,4 @@ Adapt the section names to the actual topic. Keep the order dependency-aware: ex
 2. Draft the knowledge structure internally. Do not ask the user to confirm the outline unless the request is ambiguous or asks for confirmation.
 3. Create the standalone HTML file in `$HOME/docs`.
 4. Verify the file exists.
-5. Tell the user the final file path and briefly summarize what the document contains.
+5. Tell the user the final file relative path and briefly summarize what the document contains.
