@@ -19,7 +19,9 @@ Turn the useful knowledge from the current context into a standalone `.html` art
 5. Save the article under `./docs` from the current project root. Create the folder if needed.
 6. Use a concise topic filename, such as `effect-cli-command-guide.html`.
 7. After the first complete draft, read `IMPROVE-HTML-ARTICLE.md` and apply one revision pass directly to the file.
-8. Verify the final file, then report the relative path and a short summary.
+8. Read `DESIGN-SYSTEM.md` and apply it as the final visual-system pass unless the user explicitly requested a different design system or no design-system pass.
+9. Run `bun .agents/skills/to-html/scripts/highlight-code-blocks.mjs <html-file>` to apply deterministic static highlighting to code blocks.
+10. Verify the final file, then report the relative path and a short summary.
 
 ## Article Requirements
 
@@ -29,6 +31,7 @@ Turn the useful knowledge from the current context into a standalone `.html` art
 - Do not rely on CDN assets, remote fonts, external images, runtime Mermaid, or browser-side syntax highlighters.
 - Make the article pleasant to read on mobile and desktop with clear hierarchy, readable line lengths, and intentional spacing.
 - Use visual elements only when they clarify the content.
+- By default, use `DESIGN-SYSTEM.md` for CSS tokens, typography, spacing, component styling, and final visual consistency.
 
 ## Code Blocks
 
@@ -37,10 +40,7 @@ When code is important:
 - Use `<pre><code>` and preserve indentation, backslashes, and multiline syntax.
 - Escape code correctly: `&` as `&amp;`, `<` as `&lt;`, and `>` as `&gt;`.
 - Add labels or captions for file paths, commands, or languages when helpful.
-- Prefer static syntax highlighting generated before saving the page:
-  1. Shiki, if available locally or easy to run with the project's package manager.
-  2. Pygments, if Shiki is unavailable.
-  3. Simple manual token spans for small snippets.
+- Use the bundled `scripts/highlight-code-blocks.mjs` script for deterministic static highlighting after the article and design-system pass are complete.
 - Keep highlighting markup in the saved HTML. Do not ship a runtime highlighter.
 
 ## Final Check
