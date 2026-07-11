@@ -23,6 +23,12 @@ Turn the useful knowledge from the current context into a standalone `.html` art
 9. Run `bun .agents/skills/to-html/scripts/highlight-code-blocks.mjs <html-file>` to apply deterministic static highlighting to code blocks.
 10. Verify the final file, then report the relative path and a short summary.
 
+## Scope
+
+- Center the article on the useful knowledge from the current conversation thread.
+- You may add outside context or research, including web research, when it improves accuracy or clarity.
+- Do not make the current repository/codebase the focus, cite it, or infer article content from it unless the user explicitly asks for that.
+
 ## Article Requirements
 
 - Write an article, not a transcript, Q&A log, or notes dump.
