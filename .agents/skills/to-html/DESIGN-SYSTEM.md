@@ -93,11 +93,20 @@ pre {
 }
 ```
 
+## Article Layout
+
+- Start the article with the `<h1>` topic title. Do not place eyebrow/kicker text, badges, metadata rows, or decorative labels above the title by default.
+- Use one `.deck` paragraph immediately after the title when a summary is useful.
+- Keep technical articles in a prose-first layout: title, deck, ordered sections, examples, decision rules, and optional references.
+- Do not use hero sections, marketing layouts, split media/text layouts, or decorative section cards for guides and notes.
+- Use tables only for comparisons or decision rules that are easier to scan than prose.
+
 ## Components
 
 - Links: `--clay`, underlined, visible underline offset.
 - Inline code: `--gray-100` background, `--oat` border, `--radius-sm`, wraps safely on mobile.
 - Code blocks: `--slate` background, `--ivory` text, `--gray-700` border, `--radius-md`, `--space-lg`, horizontal scroll.
+- Code block labels: use a small uppercase `.label` inside `pre` before `code` for language or file context when highlighting is expected.
 - Tables: same width as prose, collapsed borders, `--gray-100` header, `--oat` borders, compact padding.
 - Callouts: `--gray-100` background, `--oat` border, left accent using `--clay`; warning callouts may use `--warning`.
 - Sources/reference sections: top border using `--oat`, smaller text.
@@ -107,14 +116,14 @@ pre {
 The bundled highlighter emits static token spans. Style those classes; do not add a runtime highlighter.
 
 ```css
-.k { color: #f0a178; font-weight: 600; }
-.s { color: #b7d28a; }
-.n,
-.p { color: #8fb6d8; }
-.c { color: var(--gray-500); font-style: italic; }
-.f { color: #e8c16f; }
-.t { color: #f1d6a6; font-weight: 600; }
-.o { color: #c8c3b7; }
+pre code .k { color: #ffb182; font-weight: 650; }
+pre code .s { color: #bfe58b; }
+pre code .n,
+pre code .p { color: #9fd0ff; }
+pre code .c { color: #9a9992; font-style: italic; }
+pre code .f { color: #ffd36e; }
+pre code .t { color: #f5d99b; font-weight: 650; }
+pre code .o { color: #d8d2c5; }
 ```
 
 ## Mobile
@@ -137,6 +146,7 @@ The bundled highlighter emits static token spans. Style those classes; do not ad
 
 - No remote dependencies or runtime highlighters.
 - Whole article is not wrapped in a visible card shell.
+- No default eyebrow/kicker, badge row, or decorative metadata appears above the title.
 - Title has no awkward single-character orphan line.
 - Text, callouts, tables, and code blocks align to the same content width.
 - Code blocks preserve escaping and use static highlighting from the bundled script.

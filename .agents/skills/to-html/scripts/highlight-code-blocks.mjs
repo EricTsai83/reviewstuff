@@ -173,18 +173,48 @@ const highlightShell = (code) =>
     return `${leading}${span("p", flag)}`
   })
 
+const inferLanguage = (label, code) => {
+  const normalizedLabel = label.toLowerCase()
+
+  if (normalizedLabel.includes("typescript") || normalizedLabel.includes("javascript") || normalizedLabel === "ts") {
+    return "typescript"
+  }
+  if (normalizedLabel.includes("shell") || normalizedLabel.includes("bash") || normalizedLabel.includes("sh")) {
+    return "shell"
+  }
+
+  if (
+    /\b(import|export|const|let|type|interface|function)\b/.test(code) ||
+    /=>/.test(code) ||
+    /from\s+["'][^"']+["']/.test(code)
+  ) {
+    return "typescript"
+  }
+
+  if (
+    /^(\s*(#|\$|bun |pnpm |node |git |rg |cd |mkdir |cp |mv |rm |cat |sed |reviewstuff ))/m.test(code) ||
+    /\s--[A-Za-z0-9-]+/.test(code)
+  ) {
+    return "shell"
+  }
+
+  return "plain"
+}
+
 html = html.replace(
-  /<pre><span class="label">([^<]+)<\/span><code>([\s\S]*?)<\/code><\/pre>/g,
-  (_match, label, codeHtml) => {
+  /<pre>(?:<span class="label">([^<]+)<\/span>)?<code>([\s\S]*?)<\/code><\/pre>/g,
+  (_match, label = "", codeHtml) => {
     const raw = decodeHtml(codeHtml)
-    const normalizedLabel = label.toLowerCase()
-    const highlighted = normalizedLabel.includes("typescript") || normalizedLabel.includes("javascript")
+    const language = inferLanguage(label, raw)
+    const highlighted = language === "typescript"
       ? highlightTypeScript(raw)
-      : normalizedLabel.includes("shell") || normalizedLabel.includes("bash")
+      : language === "shell"
         ? highlightShell(raw)
         : escapeHtml(raw)
 
-    return `<pre><span class="label">${label}</span><code>${highlighted}</code></pre>`
+    const renderedLabel = label ? `<span class="label">${label}</span>` : ""
+
+    return `<pre>${renderedLabel}<code>${highlighted}</code></pre>`
   }
 )
 

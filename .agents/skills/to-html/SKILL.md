@@ -33,13 +33,29 @@ Turn the useful knowledge from the current context into a standalone `.html` art
 - Use visual elements only when they clarify the content.
 - By default, use `DESIGN-SYSTEM.md` for CSS tokens, typography, spacing, component styling, and final visual consistency.
 
+## Article Structure
+
+Use this default structure unless the content clearly needs a specialized pattern:
+
+1. `<h1>` with the exact topic or artifact title.
+2. One short deck paragraph that states what the article helps the reader understand or do.
+3. Body sections ordered from foundation to application to caveats or decision rules.
+4. A compact closing section only when it adds durable guidance, such as practical rules, checks, or references.
+
+Avoid decorative article furniture:
+
+- Do not add eyebrow/kicker text above the title by default.
+- Do not add badges, category labels, metadata rows, or decorative subtitles unless they carry information the reader needs.
+- Do not introduce visual components before the title.
+- Do not use a hero treatment for technical notes, guides, or explanations unless explicitly requested.
+
 ## Code Blocks
 
 When code is important:
 
 - Use `<pre><code>` and preserve indentation, backslashes, and multiline syntax.
 - Escape code correctly: `&` as `&amp;`, `<` as `&lt;`, and `>` as `&gt;`.
-- Add labels or captions for file paths, commands, or languages when helpful.
+- Add a language label for code that should be highlighted, using `<pre><span class="label">TypeScript</span><code>...</code></pre>` or `<pre><span class="label">Shell</span><code>...</code></pre>`.
 - Use the bundled `scripts/highlight-code-blocks.mjs` script for deterministic static highlighting after the article and design-system pass are complete.
 - Keep highlighting markup in the saved HTML. Do not ship a runtime highlighter.
 
@@ -52,3 +68,4 @@ Before finishing, confirm:
 - The original language is preserved.
 - There are no remote runtime dependencies.
 - Code blocks, if present, preserve escaping, indentation, and static highlighting markup.
+- No default eyebrow/kicker, badge row, or decorative metadata appears above the title.
