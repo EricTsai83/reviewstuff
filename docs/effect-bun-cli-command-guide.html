@@ -1,0 +1,674 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Effect、Bun 與 CLI Build Script 的責任分層</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --clay: #D97757;
+      --slate: #141413;
+      --ivory: #FAF9F5;
+      --oat: #E3DACC;
+      --white: #FFFFFF;
+      --gray-100: #F0EEE6;
+      --gray-300: #D1CFC5;
+      --gray-500: #87867F;
+      --gray-700: #3D3D3A;
+      --warning: #C78E3F;
+      --space-sm: 8px;
+      --space-md: 12px;
+      --space-lg: 16px;
+      --space-xl: 24px;
+      --space-2xl: 32px;
+      --space-3xl: 48px;
+      --radius-sm: 4px;
+      --radius-md: 8px;
+      --content-width: 68ch;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      overflow-x: hidden;
+    }
+
+    body {
+      margin: 0;
+      background: var(--ivory);
+      color: var(--slate);
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 16px;
+      font-weight: 430;
+      line-height: 1.55;
+      letter-spacing: 0;
+    }
+
+    main {
+      max-width: var(--content-width);
+      margin: 0 auto;
+      padding: var(--space-3xl) var(--space-xl);
+    }
+
+    article {
+      background: transparent;
+      border: 0;
+      border-radius: 0;
+      box-shadow: none;
+      padding: 0;
+    }
+
+    h1 {
+      max-width: none;
+      margin: 0 0 var(--space-lg);
+      font-size: 1.8rem;
+      line-height: 1.18;
+      text-wrap: balance;
+      overflow-wrap: normal;
+    }
+
+    h2 {
+      margin: var(--space-2xl) 0 var(--space-md);
+      font-size: 1.22rem;
+      line-height: 1.25;
+    }
+
+    h3 {
+      margin: var(--space-xl) 0 var(--space-sm);
+      font-size: 1rem;
+      line-height: 1.35;
+    }
+
+    p,
+    ul,
+    ol,
+    .deck,
+    .callout,
+    table,
+    pre {
+      max-width: var(--content-width);
+    }
+
+    p {
+      margin: var(--space-md) 0;
+      overflow-wrap: anywhere;
+    }
+
+    ul,
+    ol {
+      padding-left: 1.25rem;
+      margin: var(--space-md) 0 var(--space-lg);
+    }
+
+    li + li {
+      margin-top: 6px;
+    }
+
+    li {
+      overflow-wrap: anywhere;
+    }
+
+    a {
+      color: var(--clay);
+      text-decoration: underline;
+      text-underline-offset: 0.18em;
+    }
+
+    code {
+      border: 1px solid var(--oat);
+      border-radius: var(--radius-sm);
+      background: var(--gray-100);
+      padding: 0.08em 0.28em;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+      font-size: 0.92em;
+      overflow-wrap: anywhere;
+    }
+
+    .deck {
+      margin: 0 0 var(--space-2xl);
+      color: var(--gray-700);
+      font-size: 1.04rem;
+    }
+
+    .callout {
+      margin: var(--space-xl) 0;
+      border: 1px solid var(--oat);
+      border-left: 4px solid var(--clay);
+      border-radius: var(--radius-md);
+      background: var(--gray-100);
+      padding: var(--space-md) var(--space-lg);
+    }
+
+    .callout p {
+      margin: 0;
+    }
+
+    .table-scroll {
+      width: 100%;
+      max-width: var(--content-width);
+      margin: var(--space-lg) 0 var(--space-xl);
+      overflow-x: auto;
+    }
+
+    table {
+      width: 100%;
+      min-width: 680px;
+      margin: 0;
+      border-collapse: collapse;
+      font-size: 0.95rem;
+    }
+
+    th,
+    td {
+      border: 1px solid var(--oat);
+      padding: 10px 12px;
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th {
+      background: var(--gray-100);
+      font-weight: 700;
+    }
+
+    pre {
+      position: relative;
+      width: 100%;
+      margin: var(--space-lg) 0 var(--space-xl);
+      border: 1px solid #26241f;
+      border-radius: var(--radius-md);
+      background: #11110f;
+      color: #d8d4ca;
+      overflow: hidden;
+    }
+
+    pre code {
+      display: block;
+      border: 0;
+      background: transparent;
+      padding: 18px 64px 18px 22px;
+      color: inherit;
+      overflow-x: auto;
+      white-space: pre;
+      font-size: 0.875rem;
+      font-weight: 400;
+      line-height: 1.62;
+      scrollbar-width: none;
+    }
+
+    pre code::-webkit-scrollbar {
+      width: 0;
+      height: 0;
+    }
+
+    pre .label {
+      display: none;
+    }
+
+    .copy-code {
+      position: absolute;
+      top: 9px;
+      right: 9px;
+      z-index: 1;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 30px;
+      height: 30px;
+      padding: 0;
+      border: 1px solid rgba(250, 249, 245, 0.14);
+      border-radius: var(--radius-sm);
+      background: rgba(250, 249, 245, 0.06);
+      color: rgba(250, 249, 245, 0.72);
+      cursor: pointer;
+    }
+
+    .copy-code:hover,
+    .copy-code:focus-visible {
+      border-color: rgba(250, 249, 245, 0.28);
+      background: rgba(250, 249, 245, 0.12);
+      color: var(--ivory);
+      outline: none;
+    }
+
+    .copy-code.copied {
+      border-color: rgba(143, 184, 106, 0.42);
+      background: rgba(143, 184, 106, 0.14);
+      color: #b8d99a;
+    }
+
+    .copy-code svg {
+      width: 13px;
+      height: 13px;
+      stroke: currentColor;
+      stroke-width: 1.8;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      fill: none;
+      pointer-events: none;
+    }
+
+    .code-scrollbar {
+      position: absolute;
+      right: 0;
+      bottom: 0;
+      left: 0;
+      height: 3px;
+      border-radius: 999px;
+      background: rgba(250, 249, 245, 0.1);
+      cursor: pointer;
+    }
+
+    .code-scrollbar.hidden {
+      display: none;
+    }
+
+    .code-scrollbar-thumb {
+      height: 100%;
+      border-radius: inherit;
+      background: rgba(255, 148, 110, 0.82);
+      transform: translateX(0);
+      cursor: grab;
+    }
+
+    .code-scrollbar-thumb:active {
+      cursor: grabbing;
+    }
+
+    pre code .k { color: #ff946e; font-weight: 400; }
+    pre code .s { color: #8fb86a; }
+    pre code .n,
+    pre code .p { color: #d8d4ca; }
+    pre code .c { color: #858177; font-style: italic; }
+    pre code .f { color: #cfc6a2; }
+    pre code .t { color: #cfc6a2; font-weight: 400; }
+    pre code .o { color: #ff946e; }
+    pre.language-shell { background: #11110f; }
+    pre code .sh-command { color: #ff946e; font-weight: 400; }
+    pre code .sh-flag { color: #cfc6a2; font-weight: 400; }
+    pre code .sh-string { color: #8fb86a; }
+    pre code .sh-var { color: #cfc6a2; }
+    pre code .sh-comment { color: #858177; font-style: italic; }
+    pre code .sh-prompt { color: #ff946e; font-weight: 400; }
+
+    .flow-figure {
+      width: 100%;
+      max-width: var(--content-width);
+      margin: var(--space-xl) 0;
+    }
+
+    .flow-figure svg {
+      display: block;
+      width: 100%;
+      height: auto;
+    }
+
+    .flow-figure figcaption {
+      margin-top: var(--space-sm);
+      color: var(--gray-700);
+      font-size: 0.9rem;
+    }
+
+    .flow-node rect {
+      fill: var(--white);
+      stroke: var(--oat);
+      stroke-width: 1.5;
+    }
+
+    .flow-node text {
+      fill: var(--slate);
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 15px;
+      font-weight: 650;
+    }
+
+    .flow-note {
+      fill: var(--gray-700);
+      font-size: 12px;
+      font-weight: 500;
+    }
+
+    .flow-arrow {
+      stroke: var(--clay);
+      stroke-width: 2;
+      fill: none;
+    }
+
+    .sources {
+      margin-top: var(--space-3xl);
+      border-top: 1px solid var(--oat);
+      padding-top: var(--space-lg);
+      color: var(--gray-700);
+      font-size: 0.92rem;
+    }
+
+    @media (max-width: 640px) {
+      body {
+        font-size: 15px;
+      }
+
+      h1 {
+        font-size: 1.65rem;
+      }
+
+      main {
+        padding: var(--space-xl);
+      }
+
+      pre code {
+        font-size: 0.8125rem;
+        line-height: 1.5;
+      }
+
+      p code,
+      li code,
+      td code {
+        font-size: 0.9em;
+      }
+
+      .table-scroll,
+      table,
+      .deck,
+      .sources {
+        font-size: 0.875rem;
+      }
+
+      .flow-figure {
+        overflow-x: auto;
+      }
+
+      .flow-figure svg {
+        min-width: 620px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <article>
+      <h1>Effect、Bun 與 CLI Build Script 的責任分層</h1>
+      <p class="deck">一個 Bun 專案裡同時看到 <code>@effect/cli</code>、<code>@effect/platform/Command</code>、<code>FileSystem</code> 和 Node-compatible <code>fs</code> 時，最容易混淆的是它們到底在負責哪一層。這篇文章把這些邊界拆開，讓 build script 和產品 CLI 的設計意圖變得清楚。</p>
+
+      <h2>這支 build script 在做什麼</h2>
+      <p><code>scripts/build-bun.mjs</code> 是專案的 build wrapper。它不是產品功能本身，而是用來產生可執行檔，並確認產物能正常啟動。</p>
+
+      <p>它的流程很短：</p>
+      <ol>
+        <li>建立 <code>dist/</code> 目錄。</li>
+        <li>執行 <code>bun build src/cli.ts --compile --target=bun-darwin-arm64 --outfile=dist/reviewstuff</code>。</li>
+        <li>執行 <code>./dist/reviewstuff --version</code>。</li>
+        <li>執行 <code>./dist/reviewstuff --help</code>。</li>
+      </ol>
+
+      <pre class="language-shell"><span class="label">Shell</span><code><span class="sh-command">bun</span> build src/cli.ts \
+  <span class="sh-flag">--compile</span> <span class="sh-command">\</span>
+  <span class="sh-flag">--target=bun-darwin-arm64</span> <span class="sh-command">\</span>
+  <span class="sh-flag">--outfile=dist/reviewstuff</span>
+
+<span class="sh-command">./dist/reviewstuff</span> <span class="sh-flag">--version</span>
+<span class="sh-command">./dist/reviewstuff</span> <span class="sh-flag">--help</span></code></pre>
+
+      <p>最後兩個 command 是 smoke test。它們不是完整測試，只是確保 binary 至少能啟動、能印版本、能印 help。任何步驟 exit code 不是 <code>0</code>，script 就會設定 <code>process.exitCode = 1</code>。</p>
+
+      <h2>兩個 Command 不是同一件事</h2>
+      <p><code>@effect/cli</code> 和 <code>@effect/platform/Command</code> 都有 <code>Command</code> 這個名稱，但它們的抽象層不同。</p>
+
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>套件</th>
+              <th>負責的問題</th>
+              <th>類似概念</th>
+              <th>在這個專案的位置</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>@effect/cli</code></td>
+              <td>定義 CLI 的使用者介面：subcommand、option、argument、help、version、validation。</td>
+              <td>CLI parser / command definition</td>
+              <td><code>src/cli.ts</code></td>
+            </tr>
+            <tr>
+              <td><code>@effect/platform/Command</code></td>
+              <td>從程式裡執行外部程序，並處理 argv、env、stdout、stderr、exit code。</td>
+              <td><code>child_process.spawn</code>、<code>Bun.spawn</code>、<code>Bun.$</code></td>
+              <td><code>scripts/build-bun.mjs</code></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <figure class="flow-figure">
+        <svg role="img" aria-labelledby="flow-title flow-desc" viewBox="0 0 760 330">
+          <title id="flow-title">Effect CLI Command 與 Effect Platform Command 的責任邊界</title>
+          <desc id="flow-desc">Effect CLI Command 定義使用者介面，Effect Platform Command 執行外部程序，BunContext 提供 runtime service。</desc>
+          <defs>
+            <marker id="flow-arrowhead" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--clay)"></path>
+            </marker>
+          </defs>
+
+          <g class="flow-node">
+            <rect x="24" y="34" width="174" height="72" rx="8"></rect>
+            <text x="111" y="65" text-anchor="middle">使用者輸入</text>
+            <text class="flow-note" x="111" y="87" text-anchor="middle">reviewstuff --help</text>
+          </g>
+          <path class="flow-arrow" d="M 206 70 H 274" marker-end="url(#flow-arrowhead)"></path>
+          <g class="flow-node">
+            <rect x="282" y="34" width="174" height="72" rx="8"></rect>
+            <text x="369" y="65" text-anchor="middle">@effect/cli</text>
+            <text class="flow-note" x="369" y="87" text-anchor="middle">Command</text>
+          </g>
+          <path class="flow-arrow" d="M 464 70 H 532" marker-end="url(#flow-arrowhead)"></path>
+          <g class="flow-node">
+            <rect x="540" y="34" width="196" height="72" rx="8"></rect>
+            <text x="638" y="65" text-anchor="middle">CLI app</text>
+            <text class="flow-note" x="638" y="87" text-anchor="middle">help / version / subcommands</text>
+          </g>
+
+          <g class="flow-node">
+            <rect x="24" y="160" width="174" height="72" rx="8"></rect>
+            <text x="111" y="191" text-anchor="middle">build script</text>
+            <text class="flow-note" x="111" y="213" text-anchor="middle">scripts/build-bun.mjs</text>
+          </g>
+          <path class="flow-arrow" d="M 206 196 H 274" marker-end="url(#flow-arrowhead)"></path>
+          <g class="flow-node">
+            <rect x="282" y="160" width="174" height="72" rx="8"></rect>
+            <text x="369" y="191" text-anchor="middle">@effect/platform</text>
+            <text class="flow-note" x="369" y="213" text-anchor="middle">Command</text>
+          </g>
+          <path class="flow-arrow" d="M 464 196 H 532" marker-end="url(#flow-arrowhead)"></path>
+          <g class="flow-node">
+            <rect x="540" y="160" width="196" height="72" rx="8"></rect>
+            <text x="638" y="191" text-anchor="middle">外部程序</text>
+            <text class="flow-note" x="638" y="213" text-anchor="middle">bun build / smoke test</text>
+          </g>
+
+          <g class="flow-node">
+            <rect x="24" y="264" width="174" height="48" rx="8"></rect>
+            <text x="111" y="294" text-anchor="middle">BunContext.layer</text>
+          </g>
+          <path class="flow-arrow" d="M 198 288 C 244 288 246 218 274 205" marker-end="url(#flow-arrowhead)"></path>
+          <path class="flow-arrow" d="M 198 288 H 274" marker-end="url(#flow-arrowhead)"></path>
+          <g class="flow-node">
+            <rect x="282" y="264" width="174" height="48" rx="8"></rect>
+            <text x="369" y="294" text-anchor="middle">FileSystem / Path</text>
+          </g>
+        </svg>
+        <figcaption>同名的 <code>Command</code> 分別位在 CLI 解析層與外部程序執行層。</figcaption>
+      </figure>
+
+      <p>簡化成一句話：<code>@effect/cli Command</code> 定義「這支 CLI 接受什麼指令」；<code>@effect/platform/Command</code> 負責「從程式裡呼叫另一個外部指令」。</p>
+
+      <h2>為什麼 Bun runtime 會看到 Node FS</h2>
+      <p>這裡有兩個事實要分開看。</p>
+
+      <p>第一，Effect 有平台抽象與平台實作的設計。<code>@effect/platform</code> 定義 <code>FileSystem</code>、<code>Command</code>、<code>Path</code> 等 service；<code>@effect/platform-bun</code> 則提供 Bun runtime 的 layer。</p>
+
+      <p>第二，Bun 本身也支援 Node-compatible API。Bun 官方推薦用 <code>Bun.file</code> 和 <code>Bun.write</code> 做高效讀寫，但對 <code>mkdir</code>、<code>readdir</code> 這類操作，官方文件也會指向 Bun 對 <code>node:fs</code> 的相容實作。也就是說，在 Bun 裡使用 <code>node:fs/promises</code> 不代表程式跑到 Node runtime；它仍然是在 Bun runtime 裡使用 Bun 實作的 Node-compatible API。</p>
+
+      <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="c">// 概念上可以這樣理解</span>
+<span class="t">Bun</span> runtime
+  ├─ <span class="t">Bun</span><span class="o">-</span>native <span class="t">APIs</span><span class="o">:</span> <span class="t">Bun</span><span class="o">.</span><span class="p">file</span><span class="o">,</span> <span class="t">Bun</span><span class="o">.</span><span class="p">write</span><span class="o">,</span> <span class="t">Bun</span><span class="o">.</span><span class="p">$</span><span class="o">,</span> <span class="t">Bun</span><span class="o">.</span><span class="p">spawn</span>
+  └─ <span class="t">Node</span><span class="o">-</span>compatible <span class="t">APIs</span><span class="o">:</span> node<span class="o">:</span>fs<span class="o">,</span> node<span class="o">:</span>path<span class="o">,</span> process<span class="o">,</span> <span class="t">Buffer</span></code></pre>
+
+      <p>因此，如果 <code>@effect/platform-bun</code> 的 <code>FileSystem</code> 內部重用 node-shared implementation，這不一定是設計錯誤。它更像是 Effect 在不同 JavaScript runtime 之間共用成熟檔案系統實作的取捨。</p>
+
+      <h2>目前設計合理嗎</h2>
+      <p>它是合理的，但對一支 build script 來說偏重。判斷標準取決於你想讓 scripts 承擔什麼角色。</p>
+
+      <h3>保留 Effect 寫法的理由</h3>
+      <ul>
+        <li>整個專案都用 Effect，build script 也維持同一套錯誤處理與 platform abstraction。</li>
+        <li>執行外部程序時使用 <code>@effect/platform/Command</code>，避免散落 <code>child_process</code>、<code>Bun.spawn</code> 或 shell string。</li>
+        <li><code>FileSystem</code>、<code>CommandExecutor</code> 等 service 都由 <code>BunContext.layer</code> 提供，抽象邊界一致。</li>
+      </ul>
+
+      <h3>簡化成 Bun script 的理由</h3>
+      <ul>
+        <li>build script 只做三件小事：建立資料夾、編譯、smoke test。</li>
+        <li>若團隊期待 scripts 一眼就能讀懂，Effect runtime、layer、generator 會顯得較重。</li>
+        <li>Bun 已經提供適合 script 的 <code>Bun.$</code>，可讀性會更直接。</li>
+      </ul>
+
+      <p>如果選擇簡化，形狀大概會像這樣：</p>
+
+      <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">import</span> <span class="o">{</span> mkdir <span class="o">}</span> <span class="k">from</span> <span class="s">"node:fs/promises"</span><span class="o">;</span>
+
+<span class="k">await</span> <span class="f">mkdir</span><span class="o">(</span><span class="s">"dist"</span><span class="o">,</span> <span class="o">{</span> recursive<span class="o">:</span> <span class="n">true</span> <span class="o">}</span><span class="o">)</span><span class="o">;</span>
+
+<span class="k">await</span> <span class="t">Bun</span><span class="o">.</span><span class="p">$</span><span class="s">`bun build src/cli.ts --compile --target=bun-darwin-arm64 --outfile=dist/reviewstuff`</span><span class="o">;</span>
+<span class="k">await</span> <span class="t">Bun</span><span class="o">.</span><span class="p">$</span><span class="s">`./dist/reviewstuff --version`</span><span class="o">;</span>
+<span class="k">await</span> <span class="t">Bun</span><span class="o">.</span><span class="p">$</span><span class="s">`./dist/reviewstuff --help`</span><span class="o">;</span></code></pre>
+
+      <div class="callout">
+        <p>實務建議：產品 CLI 與核心 runtime code 可以繼續用 Effect abstraction；單純 build script 是否也要用 Effect，取決於你是否重視一致性勝過腳本本身的簡潔性。</p>
+      </div>
+
+      <h2>讀這類檔案時的判斷規則</h2>
+      <ul>
+        <li>看到 <code>@effect/cli</code>，先問：這裡是不是在定義使用者能輸入什麼？</li>
+        <li>看到 <code>@effect/platform/Command</code>，先問：這裡是不是在呼叫另一個 executable？</li>
+        <li>看到 <code>FileSystem</code>，先問：這是平台抽象，還是某個 runtime 的具體 FS API？</li>
+        <li>看到 <code>node:fs</code> 出現在 Bun 專案，不要立刻判定為錯；先確認它是 runtime 相容 API、套件內部實作，還是專案直接耦合。</li>
+        <li>build script 的「最佳」通常不是最抽象，而是最容易維護、失敗時最容易除錯。</li>
+      </ul>
+
+      <section class="sources">
+        <h2>參考資料</h2>
+        <ul>
+          <li><a href="https://bun.com/docs/runtime/file-io">Bun File I/O</a></li>
+          <li><a href="https://bun.com/docs/runtime/nodejs-compat">Bun Node.js Compatibility</a></li>
+          <li><a href="https://effect.website/docs/platform/introduction/">Effect Platform Introduction</a></li>
+          <li><a href="https://effect.website/docs/platform/file-system/">Effect FileSystem</a></li>
+        </ul>
+      </section>
+    </article>
+  </main>
+
+  <script>
+    (() => {
+      const copyIcon = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 8h10v12H8z"></path><path d="M6 16H4V4h12v2"></path></svg>';
+      const checkIcon = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"></path></svg>';
+
+      const copyText = async (text) => {
+        if (navigator.clipboard && window.isSecureContext) {
+          await navigator.clipboard.writeText(text);
+          return;
+        }
+
+        const textarea = document.createElement("textarea");
+        textarea.value = text;
+        textarea.setAttribute("readonly", "");
+        textarea.style.position = "fixed";
+        textarea.style.opacity = "0";
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand("copy");
+        textarea.remove();
+      };
+
+      document.querySelectorAll("pre").forEach((pre) => {
+        const code = pre.querySelector("code");
+        if (!code) return;
+
+        const button = document.createElement("button");
+        button.className = "copy-code";
+        button.type = "button";
+        button.setAttribute("aria-label", "Copy code");
+        button.innerHTML = copyIcon;
+        button.addEventListener("click", async () => {
+          await copyText(code.innerText);
+          button.classList.add("copied");
+          button.innerHTML = checkIcon;
+          window.setTimeout(() => {
+            button.classList.remove("copied");
+            button.innerHTML = copyIcon;
+          }, 1400);
+        });
+        pre.appendChild(button);
+
+        const scrollbar = document.createElement("div");
+        scrollbar.className = "code-scrollbar hidden";
+        const thumb = document.createElement("div");
+        thumb.className = "code-scrollbar-thumb";
+        scrollbar.appendChild(thumb);
+        pre.appendChild(scrollbar);
+
+        const update = () => {
+          const overflow = code.scrollWidth > code.clientWidth + 1;
+          scrollbar.classList.toggle("hidden", !overflow);
+          if (!overflow) return;
+          const ratio = code.clientWidth / code.scrollWidth;
+          const width = Math.max(28, scrollbar.clientWidth * ratio);
+          const maxLeft = scrollbar.clientWidth - width;
+          const left = maxLeft * (code.scrollLeft / (code.scrollWidth - code.clientWidth));
+          thumb.style.width = `${width}px`;
+          thumb.style.transform = `translateX(${left}px)`;
+        };
+
+        code.addEventListener("scroll", update);
+        window.addEventListener("resize", update);
+        update();
+
+        let dragging = false;
+        let startX = 0;
+        let startScroll = 0;
+
+        thumb.addEventListener("pointerdown", (event) => {
+          dragging = true;
+          startX = event.clientX;
+          startScroll = code.scrollLeft;
+          thumb.setPointerCapture(event.pointerId);
+        });
+
+        thumb.addEventListener("pointermove", (event) => {
+          if (!dragging) return;
+          const width = thumb.clientWidth;
+          const maxLeft = scrollbar.clientWidth - width;
+          const maxScroll = code.scrollWidth - code.clientWidth;
+          const delta = event.clientX - startX;
+          code.scrollLeft = startScroll + delta * (maxScroll / maxLeft);
+        });
+
+        thumb.addEventListener("pointerup", () => {
+          dragging = false;
+        });
+
+        scrollbar.addEventListener("click", (event) => {
+          if (event.target === thumb) return;
+          const rect = scrollbar.getBoundingClientRect();
+          const ratio = (event.clientX - rect.left) / rect.width;
+          code.scrollLeft = ratio * (code.scrollWidth - code.clientWidth);
+        });
+      });
+    })();
+  </script>
+</body>
+</html>
