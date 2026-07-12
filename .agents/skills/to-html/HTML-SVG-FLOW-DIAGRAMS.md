@@ -92,6 +92,8 @@ This keeps Mermaid out of the current project's runtime and package manifest.
 - Give every node a short label. Give non-obvious arrows or branches a short label.
 - Do not rely on color alone. Shape, position, and text must carry the meaning.
 - Keep the SVG responsive with `width: 100%; height: auto;`.
+- When using separate desktop and mobile SVGs for one figure, use explicit mutually-exclusive classes such as `.flow-desktop` and `.flow-mobile`. The CSS must hide one by default and swap visibility inside the mobile media query; both variants must never render at the same viewport width.
+- Make responsive visibility selectors at least as specific as base SVG display rules. For example, use `.flow-figure .flow-mobile { display: none; }`, not only `.flow-mobile { display: none; }`, when the stylesheet also contains `.flow-figure svg { display: block; }`.
 - The final SVG must not contain `<script>`, remote URLs, external fonts, or runtime Mermaid data.
 
 ## Layout Rules
@@ -119,6 +121,20 @@ Use these class names unless the article already has equivalent figure styles:
   display: block;
   width: 100%;
   height: auto;
+}
+
+.flow-figure .flow-mobile {
+  display: none;
+}
+
+@media (max-width: 640px) {
+  .flow-figure .flow-desktop {
+    display: none;
+  }
+
+  .flow-figure .flow-mobile {
+    display: block;
+  }
 }
 
 .flow-node rect,
@@ -177,6 +193,7 @@ For every final SVG figure, inspect the rendered article at approximately deskto
 
 Fail and revise the diagram if any of these are visible:
 
+- A responsive figure shows both its desktop and mobile SVG variants at the same viewport width.
 - Text overlaps shapes, arrows, other labels, or adjacent prose.
 - Text is clipped, too small to read, or visually crowded inside a node.
 - Arrows cross through node labels or make the branch direction ambiguous.
@@ -238,6 +255,7 @@ Use this as a structure, not as fixed content:
 - Labels do not overflow their boxes.
 - Edge labels are off the arrow path or use a background-backed label group with padding.
 - The diagram remains readable on mobile/narrow width.
+- If desktop/mobile variants are present, rendered output shows exactly one variant per viewport; verify this with computed styles, screenshots, or visible preview rather than source inspection alone.
 - A rendered visual check was performed at desktop and mobile/narrow widths, or the final response states the fallback verification limitation.
 - Nodes, labels, arrows, captions, and surrounding prose do not visibly overlap.
 - The article remains complete without remote dependencies.

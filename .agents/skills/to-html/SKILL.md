@@ -30,9 +30,10 @@ When the article contains SVG diagrams, charts, figures, or other spatial layout
 
 1. After the design-system pass and code highlighting, render the final HTML in a browser or preview at desktop width and mobile/narrow width.
 2. Capture or inspect the rendered figure pixels, not only the SVG source or DOM bounding boxes.
-3. Check that labels are readable, labels stay inside their shapes, arrows do not run through text, nodes do not overlap, captions do not collide with the figure, and the figure is not cramped on mobile.
-4. If the figure fails visual QA, revise the layout and repeat the rendered check before delivery.
-5. Prefer simplifying the figure over forcing dense content into a small SVG: split it into two figures, convert it to a table, or use a vertical layout.
+3. If a figure has separate desktop and mobile variants, verify the rendered/computed visibility at both widths: exactly one variant is visible and the other has `display: none`, `visibility: hidden`, or equivalent zero-rendered size. Do not rely on the DOM containing both variants; both may exist in source, but only one may render per viewport.
+4. Check that labels are readable, labels stay inside their shapes, arrows do not run through text, nodes do not overlap, captions do not collide with the figure, and the figure is not cramped on mobile.
+5. If the figure fails visual QA, revise the layout and repeat the rendered check before delivery.
+6. Prefer simplifying the figure over forcing dense content into a small SVG: split it into two figures, convert it to a table, or use a vertical layout.
 
 Use the available browser preview/screenshot tooling when possible. If browser preview is unavailable, use the best concrete fallback available, such as a headless browser already present in the environment, PDF/image rendering, or explicit geometry checks. Do not add browser or diagram tooling to the project dependencies only for QA. State any verification limitation in the final response.
 
@@ -46,8 +47,19 @@ Use the available browser preview/screenshot tooling when possible. If browser p
 ## Responsive Figures
 
 - A figure may use different SVGs for desktop and mobile when layout clarity improves, such as horizontal desktop flow and vertical mobile flow.
-- Scope the CSS so exactly one SVG is visible per viewport.
-- Verify both desktop and mobile renderings.
+- Scope the CSS so exactly one SVG variant is visible per viewport. Use an explicit mutually-exclusive pattern, for example:
+
+```css
+.figure .figure-mobile { display: none; }
+@media (max-width: 640px) {
+  .figure .figure-desktop { display: none; }
+  .figure .figure-mobile { display: block; }
+}
+```
+
+- Ensure the responsive visibility selectors are at least as specific as any base SVG rule such as `.figure svg { display: block; }`; otherwise the base rule can override the hide rule and render both variants.
+- Do not name responsive figure classes inconsistently between the CSS and SVG markup. If the CSS hides `.figure-mobile`, the mobile SVG must actually have `class="figure-mobile"` or include that class in its class list.
+- Verify both desktop and mobile renderings with a browser/preview check that confirms the visible SVG count for each responsive figure is exactly one. Treat “both SVGs appear on screen” as a blocking failure, even if text fit and geometry checks pass.
 
 ## Article Requirements
 
@@ -117,4 +129,5 @@ Before finishing, confirm:
 - Code blocks, if present, preserve escaping, indentation, and static highlighting markup.
 - No prose Markdown artifacts remain, including inline-code backticks outside code blocks.
 - No default eyebrow/kicker, badge row, or decorative metadata appears above the title.
+- Responsive figure variants are mutually exclusive in rendered output: desktop width shows only the desktop variant, and mobile/narrow width shows only the mobile variant.
 - Any SVG diagrams or spatial figures have passed rendered visual QA at desktop and mobile/narrow widths, or the final response states the fallback verification limitation.
