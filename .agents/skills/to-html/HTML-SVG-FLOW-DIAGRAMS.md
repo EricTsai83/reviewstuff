@@ -100,6 +100,8 @@ This keeps Mermaid out of the current project's runtime and package manifest.
 - Use vertical or stepped layouts for decision flows, multiple diamond nodes, long labels, or diagrams with branch returns.
 - Keep at least one node-width of breathing room between decision diamonds and nearby rectangles when they are on different branches.
 - Avoid arrows that pass behind or through labels. Route arrows around nodes, or move labels outside the path.
+- Never place branch or edge text directly on top of a line, curve, or arrow. Put edge labels in a clear gap beside the path, reserve a dedicated label lane, or use a small background-backed label group that visibly interrupts the line behind it.
+- For repeated error/fallback edges, prefer a separate lower lane with one shared legend or caption over repeating the same label on several dashed curves.
 - If a label needs more than two short lines, shorten the label, move detail into the caption/prose, or replace the diagram with a table.
 - If the diagram requires more than one decision diamond and two outcomes, split it into multiple figures unless the rendered screenshot remains easy to read.
 - On narrow widths, the diagram may be taller, but it should not become a tiny compressed strip; prefer stacked layouts over wide layouts that scale text below readable size.
@@ -145,6 +147,17 @@ Use these class names unless the article already has equivalent figure styles:
   stroke-width: 2;
   fill: none;
 }
+
+.flow-edge-label rect {
+  fill: var(--paper, #f8f6f1);
+  stroke: none;
+}
+
+.flow-edge-label text {
+  fill: var(--gray-700, #3d3d3a);
+  font-size: 12px;
+  font-weight: 600;
+}
 ```
 
 ## Text Fit
@@ -155,6 +168,7 @@ Mermaid improves layout compared with hand-authored SVG, but text can still over
 - Prefer `<br/>` in Mermaid labels when a label needs two lines.
 - Split dense diagrams into multiple figures rather than forcing small text.
 - Prefer short nouns and verbs over explanatory sentences inside nodes.
+- Keep edge labels shorter than node labels. If an edge label repeats or needs explanation, move it to the caption, a legend, or adjacent prose.
 - Check the rendered SVG on desktop and mobile/narrow widths before finishing.
 
 ## Rendered Visual QA
@@ -166,6 +180,7 @@ Fail and revise the diagram if any of these are visible:
 - Text overlaps shapes, arrows, other labels, or adjacent prose.
 - Text is clipped, too small to read, or visually crowded inside a node.
 - Arrows cross through node labels or make the branch direction ambiguous.
+- Edge or branch labels sit on top of dashed/solid lines, curves, or arrowheads without a clear background and padding.
 - Branch labels are detached from the branch they describe.
 - The diagram is much denser than the surrounding article, even if there is no literal overlap.
 - Mobile rendering makes the diagram unreadable or turns it into a thin scaled-down image.
@@ -197,6 +212,12 @@ Use this as a structure, not as fixed content:
 
     <path class="flow-arrow" d="M 192 78 H 270" marker-end="url(#flow-arrowhead)"></path>
 
+    <!-- If an edge needs a label, keep the text off the stroke or give it a background. -->
+    <g class="flow-edge-label">
+      <rect x="214" y="52" width="34" height="18" rx="4"></rect>
+      <text x="231" y="65" text-anchor="middle">then</text>
+    </g>
+
     <g class="flow-node">
       <rect x="280" y="42" width="180" height="72" rx="8"></rect>
       <text x="370" y="75" text-anchor="middle">Second step</text>
@@ -215,6 +236,7 @@ Use this as a structure, not as fixed content:
 - The current project's root package manifest was not changed to add Mermaid tooling.
 - The figure aligns to the article's normal content width.
 - Labels do not overflow their boxes.
+- Edge labels are off the arrow path or use a background-backed label group with padding.
 - The diagram remains readable on mobile/narrow width.
 - A rendered visual check was performed at desktop and mobile/narrow widths, or the final response states the fallback verification limitation.
 - Nodes, labels, arrows, captions, and surrounding prose do not visibly overlap.

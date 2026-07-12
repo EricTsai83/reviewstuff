@@ -335,6 +335,17 @@
       stroke-dasharray: 5 5;
     }
 
+    .flow-edge-label rect {
+      fill: var(--paper, #f8f6f1);
+      stroke: none;
+    }
+
+    .flow-edge-label text {
+      fill: var(--gray-700, #3d3d3a);
+      font-size: 12px;
+      font-weight: 600;
+    }
+
     figcaption {
       margin-top: var(--space-sm);
       color: var(--gray-700);
@@ -424,9 +435,18 @@
           <path class="flow-arrow flow-dashed" d="M 330 112 V 152" marker-end="url(#cli-flow-arrowhead)"></path>
           <path class="flow-arrow flow-dashed" d="M 561 112 C 561 150, 500 172, 496 190" marker-end="url(#cli-flow-arrowhead)"></path>
 
-          <text class="flow-note" x="164" y="165" text-anchor="middle">解析失敗</text>
-          <text class="flow-note" x="330" y="142" text-anchor="middle">解析失敗</text>
-          <text class="flow-note" x="562" y="165" text-anchor="middle">解析失敗</text>
+          <g class="flow-edge-label">
+            <rect x="130" y="151" width="68" height="22" rx="5"></rect>
+            <text x="164" y="166" text-anchor="middle">解析失敗</text>
+          </g>
+          <g class="flow-edge-label">
+            <rect x="296" y="128" width="68" height="22" rx="5"></rect>
+            <text x="330" y="143" text-anchor="middle">解析失敗</text>
+          </g>
+          <g class="flow-edge-label">
+            <rect x="528" y="151" width="68" height="22" rx="5"></rect>
+            <text x="562" y="166" text-anchor="middle">解析失敗</text>
+          </g>
         </svg>
         <figcaption>先分清動作、主要對象與設定；只有解析階段失敗才屬於 <code>ValidationError</code>。</figcaption>
       </figure>
