@@ -41,6 +41,13 @@ Use the available browser preview/screenshot tooling when possible. If browser p
 - Center the article on the useful knowledge from the current conversation thread.
 - You may add outside context or research, including web research, when it improves accuracy or clarity.
 - Do not make the current repository/codebase the focus, cite it, or infer article content from it unless the user explicitly asks for that.
+- For learning articles, prefer small pedagogical demo code over code from the current repo or conversation. Use repo-specific code only when the article is explicitly about that code.
+
+## Responsive Figures
+
+- A figure may use different SVGs for desktop and mobile when layout clarity improves, such as horizontal desktop flow and vertical mobile flow.
+- Scope the CSS so exactly one SVG is visible per viewport.
+- Verify both desktop and mobile renderings.
 
 ## Article Requirements
 
