@@ -79,6 +79,20 @@ Effect 的採用節奏要保守：先建立 runtime entrypoint 和必要 service
 - Runtime validation: 使用 Effect schema API；所有 persisted/public schema 都要 versioned。
 - Test runner: Bun test，透過 `bun run test` 執行。
 
+## Runtime And Platform Decision
+
+後續執行 plan 時，預設採用 Bun-first + Effect platform 的設計：
+
+- Bun 是 package manager、script runner、test runner、build target 和 standalone binary runtime。
+- Effect 是 application runtime；跨 use-case 的 error、dependency injection、timeout、concurrency、resource cleanup 都用 Effect 表達。
+- Filesystem、path、command、environment、clock、network 等副作用優先走 `@effect/platform` service，並在 Bun entrypoint / tests 透過 `@effect/platform-bun` 提供 layer。
+- CLI entrypoint 使用 `Bun.argv`、`Bun.env`、`import.meta.dir`、`import.meta.path` 等 Bun/runtime 原生能力。
+- Feature code 不直接 import `node:*`，也不直接使用 `process.argv`、`process.env`、`child_process`、`Bun.spawn` 或 shell string。
+- 若 Bun 或 Effect platform 沒有足夠 API，才可以在 platform adapter 的最小範圍使用 runtime-compatible escape hatch；使用前要在該 plan 或 PR 說明原因，不能散落在 use-case/domain/feature code。
+- 測試同樣遵守這個邊界：用 Bun test，副作用測試優先透過 `@effect/platform` fake/service 或 BunContext，不為方便直接改回 Node stdlib。
+
+判斷標準：如果一段程式碼看起來像 Node 腳本，通常就需要重新檢查是否應改成 Bun entrypoint、Effect service，或收斂到 platform adapter。
+
 ## Test And Fake Strategy
 
 - Unit tests 優先測 domain rules、schema parsing、config precedence、scope selection、error mapping。
