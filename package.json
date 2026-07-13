@@ -10,6 +10,8 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "build": "bun scripts/build.ts",
+    "install:local": "bun scripts/install-local.ts",
+    "uninstall:local": "bun scripts/uninstall-local.ts",
     "prepare": "effect-tsgo patch",
     "test": "bun run build && bun test"
   },
