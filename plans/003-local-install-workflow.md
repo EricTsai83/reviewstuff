@@ -19,8 +19,8 @@ bun run uninstall:local
 
 包含：
 
-- `scripts/install-local.ts`
-- `scripts/uninstall-local.ts`
+- `scripts/install-local-bin.ts`
+- `scripts/uninstall-local-bin.ts`
 - `bun run install:local`
 - `bun run uninstall:local`
 - symlink 到 `~/.local/bin/reviewstuff`

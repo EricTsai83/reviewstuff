@@ -1,31 +1,33 @@
 import { constants } from "node:fs";
 import { access } from "node:fs/promises";
 import { FileSystem, Path } from "@effect/platform";
+import type { PlatformError } from "@effect/platform/Error";
 import { BunContext, BunRuntime } from "@effect/platform-bun";
 import { Console, Data, Effect } from "effect";
 import packageJson from "../package.json";
 
-interface InstallLocalOptions {
-  readonly envPath?: string;
-  readonly force?: boolean;
+export interface InstallLocalOptions {
   readonly home?: string;
   readonly log?: (message: string) => void;
-  readonly root?: string;
+  readonly pathEnv?: string;
+  /** Replace a path at the install location when it does not point to this repo. */
+  readonly replaceExisting?: boolean;
+  readonly repoRoot?: string;
 }
 
-interface InstallLocalResult {
+export interface InstallLocalResult {
   readonly binDir: string;
   readonly linkPath: string;
   readonly targetBinary: string;
 }
 
-interface UninstallLocalOptions {
+export interface UninstallLocalOptions {
   readonly home?: string;
   readonly log?: (message: string) => void;
-  readonly root?: string;
+  readonly repoRoot?: string;
 }
 
-interface UninstallLocalResult {
+export interface UninstallLocalResult {
   readonly linkPath: string;
   readonly removed: boolean;
   readonly targetBinary: string;
@@ -38,15 +40,18 @@ interface LocalPaths {
   readonly targetBinary: string;
 }
 
-interface ParsedArgs {
-  readonly force: boolean;
-}
+type LinkState =
+  | { readonly _tag: "Missing" }
+  | { readonly _tag: "NotSymlink" }
+  | { readonly _tag: "Symlink"; readonly target: string };
 
 const pathDelimiter = ":";
 
-class InstallLocalError extends Data.TaggedError("InstallLocalError")<{
+export class LocalBinError extends Data.TaggedError("LocalBinError")<{
   readonly message: string;
 }> {}
+
+export type LocalBinScriptError = LocalBinError | PlatformError;
 
 const hasErrorCode = (error: unknown, code: string): boolean =>
   typeof error === "object" &&
@@ -54,47 +59,43 @@ const hasErrorCode = (error: unknown, code: string): boolean =>
   "code" in error &&
   error.code === code;
 
-const requireHome = (): Effect.Effect<string, InstallLocalError> =>
+const requireHome = (): Effect.Effect<string, LocalBinError> =>
   Bun.env.HOME === undefined
-    ? Effect.fail(new InstallLocalError({ message: "$HOME is not set." }))
+    ? Effect.fail(new LocalBinError({ message: "$HOME is not set." }))
     : Effect.succeed(Bun.env.HOME);
 
-const parseArgs = (args: ReadonlyArray<string>): ParsedArgs => ({
-  force: args.includes("--force"),
-});
-
-const isPathInPath = (
+const isDirOnEnvPath = (
   path: Path.Path,
   home: string,
-  targetDir: string,
-  pathValue: string,
+  dir: string,
+  pathEnv: string,
 ): boolean => {
-  const entries = pathValue
+  const entries = pathEnv
     .split(pathDelimiter)
     .filter((entry) => entry.length > 0)
     .map((entry) => path.resolve(entry.replace(/^~(?=$|\/)/, home)));
 
-  return entries.includes(path.resolve(targetDir));
+  return entries.includes(path.resolve(dir));
 };
 
 const resolveLocalPaths = (
   path: Path.Path,
   home: string,
-  root?: string,
-): Effect.Effect<LocalPaths, InstallLocalError> =>
+  repoRoot?: string,
+): Effect.Effect<LocalPaths, LocalBinError> =>
   Effect.gen(function* () {
     const binEntries = Object.entries(packageJson.bin);
     const binEntry = binEntries[0];
 
     if (binEntries.length !== 1 || binEntry === undefined) {
-      return yield* new InstallLocalError({
+      return yield* new LocalBinError({
         message: "package.json must define exactly one binary for local installation.",
       });
     }
 
     const [binaryName, relativeBinaryPath] = binEntry;
-    const repoRoot = path.resolve(import.meta.dir, "..");
-    const targetBinary = path.resolve(root ?? repoRoot, relativeBinaryPath);
+    const resolvedRoot = repoRoot ?? path.resolve(import.meta.dir, "..");
+    const targetBinary = path.resolve(resolvedRoot, relativeBinaryPath);
     const binDir = path.join(home, ".local", "bin");
 
     return {
@@ -108,19 +109,19 @@ const resolveLocalPaths = (
 const requireExecutable = (
   fs: FileSystem.FileSystem,
   targetBinary: string,
-): Effect.Effect<void, InstallLocalError> =>
+): Effect.Effect<void, LocalBinError> =>
   Effect.gen(function* () {
     const stats = yield* fs.stat(targetBinary).pipe(
       Effect.mapError(
         () =>
-          new InstallLocalError({
+          new LocalBinError({
             message: `Expected executable binary at ${targetBinary}. Run "bun run build" first.`,
           }),
       ),
     );
 
     if (stats.type !== "File") {
-      return yield* new InstallLocalError({
+      return yield* new LocalBinError({
         message: `${targetBinary} is not a file.`,
       });
     }
@@ -128,44 +129,49 @@ const requireExecutable = (
     yield* Effect.tryPromise({
       try: () => access(targetBinary, constants.X_OK),
       catch: () =>
-        new InstallLocalError({
+        new LocalBinError({
           message: `Expected executable binary at ${targetBinary}. Run "bun run build" first.`,
         }),
     });
   });
 
-const readExistingLink = (
+const readLinkState = (
   fs: FileSystem.FileSystem,
   path: Path.Path,
   linkPath: string,
-): Effect.Effect<string | null | undefined, unknown> =>
+): Effect.Effect<LinkState, PlatformError> =>
   fs.readLink(linkPath).pipe(
-    Effect.map((linkTarget) => path.resolve(path.dirname(linkPath), linkTarget)),
+    Effect.map(
+      (linkTarget): LinkState => ({
+        _tag: "Symlink",
+        target: path.resolve(path.dirname(linkPath), linkTarget),
+      }),
+    ),
     Effect.catchTag("SystemError", (error) => {
       if (error.reason === "NotFound") {
-        return Effect.succeed(undefined as undefined);
+        return Effect.succeed<LinkState>({ _tag: "Missing" });
       }
 
       if (
         error.reason === "BadResource" ||
         (error.method === "readLink" && hasErrorCode(error.cause, "EINVAL"))
       ) {
-        return Effect.succeed(null);
+        return Effect.succeed<LinkState>({ _tag: "NotSymlink" });
       }
 
       return Effect.fail(error);
     }),
   );
 
-const installLocalEffect = ({
-  force = false,
+export const installLocalEffect = ({
   home,
-  envPath = Bun.env.PATH ?? "",
-  root,
+  pathEnv = Bun.env.PATH ?? "",
+  replaceExisting = false,
+  repoRoot,
   log = console.log,
 }: InstallLocalOptions = {}): Effect.Effect<
   InstallLocalResult,
-  unknown,
+  LocalBinScriptError,
   FileSystem.FileSystem | Path.Path
 > =>
   Effect.gen(function* () {
@@ -173,23 +179,24 @@ const installLocalEffect = ({
     const path = yield* Path.Path;
     const resolvedHome = home ?? (yield* requireHome());
     const { binaryName, binDir, linkPath, targetBinary } =
-      yield* resolveLocalPaths(path, resolvedHome, root);
+      yield* resolveLocalPaths(path, resolvedHome, repoRoot);
 
     yield* requireExecutable(fs, targetBinary);
     yield* fs.makeDirectory(binDir, { recursive: true });
 
-    const existingTarget = yield* readExistingLink(fs, path, linkPath);
+    const linkState = yield* readLinkState(fs, path, linkPath);
 
-    if (existingTarget === path.resolve(targetBinary)) {
+    if (linkState._tag === "Symlink" && linkState.target === path.resolve(targetBinary)) {
       log(`${binaryName} is already linked at ${linkPath}`);
     } else {
-      if (existingTarget !== undefined) {
-        if (!force) {
-          return yield* new InstallLocalError({
+      if (linkState._tag !== "Missing") {
+        if (!replaceExisting) {
+          return yield* new LocalBinError({
             message: `${linkPath} already exists and does not point to this repo. Re-run with --force to replace it.`,
           });
         }
 
+        log(`Removing existing ${linkPath} (--force)`);
         yield* fs.remove(linkPath, { force: true, recursive: true });
       }
 
@@ -197,7 +204,7 @@ const installLocalEffect = ({
       log(`Linked ${linkPath} -> ${targetBinary}`);
     }
 
-    if (!isPathInPath(path, resolvedHome, binDir, envPath)) {
+    if (!isDirOnEnvPath(path, resolvedHome, binDir, pathEnv)) {
       log("");
       log(`${binDir} is not on PATH.`);
       log(`Add this to your shell profile: export PATH="${binDir}:$PATH"`);
@@ -206,13 +213,13 @@ const installLocalEffect = ({
     return { binDir, linkPath, targetBinary };
   });
 
-const uninstallLocalEffect = ({
+export const uninstallLocalEffect = ({
   home,
-  root,
+  repoRoot,
   log = console.log,
 }: UninstallLocalOptions = {}): Effect.Effect<
   UninstallLocalResult,
-  unknown,
+  LocalBinScriptError,
   FileSystem.FileSystem | Path.Path
 > =>
   Effect.gen(function* () {
@@ -222,17 +229,20 @@ const uninstallLocalEffect = ({
     const { binaryName, linkPath, targetBinary } = yield* resolveLocalPaths(
       path,
       resolvedHome,
-      root,
+      repoRoot,
     );
-    const existingTarget = yield* readExistingLink(fs, path, linkPath);
+    const linkState = yield* readLinkState(fs, path, linkPath);
 
-    if (existingTarget === undefined) {
+    if (linkState._tag === "Missing") {
       log(`${binaryName} is not installed at ${linkPath}`);
       return { linkPath, removed: false, targetBinary };
     }
 
-    if (existingTarget !== path.resolve(targetBinary)) {
-      return yield* new InstallLocalError({
+    if (
+      linkState._tag === "NotSymlink" ||
+      linkState.target !== path.resolve(targetBinary)
+    ) {
+      return yield* new LocalBinError({
         message: `${linkPath} does not point to this repo; refusing to remove it.`,
       });
     }
@@ -244,7 +254,7 @@ const uninstallLocalEffect = ({
   });
 
 const runWithBun = <A>(
-  effect: Effect.Effect<A, unknown, FileSystem.FileSystem | Path.Path>,
+  effect: Effect.Effect<A, LocalBinScriptError, FileSystem.FileSystem | Path.Path>,
 ): Promise<A> => effect.pipe(Effect.provide(BunContext.layer), Effect.runPromise);
 
 export const installLocal = (
@@ -255,14 +265,10 @@ export const uninstallLocal = (
   options: UninstallLocalOptions = {},
 ): Promise<UninstallLocalResult> => runWithBun(uninstallLocalEffect(options));
 
-const main = Effect.gen(function* () {
-  const { force } = parseArgs(Bun.argv.slice(2));
-
-  yield* installLocalEffect({ force });
-});
-
-if (Bun.argv[1] !== undefined && Bun.argv[1] === import.meta.path) {
-  main.pipe(
+export const runLocalBinMain = (
+  effect: Effect.Effect<unknown, LocalBinScriptError, FileSystem.FileSystem | Path.Path>,
+): void =>
+  effect.pipe(
     Effect.catchAll((error) =>
       Console.error(error instanceof Error ? error.message : String(error)).pipe(
         Effect.zipRight(
@@ -275,4 +281,3 @@ if (Bun.argv[1] !== undefined && Bun.argv[1] === import.meta.path) {
     Effect.provide(BunContext.layer),
     BunRuntime.runMain,
   );
-}

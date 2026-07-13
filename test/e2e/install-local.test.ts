@@ -3,7 +3,7 @@ import { BunContext } from "@effect/platform-bun";
 import { afterEach, describe, expect, test } from "bun:test";
 import { Effect } from "effect";
 import packageJson from "../../package.json";
-import { installLocal, uninstallLocal } from "../../scripts/install-local";
+import { installLocal, uninstallLocal } from "../../scripts/local-bin";
 
 interface Fixture {
   readonly binary: string;
@@ -96,16 +96,16 @@ describe("installLocal", () => {
     const messages: Array<string> = [];
 
     const first = await installLocal({
-      envPath: path.join(home, ".local", "bin"),
+      pathEnv: path.join(home, ".local", "bin"),
       home,
       log: (message) => messages.push(message),
-      root,
+      repoRoot: root,
     });
     const second = await installLocal({
-      envPath: first.binDir,
+      pathEnv: first.binDir,
       home,
       log: (message) => messages.push(message),
-      root,
+      repoRoot: root,
     });
 
     expect(first.linkPath).toBe(path.join(home, ".local", "bin", binaryName));
@@ -114,7 +114,7 @@ describe("installLocal", () => {
     expect(messages).toContain(`${binaryName} is already linked at ${first.linkPath}`);
   });
 
-  test("refuses to overwrite an unrelated file without --force", async () => {
+  test("refuses to overwrite an unrelated file by default", async () => {
     const { home, root } = await makeFixture();
     const linkPath = path.join(home, ".local", "bin", binaryName);
 
@@ -122,30 +122,32 @@ describe("installLocal", () => {
     await run(fs.writeFileString(linkPath, "unrelated"));
 
     await expect(
-      installLocal({ envPath: "", home, log: () => {}, root }),
+      installLocal({ pathEnv: "", home, log: () => {}, repoRoot: root }),
     ).rejects.toThrow("already exists and does not point to this repo");
     expect(await run(fs.readFileString(linkPath))).toBe("unrelated");
   });
 
-  test("replaces an unrelated file with --force", async () => {
+  test("replaces an unrelated file when replaceExisting is enabled", async () => {
     const { binary, home, root } = await makeFixture();
     const linkPath = path.join(home, ".local", "bin", binaryName);
+    const messages: Array<string> = [];
 
     await run(fs.makeDirectory(path.dirname(linkPath), { recursive: true }));
     await run(fs.writeFileString(linkPath, "unrelated"));
 
     await installLocal({
-      envPath: path.join(home, ".local", "bin"),
-      force: true,
+      pathEnv: path.join(home, ".local", "bin"),
       home,
-      log: () => {},
-      root,
+      log: (message) => messages.push(message),
+      replaceExisting: true,
+      repoRoot: root,
     });
 
     expect(await run(fs.readLink(linkPath))).toBe(binary);
+    expect(messages).toContain(`Removing existing ${linkPath} (--force)`);
   });
 
-  test("replaces an unrelated directory with --force", async () => {
+  test("replaces an unrelated directory when replaceExisting is enabled", async () => {
     const { binary, home, root } = await makeFixture();
     const linkPath = path.join(home, ".local", "bin", binaryName);
 
@@ -153,11 +155,11 @@ describe("installLocal", () => {
     await run(fs.writeFileString(path.join(linkPath, "nested", "file"), "unrelated"));
 
     await installLocal({
-      envPath: path.join(home, ".local", "bin"),
-      force: true,
+      pathEnv: path.join(home, ".local", "bin"),
       home,
       log: () => {},
-      root,
+      replaceExisting: true,
+      repoRoot: root,
     });
 
     expect(await run(fs.readLink(linkPath))).toBe(binary);
@@ -168,10 +170,10 @@ describe("installLocal", () => {
     const messages: Array<string> = [];
 
     await installLocal({
-      envPath: "~/.local/bin",
+      pathEnv: "~/.local/bin",
       home,
       log: (message) => messages.push(message),
-      root,
+      repoRoot: root,
     });
 
     expect(messages).not.toContain(`${path.join(home, ".local", "bin")} is not on PATH.`);
@@ -183,10 +185,10 @@ describe("installLocal", () => {
     const binDir = path.join(home, ".local", "bin");
 
     await installLocal({
-      envPath: "/usr/bin",
+      pathEnv: "/usr/bin",
       home,
       log: (message) => messages.push(message),
-      root,
+      repoRoot: root,
     });
 
     expect(messages).toContain(`${binDir} is not on PATH.`);
@@ -200,7 +202,7 @@ describe("installLocal", () => {
     const home = await makeTempDir();
 
     await expect(
-      installLocal({ envPath: "", home, log: () => {}, root }),
+      installLocal({ pathEnv: "", home, log: () => {}, repoRoot: root }),
     ).rejects.toThrow('Run "bun run build" first');
   });
 
@@ -211,7 +213,7 @@ describe("installLocal", () => {
     await run(fs.chmod(binary, 0o001));
 
     await expect(
-      installLocal({ envPath: "", home, log: () => {}, root }),
+      installLocal({ pathEnv: "", home, log: () => {}, repoRoot: root }),
     ).rejects.toThrow('Run "bun run build" first');
     expect(await run(fs.exists(linkPath))).toBe(false);
   });
@@ -221,13 +223,13 @@ describe("uninstallLocal", () => {
   test("removes a symlink owned by this repo", async () => {
     const { home, root } = await makeFixture();
     const installed = await installLocal({
-      envPath: path.join(home, ".local", "bin"),
+      pathEnv: path.join(home, ".local", "bin"),
       home,
       log: () => {},
-      root,
+      repoRoot: root,
     });
 
-    const result = await uninstallLocal({ home, log: () => {}, root });
+    const result = await uninstallLocal({ home, log: () => {}, repoRoot: root });
 
     expect(result.removed).toBe(true);
     expect(await run(fs.exists(installed.linkPath))).toBe(false);
@@ -240,7 +242,7 @@ describe("uninstallLocal", () => {
     const result = await uninstallLocal({
       home,
       log: (message) => messages.push(message),
-      root,
+      repoRoot: root,
     });
 
     expect(result.removed).toBe(false);
@@ -255,7 +257,7 @@ describe("uninstallLocal", () => {
     await run(fs.symlink(binary, linkPath));
     await run(fs.remove(binary));
 
-    const result = await uninstallLocal({ home, log: () => {}, root });
+    const result = await uninstallLocal({ home, log: () => {}, repoRoot: root });
 
     expect(result.removed).toBe(true);
     expect(await run(fs.exists(linkPath))).toBe(false);
@@ -269,7 +271,7 @@ describe("uninstallLocal", () => {
     await run(fs.writeFileString(linkPath, "unrelated"));
 
     await expect(
-      uninstallLocal({ home, log: () => {}, root }),
+      uninstallLocal({ home, log: () => {}, repoRoot: root }),
     ).rejects.toThrow("does not point to this repo; refusing to remove it");
     expect(await run(fs.readFileString(linkPath))).toBe("unrelated");
   });
@@ -284,7 +286,7 @@ describe("uninstallLocal", () => {
     await run(fs.symlink(otherBinary, linkPath));
 
     await expect(
-      uninstallLocal({ home, log: () => {}, root }),
+      uninstallLocal({ home, log: () => {}, repoRoot: root }),
     ).rejects.toThrow("does not point to this repo; refusing to remove it");
     expect(await run(fs.readLink(linkPath))).toBe(otherBinary);
   });
@@ -294,12 +296,12 @@ describe("local install scripts", () => {
   test("accepts an explicit home when the process HOME is missing", async () => {
     const { home, root } = await makeFixture();
     const program = [
-      'import { installLocal } from "./scripts/install-local.ts";',
+      'import { installLocal } from "./scripts/local-bin.ts";',
       "await installLocal({",
-      '  envPath: "/usr/bin",',
+      '  pathEnv: "/usr/bin",',
       "  home: Bun.env.TEST_HOME,",
       "  log: () => {},",
-      "  root: Bun.env.TEST_ROOT,",
+      "  repoRoot: Bun.env.TEST_ROOT,",
       "});",
     ].join("\n");
     const result = await runBunWithoutHome(
@@ -311,8 +313,23 @@ describe("local install scripts", () => {
     expect(result.stderr).toBe("");
   });
 
+  test("rejects unknown arguments", async () => {
+    const result = await runBunWithoutHome([
+      path.join(repoRoot, "scripts", "install-local-bin.ts"),
+      "--frce",
+    ]);
+
+    expect(result.exitCode).toBe(1);
+    expect(`${result.stderr}${result.stdout}`).toContain(
+      "Unknown argument: --frce. Supported: --force",
+    );
+  });
+
   test("reports a missing HOME without a runtime stack trace", async () => {
-    for (const scriptName of ["install-local.ts", "uninstall-local.ts"]) {
+    for (const scriptName of [
+      "install-local-bin.ts",
+      "uninstall-local-bin.ts",
+    ]) {
       const result = await runScriptWithoutHome(scriptName);
       const output = `${result.stderr}\n${result.stdout}`;
 
