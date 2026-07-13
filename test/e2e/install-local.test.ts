@@ -7,7 +7,7 @@ import { installLocal, uninstallLocal } from "../../scripts/local-bin";
 
 interface Fixture {
   readonly binary: string;
-  readonly home: string;
+  readonly installDir: string;
   readonly root: string;
 }
 
@@ -46,7 +46,7 @@ const makeTempDir = async (): Promise<string> => {
 
 const makeFixture = async (): Promise<Fixture> => {
   const root = await makeTempDir();
-  const home = await makeTempDir();
+  const installDir = path.join(await makeTempDir(), ".local", "bin");
   const binary = path.resolve(root, relativeBinaryPath);
 
   await run(fs.makeDirectory(path.dirname(binary), { recursive: true }));
@@ -54,7 +54,7 @@ const makeFixture = async (): Promise<Fixture> => {
     fs.writeFileString(binary, "#!/usr/bin/env sh\nexit 0\n", { mode: 0o755 }),
   );
 
-  return { binary, home, root };
+  return { binary, installDir, root };
 };
 
 const runBunWithoutHome = async (
@@ -91,53 +91,55 @@ afterEach(async () => {
 });
 
 describe("installLocal", () => {
-  test("creates a repeatable symlink in ~/.local/bin", async () => {
-    const { binary, home, root } = await makeFixture();
+  test("creates a repeatable symlink in the configured install directory", async () => {
+    const { binary, installDir, root } = await makeFixture();
     const messages: Array<string> = [];
 
     const first = await installLocal({
-      pathEnv: path.join(home, ".local", "bin"),
-      home,
+      pathEnv: installDir,
+      installDir,
       log: (message) => messages.push(message),
       repoRoot: root,
     });
     const second = await installLocal({
       pathEnv: first.binDir,
-      home,
+      installDir,
       log: (message) => messages.push(message),
       repoRoot: root,
     });
 
-    expect(first.linkPath).toBe(path.join(home, ".local", "bin", binaryName));
+    expect(first.linkPath).toBe(path.join(installDir, binaryName));
     expect(await run(fs.readLink(first.linkPath))).toBe(binary);
     expect(second.linkPath).toBe(first.linkPath);
-    expect(messages).toContain(`${binaryName} is already linked at ${first.linkPath}`);
+    expect(messages).toContain(
+      `${binaryName} is already linked at ${first.linkPath}`,
+    );
   });
 
   test("refuses to overwrite an unrelated file by default", async () => {
-    const { home, root } = await makeFixture();
-    const linkPath = path.join(home, ".local", "bin", binaryName);
+    const { installDir, root } = await makeFixture();
+    const linkPath = path.join(installDir, binaryName);
 
     await run(fs.makeDirectory(path.dirname(linkPath), { recursive: true }));
     await run(fs.writeFileString(linkPath, "unrelated"));
 
     await expect(
-      installLocal({ pathEnv: "", home, log: () => {}, repoRoot: root }),
+      installLocal({ installDir, pathEnv: "", log: () => {}, repoRoot: root }),
     ).rejects.toThrow("already exists and does not point to this repo");
     expect(await run(fs.readFileString(linkPath))).toBe("unrelated");
   });
 
   test("replaces an unrelated file when replaceExisting is enabled", async () => {
-    const { binary, home, root } = await makeFixture();
-    const linkPath = path.join(home, ".local", "bin", binaryName);
+    const { binary, installDir, root } = await makeFixture();
+    const linkPath = path.join(installDir, binaryName);
     const messages: Array<string> = [];
 
     await run(fs.makeDirectory(path.dirname(linkPath), { recursive: true }));
     await run(fs.writeFileString(linkPath, "unrelated"));
 
     await installLocal({
-      pathEnv: path.join(home, ".local", "bin"),
-      home,
+      installDir,
+      pathEnv: installDir,
       log: (message) => messages.push(message),
       replaceExisting: true,
       repoRoot: root,
@@ -148,15 +150,15 @@ describe("installLocal", () => {
   });
 
   test("replaces an unrelated directory when replaceExisting is enabled", async () => {
-    const { binary, home, root } = await makeFixture();
-    const linkPath = path.join(home, ".local", "bin", binaryName);
+    const { binary, installDir, root } = await makeFixture();
+    const linkPath = path.join(installDir, binaryName);
 
     await run(fs.makeDirectory(path.join(linkPath, "nested"), { recursive: true }));
     await run(fs.writeFileString(path.join(linkPath, "nested", "file"), "unrelated"));
 
     await installLocal({
-      pathEnv: path.join(home, ".local", "bin"),
-      home,
+      installDir,
+      pathEnv: installDir,
       log: () => {},
       replaceExisting: true,
       repoRoot: root,
@@ -165,55 +167,40 @@ describe("installLocal", () => {
     expect(await run(fs.readLink(linkPath))).toBe(binary);
   });
 
-  test("expands a PATH tilde using the supplied home", async () => {
-    const { home, root } = await makeFixture();
+  test("prints PATH guidance when the install directory is missing from PATH", async () => {
+    const { installDir, root } = await makeFixture();
     const messages: Array<string> = [];
 
     await installLocal({
-      pathEnv: "~/.local/bin",
-      home,
-      log: (message) => messages.push(message),
-      repoRoot: root,
-    });
-
-    expect(messages).not.toContain(`${path.join(home, ".local", "bin")} is not on PATH.`);
-  });
-
-  test("prints PATH guidance when ~/.local/bin is missing from PATH", async () => {
-    const { home, root } = await makeFixture();
-    const messages: Array<string> = [];
-    const binDir = path.join(home, ".local", "bin");
-
-    await installLocal({
+      installDir,
       pathEnv: "/usr/bin",
-      home,
       log: (message) => messages.push(message),
       repoRoot: root,
     });
 
-    expect(messages).toContain(`${binDir} is not on PATH.`);
+    expect(messages).toContain(`${installDir} is not on PATH.`);
     expect(messages).toContain(
-      `Add this to your shell profile: export PATH="${binDir}:$PATH"`,
+      `Add this to your shell profile: export PATH="${installDir}:$PATH"`,
     );
   });
 
   test("requires the built binary to exist and be executable", async () => {
     const root = await makeTempDir();
-    const home = await makeTempDir();
+    const installDir = await makeTempDir();
 
     await expect(
-      installLocal({ pathEnv: "", home, log: () => {}, repoRoot: root }),
+      installLocal({ installDir, pathEnv: "", log: () => {}, repoRoot: root }),
     ).rejects.toThrow('Run "bun run build" first');
   });
 
   test("rejects a binary that the current user cannot execute", async () => {
-    const { binary, home, root } = await makeFixture();
-    const linkPath = path.join(home, ".local", "bin", binaryName);
+    const { binary, installDir, root } = await makeFixture();
+    const linkPath = path.join(installDir, binaryName);
 
     await run(fs.chmod(binary, 0o001));
 
     await expect(
-      installLocal({ pathEnv: "", home, log: () => {}, repoRoot: root }),
+      installLocal({ installDir, pathEnv: "", log: () => {}, repoRoot: root }),
     ).rejects.toThrow('Run "bun run build" first');
     expect(await run(fs.exists(linkPath))).toBe(false);
   });
@@ -221,26 +208,30 @@ describe("installLocal", () => {
 
 describe("uninstallLocal", () => {
   test("removes a symlink owned by this repo", async () => {
-    const { home, root } = await makeFixture();
+    const { installDir, root } = await makeFixture();
     const installed = await installLocal({
-      pathEnv: path.join(home, ".local", "bin"),
-      home,
+      installDir,
+      pathEnv: installDir,
       log: () => {},
       repoRoot: root,
     });
 
-    const result = await uninstallLocal({ home, log: () => {}, repoRoot: root });
+    const result = await uninstallLocal({
+      installDir,
+      log: () => {},
+      repoRoot: root,
+    });
 
     expect(result.removed).toBe(true);
     expect(await run(fs.exists(installed.linkPath))).toBe(false);
   });
 
   test("succeeds when the symlink is already absent", async () => {
-    const { home, root } = await makeFixture();
+    const { installDir, root } = await makeFixture();
     const messages: Array<string> = [];
 
     const result = await uninstallLocal({
-      home,
+      installDir,
       log: (message) => messages.push(message),
       repoRoot: root,
     });
@@ -250,63 +241,89 @@ describe("uninstallLocal", () => {
   });
 
   test("removes an owned dangling symlink", async () => {
-    const { binary, home, root } = await makeFixture();
-    const linkPath = path.join(home, ".local", "bin", binaryName);
+    const { binary, installDir, root } = await makeFixture();
+    const linkPath = path.join(installDir, binaryName);
 
     await run(fs.makeDirectory(path.dirname(linkPath), { recursive: true }));
     await run(fs.symlink(binary, linkPath));
     await run(fs.remove(binary));
 
-    const result = await uninstallLocal({ home, log: () => {}, repoRoot: root });
+    const result = await uninstallLocal({
+      installDir,
+      log: () => {},
+      repoRoot: root,
+    });
 
     expect(result.removed).toBe(true);
     expect(await run(fs.exists(linkPath))).toBe(false);
   });
 
   test("refuses to remove an unrelated file", async () => {
-    const { home, root } = await makeFixture();
-    const linkPath = path.join(home, ".local", "bin", binaryName);
+    const { installDir, root } = await makeFixture();
+    const linkPath = path.join(installDir, binaryName);
 
     await run(fs.makeDirectory(path.dirname(linkPath), { recursive: true }));
     await run(fs.writeFileString(linkPath, "unrelated"));
 
     await expect(
-      uninstallLocal({ home, log: () => {}, repoRoot: root }),
+      uninstallLocal({ installDir, log: () => {}, repoRoot: root }),
     ).rejects.toThrow("does not point to this repo; refusing to remove it");
     expect(await run(fs.readFileString(linkPath))).toBe("unrelated");
   });
 
   test("refuses to remove a symlink owned by another repo", async () => {
-    const { home, root } = await makeFixture();
+    const { installDir, root } = await makeFixture();
     const otherRoot = await makeTempDir();
     const otherBinary = path.resolve(otherRoot, relativeBinaryPath);
-    const linkPath = path.join(home, ".local", "bin", binaryName);
+    const linkPath = path.join(installDir, binaryName);
 
     await run(fs.makeDirectory(path.dirname(linkPath), { recursive: true }));
     await run(fs.symlink(otherBinary, linkPath));
 
     await expect(
-      uninstallLocal({ home, log: () => {}, repoRoot: root }),
+      uninstallLocal({ installDir, log: () => {}, repoRoot: root }),
     ).rejects.toThrow("does not point to this repo; refusing to remove it");
     expect(await run(fs.readLink(linkPath))).toBe(otherBinary);
   });
 });
 
 describe("local install scripts", () => {
-  test("accepts an explicit home when the process HOME is missing", async () => {
-    const { home, root } = await makeFixture();
+  test("defaults to $HOME/.local/bin and expands ~ in PATH", async () => {
+    const { binary, root } = await makeFixture();
+    const homeDir = await makeTempDir();
     const program = [
       'import { installLocal } from "./scripts/local-bin.ts";',
       "await installLocal({",
-      '  pathEnv: "/usr/bin",',
-      "  home: Bun.env.TEST_HOME,",
+      '  pathEnv: "~/.local/bin",',
       "  log: () => {},",
       "  repoRoot: Bun.env.TEST_ROOT,",
       "});",
     ].join("\n");
     const result = await runBunWithoutHome(
       ["-e", program],
-      { TEST_HOME: home, TEST_ROOT: root },
+      { HOME: homeDir, TEST_ROOT: root },
+    );
+    const linkPath = path.join(homeDir, ".local", "bin", binaryName);
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stderr).toBe("");
+    expect(await run(fs.readLink(linkPath))).toBe(binary);
+  });
+
+  test("accepts an explicit install directory when HOME is missing", async () => {
+    const { installDir, root } = await makeFixture();
+    const program = [
+      'import { installLocal } from "./scripts/local-bin.ts";',
+      "await installLocal({",
+      "  installDir: Bun.env.TEST_INSTALL_DIR,",
+      '  pathEnv: "/usr/bin",',
+      "  log: () => {},",
+      "  repoRoot: Bun.env.TEST_ROOT,",
+      "});",
+    ].join("\n");
+    const result = await runBunWithoutHome(
+      ["-e", program],
+      { TEST_INSTALL_DIR: installDir, TEST_ROOT: root },
     );
 
     expect(result.exitCode).toBe(0);

@@ -7,7 +7,8 @@ import { Console, Data, Effect } from "effect";
 import packageJson from "../package.json";
 
 export interface InstallLocalOptions {
-  readonly home?: string;
+  /** Defaults to `$HOME/.local/bin`. */
+  readonly installDir?: string;
   readonly log?: (message: string) => void;
   readonly pathEnv?: string;
   /** Replace a path at the install location when it does not point to this repo. */
@@ -22,7 +23,8 @@ export interface InstallLocalResult {
 }
 
 export interface UninstallLocalOptions {
-  readonly home?: string;
+  /** Defaults to `$HOME/.local/bin`. */
+  readonly installDir?: string;
   readonly log?: (message: string) => void;
   readonly repoRoot?: string;
 }
@@ -66,21 +68,42 @@ const requireHome = (): Effect.Effect<string, LocalBinError> =>
 
 const isDirOnEnvPath = (
   path: Path.Path,
-  home: string,
   dir: string,
   pathEnv: string,
 ): boolean => {
+  const home = Bun.env.HOME;
   const entries = pathEnv
     .split(pathDelimiter)
     .filter((entry) => entry.length > 0)
-    .map((entry) => path.resolve(entry.replace(/^~(?=$|\/)/, home)));
+    .map((entry) =>
+      path.resolve(
+        home === undefined ? entry : entry.replace(/^~(?=$|\/)/, home),
+      ),
+    );
 
   return entries.includes(path.resolve(dir));
 };
 
+const resolveInstallDir = (
+  path: Path.Path,
+  installDir?: string,
+): Effect.Effect<string, LocalBinError> => {
+  if (installDir === undefined || installDir.length === 0) {
+    return Effect.map(requireHome(), (home) => path.join(home, ".local", "bin"));
+  }
+
+  if (/^~(?=$|\/)/.test(installDir)) {
+    return Effect.map(requireHome(), (home) =>
+      path.resolve(installDir.replace(/^~(?=$|\/)/, home)),
+    );
+  }
+
+  return Effect.succeed(path.resolve(installDir));
+};
+
 const resolveLocalPaths = (
   path: Path.Path,
-  home: string,
+  binDir: string,
   repoRoot?: string,
 ): Effect.Effect<LocalPaths, LocalBinError> =>
   Effect.gen(function* () {
@@ -96,7 +119,6 @@ const resolveLocalPaths = (
     const [binaryName, relativeBinaryPath] = binEntry;
     const resolvedRoot = repoRoot ?? path.resolve(import.meta.dir, "..");
     const targetBinary = path.resolve(resolvedRoot, relativeBinaryPath);
-    const binDir = path.join(home, ".local", "bin");
 
     return {
       binaryName,
@@ -164,7 +186,7 @@ const readLinkState = (
   );
 
 export const installLocalEffect = ({
-  home,
+  installDir,
   pathEnv = Bun.env.PATH ?? "",
   replaceExisting = false,
   repoRoot,
@@ -177,9 +199,9 @@ export const installLocalEffect = ({
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
-    const resolvedHome = home ?? (yield* requireHome());
+    const resolvedInstallDir = yield* resolveInstallDir(path, installDir);
     const { binaryName, binDir, linkPath, targetBinary } =
-      yield* resolveLocalPaths(path, resolvedHome, repoRoot);
+      yield* resolveLocalPaths(path, resolvedInstallDir, repoRoot);
 
     yield* requireExecutable(fs, targetBinary);
     yield* fs.makeDirectory(binDir, { recursive: true });
@@ -204,7 +226,7 @@ export const installLocalEffect = ({
       log(`Linked ${linkPath} -> ${targetBinary}`);
     }
 
-    if (!isDirOnEnvPath(path, resolvedHome, binDir, pathEnv)) {
+    if (!isDirOnEnvPath(path, binDir, pathEnv)) {
       log("");
       log(`${binDir} is not on PATH.`);
       log(`Add this to your shell profile: export PATH="${binDir}:$PATH"`);
@@ -214,7 +236,7 @@ export const installLocalEffect = ({
   });
 
 export const uninstallLocalEffect = ({
-  home,
+  installDir,
   repoRoot,
   log = console.log,
 }: UninstallLocalOptions = {}): Effect.Effect<
@@ -225,10 +247,10 @@ export const uninstallLocalEffect = ({
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
-    const resolvedHome = home ?? (yield* requireHome());
+    const resolvedInstallDir = yield* resolveInstallDir(path, installDir);
     const { binaryName, linkPath, targetBinary } = yield* resolveLocalPaths(
       path,
-      resolvedHome,
+      resolvedInstallDir,
       repoRoot,
     );
     const linkState = yield* readLinkState(fs, path, linkPath);
