@@ -292,13 +292,10 @@ export const runLocalBinMain = (
 ): void =>
   effect.pipe(
     Effect.catchAll((error) =>
-      Console.error(error instanceof Error ? error.message : String(error)).pipe(
-        Effect.zipRight(
-          Effect.sync(() => {
-            process.exitCode = 1;
-          }),
-        ),
-      ),
+      Effect.gen(function* () {
+        yield* Console.error(error instanceof Error ? error.message : String(error));
+        process.exitCode = 1;
+      }),
     ),
     Effect.provide(BunContext.layer),
     BunRuntime.runMain,
