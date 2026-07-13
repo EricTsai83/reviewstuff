@@ -18,7 +18,7 @@ reviewstuff --help
 
 包含：
 
-- `scripts/install-local.mjs`
+- `scripts/install-local.ts`
 - `bun run install:local`
 - symlink 到 `~/.local/bin/reviewstuff`
 - PATH guidance
