@@ -139,6 +139,10 @@ if (!svgMatch) {
 
 svg = svgMatch[0]
 
+// Mermaid emits empty presentation attributes such as style="" and style=";".
+// Remove them so the inlined SVG passes HTML/CSS diagnostics.
+svg = svg.replace(/\sstyle="[\s;]*"/gi, "")
+
 if (/<script\b/i.test(svg)) {
   console.error("Refusing to inline SVG containing <script>.")
   process.exit(1)

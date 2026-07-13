@@ -22,7 +22,8 @@ Turn the useful knowledge from the current context into a standalone `.html` art
 7. After the first complete draft, read `IMPROVE-HTML-ARTICLE.md` and apply one revision pass directly to the file.
 8. Read `DESIGN-SYSTEM.md` and apply it as the final visual-system pass unless the user explicitly requested a different design system or no design-system pass.
 9. Run `bun .agents/skills/to-html/scripts/highlight-code-blocks.mjs <html-file>` to apply deterministic static highlighting to code blocks.
-10. Verify the final file, then report the relative path and a short summary.
+10. Run `bun .agents/skills/to-html/scripts/validate-html.mjs <html-file>` and fix every reported issue.
+11. Verify the final file, then report the relative path and a short summary.
 
 ## Visual QA For Figures
 
@@ -128,6 +129,7 @@ Before finishing, confirm:
 - There are no remote runtime dependencies.
 - Code blocks, if present, preserve escaping, indentation, and static highlighting markup.
 - No prose Markdown artifacts remain, including inline-code backticks outside code blocks.
+- No empty CSS rulesets or empty `style` attributes remain, including inside generated inline SVG.
 - No default eyebrow/kicker, badge row, or decorative metadata appears above the title.
 - Responsive figure variants are mutually exclusive in rendered output: desktop width shows only the desktop variant, and mobile/narrow width shows only the mobile variant.
 - Any SVG diagrams or spatial figures have passed rendered visual QA at desktop and mobile/narrow widths, or the final response states the fallback verification limitation.
