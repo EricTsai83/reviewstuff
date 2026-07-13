@@ -28,6 +28,8 @@ Turn the durable knowledge in the current context into a standalone `.html` arti
 
 - Write an article, not a transcript, Q&A log, or notes dump. Do not mention its conversational origin unless explicitly requested.
 - Center every section on durable knowledge. Remove material that only preserves thread history.
+- Start with the `<h1>` topic title. Do not put an eyebrow/kicker, badge row, metadata strip, decorative label, or hero treatment above it, even when the default design-system pass is skipped.
+- Keep technical articles prose-first; do not use marketing-style hero, split media/text, or decorative section-card layouts.
 - Do not make the current repository or its code the subject, cite it, or infer content from it unless the user explicitly asks for that.
 - For general learning articles, prefer small pedagogical examples over repository-specific code.
 - Add outside context or research only when needed for accuracy or standalone completeness, and verify it before inclusion.
@@ -50,8 +52,9 @@ Before delivery, confirm that the headings express the subject's progression, ev
 - Keep the document self-contained with inline CSS, inline SVG when useful, and only small local JavaScript when interaction adds value.
 - Do not rely on remote fonts, external images, CDNs, runtime Mermaid, browser-side syntax highlighting, or other remote runtime dependencies.
 - Use semantic HTML rather than prose Markdown artifacts. Inline code belongs in `<code>`; lists, emphasis, and headings must use their corresponding HTML elements.
-- Use `<pre><code>` for code blocks, preserve indentation and multiline syntax, and escape `&`, `<`, and `>` correctly. Add a language label when it helps the bundled highlighter identify the language.
+- Use `<pre><code>` for code blocks, preserve indentation and multiline syntax, and escape `&`, `<`, and `>` correctly. When identifying a language for the bundled highlighter, use this exact structure: `<pre><span class="label">TypeScript</span><code>...</code></pre>` (replace `TypeScript` with the appropriate language).
 - Use visuals only when they clarify the content. Prefer inline SVG over ASCII art and follow `HTML-SVG-FLOW-DIAGRAMS.md` for diagram-specific requirements.
+- For any figure with separate desktop and mobile variants—not only flow diagrams—make the variants mutually exclusive. Hide one by default, swap them in the media query, and make those visibility selectors at least as specific as the base figure/SVG display rule so both variants can never render at the same viewport width.
 
 ## Final Check
 

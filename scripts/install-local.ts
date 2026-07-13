@@ -3,6 +3,7 @@ import { access } from "node:fs/promises";
 import { FileSystem, Path } from "@effect/platform";
 import { BunContext, BunRuntime } from "@effect/platform-bun";
 import { Console, Data, Effect } from "effect";
+import packageJson from "../package.json";
 
 interface InstallLocalOptions {
   readonly envPath?: string;
@@ -30,6 +31,13 @@ interface UninstallLocalResult {
   readonly targetBinary: string;
 }
 
+interface LocalPaths {
+  readonly binaryName: string;
+  readonly binDir: string;
+  readonly linkPath: string;
+  readonly targetBinary: string;
+}
+
 interface ParsedArgs {
   readonly force: boolean;
 }
@@ -40,24 +48,11 @@ class InstallLocalError extends Data.TaggedError("InstallLocalError")<{
   readonly message: string;
 }> {}
 
-const hasSystemErrorReason = (error: unknown, reason: string): boolean =>
+const hasErrorCode = (error: unknown, code: string): boolean =>
   typeof error === "object" &&
   error !== null &&
-  "_tag" in error &&
-  error._tag === "SystemError" &&
-  "reason" in error &&
-  error.reason === reason;
-
-const isReadLinkInvalidArgument = (error: unknown): boolean =>
-  typeof error === "object" &&
-  error !== null &&
-  "_tag" in error &&
-  error._tag === "SystemError" &&
-  "method" in error &&
-  error.method === "readLink" &&
-  "description" in error &&
-  typeof error.description === "string" &&
-  error.description.includes("EINVAL");
+  "code" in error &&
+  error.code === code;
 
 const requireHome = (): Effect.Effect<string, InstallLocalError> =>
   Bun.env.HOME === undefined
@@ -81,6 +76,34 @@ const isPathInPath = (
 
   return entries.includes(path.resolve(targetDir));
 };
+
+const resolveLocalPaths = (
+  path: Path.Path,
+  home: string,
+  root?: string,
+): Effect.Effect<LocalPaths, InstallLocalError> =>
+  Effect.gen(function* () {
+    const binEntries = Object.entries(packageJson.bin);
+    const binEntry = binEntries[0];
+
+    if (binEntries.length !== 1 || binEntry === undefined) {
+      return yield* new InstallLocalError({
+        message: "package.json must define exactly one binary for local installation.",
+      });
+    }
+
+    const [binaryName, relativeBinaryPath] = binEntry;
+    const repoRoot = path.resolve(import.meta.dir, "..");
+    const targetBinary = path.resolve(root ?? repoRoot, relativeBinaryPath);
+    const binDir = path.join(home, ".local", "bin");
+
+    return {
+      binaryName,
+      binDir,
+      linkPath: path.join(binDir, binaryName),
+      targetBinary,
+    };
+  });
 
 const requireExecutable = (
   fs: FileSystem.FileSystem,
@@ -118,16 +141,16 @@ const readExistingLink = (
 ): Effect.Effect<string | null | undefined, unknown> =>
   fs.readLink(linkPath).pipe(
     Effect.map((linkTarget) => path.resolve(path.dirname(linkPath), linkTarget)),
-    Effect.catchAll((error: unknown) => {
-      if (
-        hasSystemErrorReason(error, "BadResource") ||
-        isReadLinkInvalidArgument(error)
-      ) {
-        return Effect.succeed(null);
+    Effect.catchTag("SystemError", (error) => {
+      if (error.reason === "NotFound") {
+        return Effect.succeed(undefined as undefined);
       }
 
-      if (hasSystemErrorReason(error, "NotFound")) {
-        return Effect.succeed(undefined as undefined);
+      if (
+        error.reason === "BadResource" ||
+        (error.method === "readLink" && hasErrorCode(error.cause, "EINVAL"))
+      ) {
+        return Effect.succeed(null);
       }
 
       return Effect.fail(error);
@@ -149,10 +172,8 @@ const installLocalEffect = ({
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const resolvedHome = home ?? (yield* requireHome());
-    const repoRoot = path.resolve(import.meta.dir, "..");
-    const targetBinary = path.join(root ?? repoRoot, "dist", "reviewstuff");
-    const binDir = path.join(resolvedHome, ".local", "bin");
-    const linkPath = path.join(binDir, "reviewstuff");
+    const { binaryName, binDir, linkPath, targetBinary } =
+      yield* resolveLocalPaths(path, resolvedHome, root);
 
     yield* requireExecutable(fs, targetBinary);
     yield* fs.makeDirectory(binDir, { recursive: true });
@@ -160,7 +181,7 @@ const installLocalEffect = ({
     const existingTarget = yield* readExistingLink(fs, path, linkPath);
 
     if (existingTarget === path.resolve(targetBinary)) {
-      log(`reviewstuff is already linked at ${linkPath}`);
+      log(`${binaryName} is already linked at ${linkPath}`);
     } else {
       if (existingTarget !== undefined) {
         if (!force) {
@@ -169,7 +190,7 @@ const installLocalEffect = ({
           });
         }
 
-        yield* fs.remove(linkPath, { force: true });
+        yield* fs.remove(linkPath, { force: true, recursive: true });
       }
 
       yield* fs.symlink(targetBinary, linkPath);
@@ -198,13 +219,15 @@ const uninstallLocalEffect = ({
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const resolvedHome = home ?? (yield* requireHome());
-    const repoRoot = path.resolve(import.meta.dir, "..");
-    const targetBinary = path.join(root ?? repoRoot, "dist", "reviewstuff");
-    const linkPath = path.join(resolvedHome, ".local", "bin", "reviewstuff");
+    const { binaryName, linkPath, targetBinary } = yield* resolveLocalPaths(
+      path,
+      resolvedHome,
+      root,
+    );
     const existingTarget = yield* readExistingLink(fs, path, linkPath);
 
     if (existingTarget === undefined) {
-      log(`reviewstuff is not installed at ${linkPath}`);
+      log(`${binaryName} is not installed at ${linkPath}`);
       return { linkPath, removed: false, targetBinary };
     }
 
