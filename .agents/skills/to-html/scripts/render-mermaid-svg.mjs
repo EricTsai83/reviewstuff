@@ -165,11 +165,7 @@ svg = svg.replace(/\bid="([^"]+)"/g, (_match, id) => {
 
 for (const [from, to] of idMap) {
   const escaped = from.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
-  svg = svg
-    .replace(new RegExp(`#${escaped}`, "g"), `#${to}`)
-    .replace(new RegExp(`url\\(#${escaped}\\)`, "g"), `url(#${to})`)
-    .replace(new RegExp(`href="#${escaped}"`, "g"), `href="#${to}"`)
-    .replace(new RegExp(`xlink:href="#${escaped}"`, "g"), `xlink:href="#${to}"`)
+  svg = svg.replace(new RegExp(`#${escaped}`, "g"), `#${to}`)
 }
 
 const titleId = `${idPrefix}-title`

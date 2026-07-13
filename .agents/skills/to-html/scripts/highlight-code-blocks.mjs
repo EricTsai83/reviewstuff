@@ -44,7 +44,6 @@ const keywords = new Set([
   "else",
   "export",
   "extends",
-  "false",
   "finally",
   "for",
   "from",
@@ -55,16 +54,13 @@ const keywords = new Set([
   "instanceof",
   "let",
   "new",
-  "null",
   "of",
   "return",
   "satisfies",
   "switch",
   "throw",
-  "true",
   "try",
   "type",
-  "undefined",
   "while",
   "yield"
 ])
@@ -230,9 +226,6 @@ const highlightShellLine = (line) => {
       emitSpan("sh-flag", word)
     } else if (/^\$[A-Za-z_][A-Za-z0-9_]*$/.test(word) || /^[A-Za-z_][A-Za-z0-9_]*=/.test(word)) {
       emitSpan("sh-var", word)
-    } else if (!commandHighlighted && !/^[./~\w-]+=/.test(word)) {
-      emitSpan("sh-command", word)
-      commandHighlighted = true
     } else if (!commandHighlighted) {
       emitSpan("sh-command", word)
       commandHighlighted = true
