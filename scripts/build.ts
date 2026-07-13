@@ -1,9 +1,13 @@
 import * as Command from "@effect/platform/Command";
 import { FileSystem } from "@effect/platform/FileSystem";
 import { BunContext, BunRuntime } from "@effect/platform-bun";
-import { Console, Effect } from "effect";
+import { Console, Data, Effect } from "effect";
 
 const executablePath = "dist/reviewstuff";
+
+class CommandFailedError extends Data.TaggedError("CommandFailedError")<{
+  readonly message: string;
+}> {}
 
 const makeBuildCommand = (command: string, args: ReadonlyArray<string>) =>
   Command.make(command, ...args).pipe(
@@ -20,7 +24,9 @@ const run = (command: string, args: ReadonlyArray<string>) =>
     const exitCode = yield* Command.exitCode(makeBuildCommand(command, args));
 
     if (exitCode !== 0) {
-      return yield* Effect.fail(new Error(`Command failed with exit code ${exitCode}: ${formatCommand(command, args)}`));
+      return yield* new CommandFailedError({
+        message: `Command failed with exit code ${exitCode}: ${formatCommand(command, args)}`,
+      });
     }
   });
 
