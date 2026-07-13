@@ -89,7 +89,9 @@ const resolveInstallDir = (
   installDir?: string,
 ): Effect.Effect<string, LocalBinError> => {
   if (installDir === undefined || installDir.length === 0) {
-    return Effect.map(requireHome(), (home) => path.join(home, ".local", "bin"));
+    return Effect.map(requireHome(), (home) =>
+      path.join(home, ".local", "bin"),
+    );
   }
 
   if (/^~(?=$|\/)/.test(installDir)) {
@@ -112,7 +114,8 @@ const resolveLocalPaths = (
 
     if (binEntries.length !== 1 || binEntry === undefined) {
       return yield* new LocalBinError({
-        message: "package.json must define exactly one binary for local installation.",
+        message:
+          "package.json must define exactly one binary for local installation.",
       });
     }
 
@@ -174,10 +177,7 @@ const readLinkState = (
         return Effect.succeed<LinkState>({ _tag: "Missing" });
       }
 
-      if (
-        error.reason === "BadResource" ||
-        (error.method === "readLink" && hasErrorCode(error.cause, "EINVAL"))
-      ) {
+      if (hasErrorCode(error.cause, "EINVAL")) {
         return Effect.succeed<LinkState>({ _tag: "NotSymlink" });
       }
 
@@ -208,7 +208,10 @@ export const installLocalEffect = ({
 
     const linkState = yield* readLinkState(fs, path, linkPath);
 
-    if (linkState._tag === "Symlink" && linkState.target === path.resolve(targetBinary)) {
+    if (
+      linkState._tag === "Symlink" &&
+      linkState.target === path.resolve(targetBinary)
+    ) {
       log(`${binaryName} is already linked at ${linkPath}`);
     } else {
       if (linkState._tag !== "Missing") {
@@ -276,8 +279,13 @@ export const uninstallLocalEffect = ({
   });
 
 const runWithBun = <A>(
-  effect: Effect.Effect<A, LocalBinScriptError, FileSystem.FileSystem | Path.Path>,
-): Promise<A> => effect.pipe(Effect.provide(BunContext.layer), Effect.runPromise);
+  effect: Effect.Effect<
+    A,
+    LocalBinScriptError,
+    FileSystem.FileSystem | Path.Path
+  >,
+): Promise<A> =>
+  effect.pipe(Effect.provide(BunContext.layer), Effect.runPromise);
 
 export const installLocal = (
   options: InstallLocalOptions = {},
@@ -288,12 +296,18 @@ export const uninstallLocal = (
 ): Promise<UninstallLocalResult> => runWithBun(uninstallLocalEffect(options));
 
 export const runLocalBinMain = (
-  effect: Effect.Effect<unknown, LocalBinScriptError, FileSystem.FileSystem | Path.Path>,
+  effect: Effect.Effect<
+    unknown,
+    LocalBinScriptError,
+    FileSystem.FileSystem | Path.Path
+  >,
 ): void =>
   effect.pipe(
     Effect.catchAll((error) =>
       Effect.gen(function* () {
-        yield* Console.error(error instanceof Error ? error.message : String(error));
+        yield* Console.error(
+          error instanceof Error ? error.message : String(error),
+        );
         process.exitCode = 1;
       }),
     ),
