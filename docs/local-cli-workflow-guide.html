@@ -254,23 +254,39 @@
         <p><strong>最短結論：</strong>平常開發使用 <code>bun run cli:local &lt;args&gt;</code>。它直接執行專案內的 compiled binary，不會改變電腦上的全域指令。</p>
       </div>
 
-      <h2>1. 先理解三個不同範圍</h2>
-      <p>「可以執行一個 CLI」不等於「一定要把它安裝到全域」。實務上常見的範圍有三種：</p>
+      <h2>1. 先理解三種執行方式</h2>
+      <p>同一個 CLI 可以用不同方式啟動。差別在於 shell 如何找到 executable，以及執行後會不會改變目前 terminal 或其他 terminal 的環境。</p>
 
       <div class="table-wrap">
         <table>
           <thead>
-            <tr><th>範圍</th><th>例子</th><th>會不會影響其他 terminal</th></tr>
+            <tr><th>做法</th><th>範例</th><th>實際發生什麼</th></tr>
           </thead>
           <tbody>
-            <tr><td>專案內直接執行</td><td><code>./dist/reviewstuff</code></td><td>不會</td></tr>
-            <tr><td>單一 process 的 PATH</td><td><code>PATH="...:$PATH" reviewstuff</code></td><td>不會，只影響這次指令</td></tr>
-            <tr><td>使用者層級安裝</td><td><code>~/.local/bin/reviewstuff</code></td><td>會，之後開啟的 terminal 都可能找到它</td></tr>
+            <tr>
+              <td>直接指定專案內的檔案</td>
+              <td><code>./dist/reviewstuff --help</code></td>
+              <td>Shell 直接執行這個檔案，不需要透過 PATH 尋找。指令結束後不會留下任何設定。</td>
+            </tr>
+            <tr>
+              <td>只替這次指令暫時調整 PATH</td>
+              <td><code>PATH="/tmp/reviewstuff-bin:$PATH" reviewstuff --help</code></td>
+              <td>Shell 只在啟動這次 <code>reviewstuff</code> 時，把暫存目錄放在搜尋順序最前面。指令結束後，目前 terminal 的 PATH 仍是原來的值。</td>
+            </tr>
+            <tr>
+              <td>安裝到使用者的 PATH</td>
+              <td>檔案位於 <code>~/.local/bin/reviewstuff</code></td>
+              <td>只要 <code>~/.local/bin</code> 在 PATH 中，現在與之後開啟的 terminal 輸入 <code>reviewstuff</code> 時，都可能找到這個檔案。</td>
+            </tr>
           </tbody>
         </table>
       </div>
 
-      <p>開發時只想確認「目前這份程式碼能不能跑」，第一種就足夠。第三種比較接近真正安裝產品，應由 Homebrew、release installer 或其他正式發佈方式負責。</p>
+      <div class="callout">
+        <p><strong>第二種的讀法：</strong><code>PATH="..." reviewstuff</code> 不是永久修改 PATH，而是「帶著這份臨時 PATH 執行一次 <code>reviewstuff</code>」。該程式啟動的子程式也會繼承它，但這次執行結束後，terminal 本身的 PATH 不會改變。</p>
+      </div>
+
+      <p>平常只想確認「目前這份程式碼能不能跑」，第一種最直接。第二種適合專門測試 PATH lookup；第三種則是正式安裝產品的範圍，應由 Homebrew、release installer 或其他發佈方式負責。</p>
 
       <h2>2. 現在的日常流程</h2>
       <p>程式碼改變後，先產生最新的 compiled binary，再透過專案 script 執行：</p>
