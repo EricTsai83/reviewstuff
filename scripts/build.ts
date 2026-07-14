@@ -49,7 +49,7 @@ const program = Effect.gen(function* () {
 
 program.pipe(
   Effect.catchAll((error) =>
-    Console.error(error instanceof Error ? error.message : String(error)).pipe(
+    Console.error(error.message).pipe(
       Effect.zipRight(
         Effect.sync(() => {
           process.exitCode = 1;

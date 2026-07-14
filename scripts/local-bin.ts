@@ -42,7 +42,7 @@ interface LocalPaths {
   readonly targetBinary: string;
 }
 
-type LinkState =
+type SymlinkStatus =
   | { readonly _tag: "Missing" }
   | { readonly _tag: "NotSymlink" }
   | { readonly _tag: "Symlink"; readonly target: string };
@@ -160,25 +160,25 @@ const requireExecutable = (
     });
   });
 
-const readLinkState = (
+const inspectSymlink = (
   fs: FileSystem.FileSystem,
   path: Path.Path,
   linkPath: string,
-): Effect.Effect<LinkState, PlatformError> =>
+): Effect.Effect<SymlinkStatus, PlatformError> =>
   fs.readLink(linkPath).pipe(
     Effect.map(
-      (linkTarget): LinkState => ({
+      (linkTarget): SymlinkStatus => ({
         _tag: "Symlink",
         target: path.resolve(path.dirname(linkPath), linkTarget),
       }),
     ),
     Effect.catchTag("SystemError", (error) => {
       if (error.reason === "NotFound") {
-        return Effect.succeed<LinkState>({ _tag: "Missing" });
+        return Effect.succeed<SymlinkStatus>({ _tag: "Missing" });
       }
 
       if (hasErrorCode(error.cause, "EINVAL")) {
-        return Effect.succeed<LinkState>({ _tag: "NotSymlink" });
+        return Effect.succeed<SymlinkStatus>({ _tag: "NotSymlink" });
       }
 
       return Effect.fail(error);
@@ -206,15 +206,15 @@ export const installLocalEffect = ({
     yield* requireExecutable(fs, targetBinary);
     yield* fs.makeDirectory(binDir, { recursive: true });
 
-    const linkState = yield* readLinkState(fs, path, linkPath);
+    const symlinkStatus = yield* inspectSymlink(fs, path, linkPath);
 
     if (
-      linkState._tag === "Symlink" &&
-      linkState.target === path.resolve(targetBinary)
+      symlinkStatus._tag === "Symlink" &&
+      symlinkStatus.target === targetBinary
     ) {
       log(`${binaryName} is already linked at ${linkPath}`);
     } else {
-      if (linkState._tag !== "Missing") {
+      if (symlinkStatus._tag !== "Missing") {
         if (!replaceExisting) {
           return yield* new LocalBinError({
             message: `${linkPath} already exists and does not point to this repo. Re-run with --force to replace it.`,
@@ -256,16 +256,16 @@ export const uninstallLocalEffect = ({
       resolvedInstallDir,
       repoRoot,
     );
-    const linkState = yield* readLinkState(fs, path, linkPath);
+    const symlinkStatus = yield* inspectSymlink(fs, path, linkPath);
 
-    if (linkState._tag === "Missing") {
+    if (symlinkStatus._tag === "Missing") {
       log(`${binaryName} is not installed at ${linkPath}`);
       return { linkPath, removed: false, targetBinary };
     }
 
     if (
-      linkState._tag === "NotSymlink" ||
-      linkState.target !== path.resolve(targetBinary)
+      symlinkStatus._tag === "NotSymlink" ||
+      symlinkStatus.target !== targetBinary
     ) {
       return yield* new LocalBinError({
         message: `${linkPath} does not point to this repo; refusing to remove it.`,
@@ -305,9 +305,7 @@ export const runLocalBinMain = (
   effect.pipe(
     Effect.catchAll((error) =>
       Effect.gen(function* () {
-        yield* Console.error(
-          error instanceof Error ? error.message : String(error),
-        );
+        yield* Console.error(error.message);
         process.exitCode = 1;
       }),
     ),
