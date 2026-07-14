@@ -1,0 +1,923 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Effect 的延遲執行：從 lazy 到 Effect.suspend</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --clay: #d97757;
+      --slate: #141413;
+      --ivory: #faf9f5;
+      --oat: #e3dacc;
+      --white: #ffffff;
+      --gray-100: #f0eee6;
+      --gray-300: #d1cfc5;
+      --gray-500: #87867f;
+      --gray-700: #3d3d3a;
+      --warning: #c78e3f;
+      --success: #58764d;
+      --space-sm: 8px;
+      --space-md: 12px;
+      --space-lg: 16px;
+      --space-xl: 24px;
+      --space-2xl: 32px;
+      --space-3xl: 48px;
+      --radius-sm: 4px;
+      --radius-md: 8px;
+      --content-width: 68ch;
+    }
+
+    * { box-sizing: border-box; }
+
+    html {
+      scroll-behavior: smooth;
+      background: var(--ivory);
+    }
+
+    body {
+      margin: 0;
+      color: var(--slate);
+      background: var(--ivory);
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 16px;
+      font-weight: 430;
+      line-height: 1.55;
+      letter-spacing: 0;
+      text-rendering: optimizeLegibility;
+    }
+
+    main {
+      max-width: var(--content-width);
+      margin: 0 auto;
+      padding: var(--space-3xl) var(--space-xl);
+    }
+
+    article { background: transparent; border: 0; border-radius: 0; box-shadow: none; padding: 0; }
+
+    h1, h2, h3 {
+      color: var(--slate);
+      letter-spacing: -0.015em;
+      text-wrap: balance;
+    }
+
+    h1 {
+      margin: 0;
+      max-width: none;
+      font-size: 1.8rem;
+      line-height: 1.18;
+      overflow-wrap: normal;
+    }
+
+    h2 {
+      margin: var(--space-3xl) 0 var(--space-md);
+      font-size: 1.22rem;
+      line-height: 1.25;
+    }
+
+    h3 {
+      margin: var(--space-2xl) 0 var(--space-sm);
+      font-size: 1rem;
+      line-height: 1.35;
+    }
+
+    p { margin: var(--space-md) 0; }
+
+    p, ul, ol, .deck, .callout, table, pre { max-width: var(--content-width); }
+
+    a {
+      color: var(--clay);
+      text-decoration-thickness: 1px;
+      text-underline-offset: 3px;
+    }
+
+    .deck {
+      margin: var(--space-md) 0 0;
+      color: var(--gray-700);
+      font-size: 1.05rem;
+    }
+
+    .lede {
+      margin: var(--space-xl) 0 0;
+      padding: var(--space-lg);
+      border: 1px solid var(--oat);
+      border-left: 3px solid var(--clay);
+      border-radius: var(--radius-md);
+      background: var(--gray-100);
+    }
+
+    .toc {
+      margin: var(--space-xl) 0 0;
+      padding: var(--space-lg);
+      border: 1px solid var(--oat);
+      border-radius: var(--radius-md);
+      background: transparent;
+    }
+
+    .toc strong { display: block; margin-bottom: var(--space-sm); }
+    .toc ol { columns: 2; margin: 0; padding-left: 1.2rem; }
+    .toc li { padding: 3px var(--space-md) 3px 0; break-inside: avoid; }
+
+    code {
+      padding: 0.1em 0.3em;
+      border: 1px solid var(--oat);
+      border-radius: var(--radius-sm);
+      background: var(--gray-100);
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+      font-size: 0.9em;
+      word-break: break-word;
+    }
+
+    pre {
+      position: relative;
+      width: 100%;
+      margin: var(--space-lg) 0 var(--space-xl);
+      border: 1px solid #26241f;
+      border-radius: var(--radius-md);
+      background: #11110f;
+      color: #d8d4ca;
+      overflow: hidden;
+      tab-size: 2;
+    }
+
+    pre code {
+      display: block;
+      border: 0;
+      background: transparent;
+      padding: 18px 64px 18px 22px;
+      color: inherit;
+      overflow-x: auto;
+      white-space: pre;
+      font-size: 0.875rem;
+      font-weight: 400;
+      line-height: 1.62;
+      word-break: normal;
+      scrollbar-width: none;
+    }
+
+    pre code::-webkit-scrollbar { width: 0; height: 0; }
+    pre .label { display: none; }
+    pre code .k { color: #ff946e; font-weight: 400; }
+    pre code .s { color: #8fb86a; }
+    pre code .n, pre code .p { color: #d8d4ca; }
+    pre code .c { color: #858177; font-style: italic; }
+    pre code .f, pre code .t { color: #cfc6a2; font-weight: 400; }
+    pre code .o { color: #ff946e; }
+
+    .copy-code {
+      position: absolute;
+      top: 9px;
+      right: 9px;
+      z-index: 1;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 30px;
+      height: 30px;
+      padding: 0;
+      border: 1px solid rgb(250 249 245 / 0.14);
+      border-radius: var(--radius-sm);
+      background: rgb(250 249 245 / 0.06);
+      color: rgb(250 249 245 / 0.72);
+      cursor: pointer;
+    }
+
+    .copy-code:hover, .copy-code:focus-visible {
+      border-color: rgb(250 249 245 / 0.28);
+      background: rgb(250 249 245 / 0.12);
+      color: var(--ivory);
+      outline: none;
+    }
+
+    .copy-code.copied { border-color: rgb(143 184 106 / 0.42); background: rgb(143 184 106 / 0.14); color: #b8d99a; }
+    .copy-code svg { width: 13px; height: 13px; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; fill: none; pointer-events: none; }
+
+    .code-scrollbar { position: absolute; right: 0; bottom: 0; left: 0; height: 3px; border-radius: 999px; background: rgb(250 249 245 / 0.1); cursor: pointer; }
+    .code-scrollbar.hidden { display: none; }
+    .code-scrollbar-thumb { height: 100%; border-radius: inherit; background: rgb(255 148 110 / 0.82); transform: translateX(0); cursor: grab; }
+    .code-scrollbar-thumb:active { cursor: grabbing; }
+
+    .timeline {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: var(--space-2xl);
+      margin: var(--space-xl) 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .timeline li {
+      position: relative;
+      min-height: 155px;
+      padding: var(--space-lg);
+      border: 1px solid var(--oat);
+      border-radius: var(--radius-md);
+      background: var(--white);
+    }
+
+    .timeline li:not(:last-child)::after {
+      content: "→";
+      position: absolute;
+      top: 50%;
+      right: -25px;
+      color: var(--clay);
+      font-weight: 700;
+      transform: translateY(-50%);
+    }
+
+    .timeline .phase {
+      display: block;
+      margin-bottom: var(--space-sm);
+      color: var(--clay);
+      font-size: 0.75rem;
+      font-weight: 700;
+    }
+
+    .timeline strong { display: block; line-height: 1.35; }
+    .timeline p { margin: var(--space-sm) 0 0; color: var(--gray-700); font-size: 0.875rem; }
+
+    .comparison {
+      width: 100%;
+      margin: var(--space-xl) 0;
+      overflow-x: auto;
+      border: 1px solid var(--oat);
+      border-radius: var(--radius-md);
+      background: var(--white);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.875rem;
+    }
+
+    th, td {
+      padding: var(--space-md);
+      border-bottom: 1px solid var(--oat);
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th {
+      background: var(--gray-100);
+      font-size: 0.8125rem;
+    }
+
+    tbody tr:last-child td { border-bottom: 0; }
+
+    .callout {
+      margin: var(--space-xl) 0;
+      padding: var(--space-lg);
+      border: 1px solid var(--oat);
+      border-left: 3px solid var(--clay);
+      border-radius: var(--radius-md);
+      background: var(--gray-100);
+    }
+
+    .callout.warning { border-left-color: var(--warning); }
+    .callout.good { border-left-color: var(--success); }
+    .callout strong { display: block; margin-bottom: 4px; }
+    .callout p { margin: 4px 0; }
+
+    .output {
+      margin: calc(var(--space-lg) * -1) 0 var(--space-xl);
+      padding: var(--space-md) var(--space-lg);
+      border: 1px solid var(--oat);
+      border-top: 0;
+      border-radius: 0 0 var(--radius-md) var(--radius-md);
+      color: var(--gray-700);
+      background: var(--gray-100);
+      font-family: "SFMono-Regular", Consolas, monospace;
+      font-size: 0.8125rem;
+      white-space: pre-line;
+    }
+
+    .rules {
+      margin: var(--space-xl) 0;
+      padding: 0;
+      list-style: none;
+      counter-reset: rule;
+    }
+
+    .rules li {
+      position: relative;
+      margin: var(--space-sm) 0;
+      padding: var(--space-md) var(--space-md) var(--space-md) var(--space-3xl);
+      border-bottom: 1px solid var(--oat);
+      counter-increment: rule;
+    }
+
+    .rules li::before {
+      content: counter(rule);
+      position: absolute;
+      top: 10px;
+      left: var(--space-sm);
+      display: grid;
+      width: 28px;
+      height: 28px;
+      place-items: center;
+      border-radius: 50%;
+      background: var(--slate);
+      color: var(--ivory);
+      font-size: 0.75rem;
+      font-weight: 700;
+    }
+
+    .quiz {
+      margin-top: var(--space-3xl);
+      padding: var(--space-lg);
+      border: 1px solid var(--oat);
+      border-radius: var(--radius-md);
+      background: transparent;
+    }
+
+    .quiz h2 { margin-top: 0; }
+
+    details {
+      margin: var(--space-sm) 0;
+      padding: var(--space-md);
+      border: 1px solid var(--oat);
+      border-radius: var(--radius-md);
+      background: var(--gray-100);
+    }
+
+    summary { cursor: pointer; font-weight: 700; }
+
+    footer {
+      margin-top: var(--space-3xl);
+      padding-top: var(--space-lg);
+      border-top: 1px solid var(--oat);
+      color: var(--gray-700);
+      font-size: 0.875rem;
+    }
+
+    @media (max-width: 640px) {
+      body { font-size: 15px; }
+      h1 { font-size: 1.65rem; }
+      main { padding: var(--space-xl); }
+      .toc ol { columns: 1; }
+      .timeline { grid-template-columns: 1fr; gap: var(--space-2xl); }
+      .timeline li { min-height: 0; }
+      .timeline li:not(:last-child)::after {
+        content: "↓";
+        top: auto;
+        right: 50%;
+        bottom: -26px;
+        transform: translateX(50%);
+      }
+      pre code { font-size: 0.8125rem; line-height: 1.5; }
+      p code, li code, td code { font-size: 0.9em; }
+      table, .deck { font-size: 0.875rem; }
+      th, td { min-width: 140px; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+    }
+
+  </style>
+</head>
+<body>
+  <main>
+    <article>
+      <h1>Effect 的延遲執行：從 lazy 到 <code>Effect.suspend</code></h1>
+      <p class="deck">「Effect 本來就是 lazy，為什麼還需要 <code>suspend</code>？」答案藏在兩個不同的時間點：執行 Effect 是延遲的，但用來建立 Effect 的 JavaScript 不一定延遲。</p>
+
+      <div class="lede">
+        <strong>讀完後你會知道：</strong>JavaScript 何時求值、Effect 何時建立與執行，如何在 <code>Effect.succeed</code>、<code>Effect.sync</code>、<code>Effect.suspend</code> 之間選擇，以及如何避免遞迴提前展開與不必要的 <code>suspend</code>。
+      </div>
+
+      <nav class="toc" aria-label="文章目錄">
+        <strong>學習路徑</strong>
+        <ol>
+          <li><a href="#what-lazy-means">Effect 說的 lazy 是什麼</a></li>
+          <li><a href="#three-moments">三個時間點</a></li>
+          <li><a href="#succeed-sync-suspend">三個建構器比較</a></li>
+          <li><a href="#running-example">逐步範例</a></li>
+          <li><a href="#recursion">遞迴與提前展開</a></li>
+          <li><a href="#callbacks">callback 已經提供的延遲</a></li>
+          <li><a href="#pitfalls">常見誤解</a></li>
+          <li><a href="#decision-rules">實用判斷規則</a></li>
+        </ol>
+      </nav>
+
+      <section id="what-lazy-means">
+        <h2>1. Effect 說的 lazy，究竟是什麼？</h2>
+
+        <p>Effect 可以想成一份<strong>可組合的執行描述</strong>。建立一個 Effect 通常只是描述「未來要做什麼」，不會立刻執行描述中的工作；直到把它交給 Effect runtime，例如呼叫 <code>Effect.runPromise</code> 或 <code>Effect.runSync</code>，工作才真正開始。</p>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">import</span> <span class="o">{</span> <span class="t">Effect</span> <span class="o">}</span> <span class="k">from</span> <span class="s">"effect"</span>
+
+<span class="k">const</span> program <span class="o">=</span> <span class="t">Effect</span><span class="o">.</span><span class="p">sync</span><span class="o">(</span><span class="o">(</span><span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span> <span class="o">{</span>
+  console<span class="o">.</span><span class="p">log</span><span class="o">(</span><span class="s">"真的開始執行"</span><span class="o">)</span>
+  <span class="k">return</span> <span class="n">42</span>
+<span class="o">}</span><span class="o">)</span>
+
+console<span class="o">.</span><span class="p">log</span><span class="o">(</span><span class="s">"Effect 已建立"</span><span class="o">)</span>
+<span class="t">Effect</span><span class="o">.</span><span class="p">runSync</span><span class="o">(</span>program<span class="o">)</span></code></pre>
+
+        <div class="output">Effect 已建立
+真的開始執行</div>
+
+        <p>這就是一般所說的「Effect 是 lazy」：<code>Effect.sync</code> 收到的函式在建立 <code>program</code> 時不會執行。</p>
+
+        <div class="callout warning">
+          <strong>關鍵邊界</strong>
+          <p>Effect runtime 能延遲的是它所描述的工作；它不能回頭阻止 JavaScript 在建立描述之前就已經完成的求值。</p>
+        </div>
+      </section>
+
+      <section id="three-moments">
+        <h2>2. 把程式拆成三個時間點</h2>
+
+        <p>理解延遲最有效的方法，是不要只問「它 lazy 嗎？」而是問：「哪一段程式碼，在哪個時間點執行？」</p>
+
+        <ol class="timeline" aria-label="Effect 程式的三個時間點">
+          <li>
+            <span class="phase">時間點 1</span>
+            <strong>JavaScript 求值</strong>
+            <p>計算函式參數、呼叫普通函式、讀取目前變數。</p>
+          </li>
+          <li>
+            <span class="phase">時間點 2</span>
+            <strong>建立 Effect 描述</strong>
+            <p>用 <code>succeed</code>、<code>flatMap</code> 等建構執行計畫。</p>
+          </li>
+          <li>
+            <span class="phase">時間點 3</span>
+            <strong>Runtime 執行</strong>
+            <p>開始工作，得到成功值、預期失敗或 defect。</p>
+          </li>
+        </ol>
+
+        <p>問題通常發生在第一個時間點。JavaScript 採用 eager argument evaluation：呼叫函式前，會先把函式參數算出來。</p>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">const</span> program <span class="o">=</span> <span class="t">Effect</span><span class="o">.</span><span class="p">succeed</span><span class="o">(</span><span class="f">expensive</span><span class="o">(</span><span class="o">)</span><span class="o">)</span></code></pre>
+
+        <p>實際順序是：</p>
+
+        <ol>
+          <li>JavaScript 立即呼叫 <code>expensive()</code>。</li>
+          <li>把結果傳給 <code>Effect.succeed</code>。</li>
+          <li><code>Effect.succeed</code> 建立一個「成功並回傳該結果」的描述。</li>
+          <li>未來執行 Effect 時，只是取出先前算好的結果。</li>
+        </ol>
+
+        <p>所以 Effect 仍然是 lazy；被提前執行的是 Effect 外面的 JavaScript 表達式。</p>
+      </section>
+
+      <section id="succeed-sync-suspend">
+        <h2>3. <code>succeed</code>、<code>sync</code>、<code>suspend</code> 延遲的東西不同</h2>
+
+        <div class="comparison">
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">API</th>
+                <th scope="col">輸入</th>
+                <th scope="col">延遲什麼</th>
+                <th scope="col">典型用途</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>Effect.succeed(value)</code></td>
+                <td>已經存在的值</td>
+                <td>不延遲 <code>value</code> 的計算</td>
+                <td>包裝常數或已算好的純值</td>
+              </tr>
+              <tr>
+                <td><code>Effect.sync(() =&gt; value)</code></td>
+                <td>回傳普通值的 thunk</td>
+                <td>延遲計算一個值</td>
+                <td>同步讀取、計算或副作用</td>
+              </tr>
+              <tr>
+                <td><code>Effect.suspend(() =&gt; effect)</code></td>
+                <td>回傳 Effect 的 thunk</td>
+                <td>延遲建立或選擇一個 Effect</td>
+                <td>動態分支、遞迴、重新捕捉狀態</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3><code>Effect.succeed</code>：值現在就要存在</h3>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">let</span> count <span class="o">=</span> <span class="n">0</span>
+
+<span class="k">const</span> program <span class="o">=</span> <span class="t">Effect</span><span class="o">.</span><span class="p">succeed</span><span class="o">(</span>count<span class="o">+</span><span class="o">+</span><span class="o">)</span>
+
+console<span class="o">.</span><span class="p">log</span><span class="o">(</span>count<span class="o">)</span>                <span class="c">// 1</span>
+console<span class="o">.</span><span class="p">log</span><span class="o">(</span><span class="t">Effect</span><span class="o">.</span><span class="p">runSync</span><span class="o">(</span>program<span class="o">)</span><span class="o">)</span> <span class="c">// 0</span>
+console<span class="o">.</span><span class="p">log</span><span class="o">(</span><span class="t">Effect</span><span class="o">.</span><span class="p">runSync</span><span class="o">(</span>program<span class="o">)</span><span class="o">)</span> <span class="c">// 0</span></code></pre>
+
+        <p><code>count++</code> 在建立 Effect 前就發生。Effect 只記住結果 <code>0</code>，每次執行都回傳同一個值。</p>
+
+        <h3><code>Effect.sync</code>：執行時才計算值</h3>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">let</span> count <span class="o">=</span> <span class="n">0</span>
+
+<span class="k">const</span> program <span class="o">=</span> <span class="t">Effect</span><span class="o">.</span><span class="p">sync</span><span class="o">(</span><span class="o">(</span><span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span> count<span class="o">+</span><span class="o">+</span><span class="o">)</span>
+
+console<span class="o">.</span><span class="p">log</span><span class="o">(</span>count<span class="o">)</span>                <span class="c">// 0</span>
+console<span class="o">.</span><span class="p">log</span><span class="o">(</span><span class="t">Effect</span><span class="o">.</span><span class="p">runSync</span><span class="o">(</span>program<span class="o">)</span><span class="o">)</span> <span class="c">// 0</span>
+console<span class="o">.</span><span class="p">log</span><span class="o">(</span><span class="t">Effect</span><span class="o">.</span><span class="p">runSync</span><span class="o">(</span>program<span class="o">)</span><span class="o">)</span> <span class="c">// 1</span></code></pre>
+
+        <p>每次執行 <code>program</code>，runtime 都會重新呼叫 thunk。若你只是想延遲普通同步計算，<code>sync</code> 已經足夠，不需要 <code>suspend</code>。</p>
+
+        <h3><code>Effect.suspend</code>：執行時才取得內層 Effect</h3>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">let</span> enabled <span class="o">=</span> <span class="n">false</span>
+
+<span class="k">const</span> program <span class="o">=</span> <span class="t">Effect</span><span class="o">.</span><span class="p">suspend</span><span class="o">(</span><span class="o">(</span><span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span>
+  enabled
+    <span class="o">?</span> <span class="t">Effect</span><span class="o">.</span><span class="p">succeed</span><span class="o">(</span><span class="s">"功能已開啟"</span><span class="o">)</span>
+    <span class="o">:</span> <span class="t">Effect</span><span class="o">.</span><span class="p">fail</span><span class="o">(</span><span class="k">new</span> <span class="f">Error</span><span class="o">(</span><span class="s">"功能未開啟"</span><span class="o">)</span><span class="o">)</span>
+<span class="o">)</span>
+
+enabled <span class="o">=</span> <span class="n">true</span>
+console<span class="o">.</span><span class="p">log</span><span class="o">(</span><span class="t">Effect</span><span class="o">.</span><span class="p">runSync</span><span class="o">(</span>program<span class="o">)</span><span class="o">)</span> <span class="c">// 功能已開啟</span></code></pre>
+
+        <p><code>suspend</code> 的 thunk 回傳的是另一個 Effect。runtime 執行外層 Effect 時才呼叫 thunk，取得內層 Effect，接著繼續執行內層描述。概念上很接近：</p>
+
+        <pre><span class="label">Conceptual model</span><code>Effect.suspend(makeEffect)
+
+// 約等於「延遲取得 Effect，再把兩層攤平」
+Effect.flatten(Effect.sync(makeEffect))</code></pre>
+
+        <div class="callout">
+          <strong>thunk 是理解延遲的核心</strong>
+          <p><code>value</code> 是現在就有的東西；<code>() =&gt; value</code> 是未來才計算值的配方；<code>() =&gt; Effect</code> 則是未來才建立 Effect 描述的配方。</p>
+        </div>
+      </section>
+
+      <section id="running-example">
+        <h2>4. 一個逐步範例：何時決定執行策略？</h2>
+
+        <p>假設程式會依照目前模式決定走快速或安全路徑。先看一個容易誤判的版本：</p>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">type</span> <span class="t">Mode</span> <span class="o">=</span> <span class="s">"fast"</span> <span class="o">|</span> <span class="s">"safe"</span>
+
+<span class="k">let</span> mode<span class="o">:</span> <span class="t">Mode</span> <span class="o">=</span> <span class="s">"safe"</span>
+
+<span class="k">const</span> chooseProgram <span class="o">=</span> <span class="o">(</span><span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span>
+  mode <span class="o">=</span><span class="o">=</span><span class="o">=</span> <span class="s">"fast"</span>
+    <span class="o">?</span> <span class="t">Effect</span><span class="o">.</span><span class="p">succeed</span><span class="o">(</span><span class="s">"使用快取"</span><span class="o">)</span>
+    <span class="o">:</span> <span class="t">Effect</span><span class="o">.</span><span class="p">succeed</span><span class="o">(</span><span class="s">"重新驗證資料"</span><span class="o">)</span>
+
+<span class="k">const</span> program <span class="o">=</span> <span class="f">chooseProgram</span><span class="o">(</span><span class="o">)</span>
+
+mode <span class="o">=</span> <span class="s">"fast"</span>
+console<span class="o">.</span><span class="p">log</span><span class="o">(</span><span class="t">Effect</span><span class="o">.</span><span class="p">runSync</span><span class="o">(</span>program<span class="o">)</span><span class="o">)</span> <span class="c">// 重新驗證資料</span></code></pre>
+
+        <p><code>chooseProgram()</code> 在指定 <code>program</code> 時就已經被呼叫，因此當時的 <code>mode</code> 是 <code>"safe"</code>。之後改變 <code>mode</code> 不會重建 <code>program</code>。</p>
+
+        <p>把選擇放進 <code>suspend</code>：</p>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">const</span> program <span class="o">=</span> <span class="t">Effect</span><span class="o">.</span><span class="p">suspend</span><span class="o">(</span><span class="o">(</span><span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span>
+  mode <span class="o">=</span><span class="o">=</span><span class="o">=</span> <span class="s">"fast"</span>
+    <span class="o">?</span> <span class="t">Effect</span><span class="o">.</span><span class="p">succeed</span><span class="o">(</span><span class="s">"使用快取"</span><span class="o">)</span>
+    <span class="o">:</span> <span class="t">Effect</span><span class="o">.</span><span class="p">succeed</span><span class="o">(</span><span class="s">"重新驗證資料"</span><span class="o">)</span>
+<span class="o">)</span>
+
+mode <span class="o">=</span> <span class="s">"fast"</span>
+console<span class="o">.</span><span class="p">log</span><span class="o">(</span><span class="t">Effect</span><span class="o">.</span><span class="p">runSync</span><span class="o">(</span>program<span class="o">)</span><span class="o">)</span> <span class="c">// 使用快取</span></code></pre>
+
+        <p>現在 <code>mode</code> 是在每次執行 Effect 時讀取。若同一個 <code>program</code> 執行兩次，中間改變模式，兩次可以選到不同的 Effect。</p>
+
+        <div class="callout good">
+          <strong>真正的設計問題</strong>
+          <p>你想在「定義程式」時固定策略，還是在「每次執行」時重新選擇？兩者都可能正確；<code>suspend</code> 只是讓時間點成為明確選擇。</p>
+        </div>
+
+        <h3>如果兩個分支只是回傳普通值呢？</h3>
+
+        <p>那麼用 <code>sync</code> 更直接：</p>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">const</span> label <span class="o">=</span> <span class="t">Effect</span><span class="o">.</span><span class="p">sync</span><span class="o">(</span><span class="o">(</span><span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span>
+  mode <span class="o">=</span><span class="o">=</span><span class="o">=</span> <span class="s">"fast"</span> <span class="o">?</span> <span class="s">"使用快取"</span> <span class="o">:</span> <span class="s">"重新驗證資料"</span>
+<span class="o">)</span></code></pre>
+
+        <p>只有當分支本身是不同的 Effect——例如不同失敗型別、不同依賴或不同工作流程——<code>suspend</code> 才特別自然。</p>
+      </section>
+
+      <section id="each-run">
+        <h2>5. 每次執行都會重新呼叫，不是只延遲一次</h2>
+
+        <p><code>Effect.suspend</code> 不是 memoization，也不是 lazy singleton。它不會在第一次執行後保存內層 Effect；外層 Effect 每執行一次，thunk 就會再呼叫一次。</p>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">let</span> builds <span class="o">=</span> <span class="n">0</span>
+
+<span class="k">const</span> program <span class="o">=</span> <span class="t">Effect</span><span class="o">.</span><span class="p">suspend</span><span class="o">(</span><span class="o">(</span><span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span> <span class="o">{</span>
+  builds <span class="o">+</span><span class="o">=</span> <span class="n">1</span>
+  <span class="k">return</span> <span class="t">Effect</span><span class="o">.</span><span class="p">succeed</span><span class="o">(</span><span class="s">`第 ${builds} 次建立內層 Effect`</span><span class="o">)</span>
+<span class="o">}</span><span class="o">)</span>
+
+console<span class="o">.</span><span class="p">log</span><span class="o">(</span><span class="t">Effect</span><span class="o">.</span><span class="p">runSync</span><span class="o">(</span>program<span class="o">)</span><span class="o">)</span> <span class="c">// 第 1 次建立內層 Effect</span>
+console<span class="o">.</span><span class="p">log</span><span class="o">(</span><span class="t">Effect</span><span class="o">.</span><span class="p">runSync</span><span class="o">(</span>program<span class="o">)</span><span class="o">)</span> <span class="c">// 第 2 次建立內層 Effect</span></code></pre>
+
+        <p>這個特性可用來重新讀取執行當下的狀態，但也代表 thunk 應保持輕量。若建立內層描述本身非常昂貴，應先確認是否真的需要每次重建，或是否需要另外的快取策略。</p>
+      </section>
+
+      <section id="recursion">
+        <h2>6. 遞迴：<code>suspend</code> 最重要的用途之一</h2>
+
+        <p>Effect 的工作雖然尚未執行，但普通函式呼叫仍會立即發生。若遞迴函式在建立 Effect 描述時直接呼叫自己，整棵描述可能在 runtime 開始前就被展開。</p>
+
+        <h3>問題版本：遞迴在建構階段發生</h3>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">const</span> countdown <span class="o">=</span> <span class="o">(</span>n<span class="o">:</span> number<span class="o">)</span><span class="o">:</span> <span class="t">Effect</span><span class="o">.</span><span class="p">Effect</span><span class="o">&lt;</span>void<span class="o">&gt;</span> <span class="o">=</span><span class="o">&gt;</span>
+  n <span class="o">&lt;</span><span class="o">=</span> <span class="n">0</span>
+    <span class="o">?</span> <span class="t">Effect</span><span class="o">.</span><span class="p">void</span>
+    <span class="o">:</span> <span class="t">Effect</span><span class="o">.</span><span class="p">zipRight</span><span class="o">(</span>
+        <span class="t">Effect</span><span class="o">.</span><span class="p">log</span><span class="o">(</span>n<span class="o">)</span><span class="o">,</span>
+        <span class="f">countdown</span><span class="o">(</span>n <span class="o">-</span> <span class="n">1</span><span class="o">)</span> <span class="c">// 立即呼叫</span>
+      <span class="o">)</span>
+
+<span class="k">const</span> program <span class="o">=</span> <span class="f">countdown</span><span class="o">(</span><span class="n">100_000</span><span class="o">)</span>
+<span class="c">// runtime 尚未開始，JavaScript 就可能 stack overflow</span></code></pre>
+
+        <p>為了呼叫 <code>Effect.zipRight</code>，JavaScript 必須先算出第二個參數，所以立即執行 <code>countdown(n - 1)</code>，再執行下一層，直到結束或耗盡 call stack。</p>
+
+        <h3>延遲版本：每次只建立下一層</h3>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">const</span> countdown <span class="o">=</span> <span class="o">(</span>n<span class="o">:</span> number<span class="o">)</span><span class="o">:</span> <span class="t">Effect</span><span class="o">.</span><span class="p">Effect</span><span class="o">&lt;</span>void<span class="o">&gt;</span> <span class="o">=</span><span class="o">&gt;</span>
+  n <span class="o">&lt;</span><span class="o">=</span> <span class="n">0</span>
+    <span class="o">?</span> <span class="t">Effect</span><span class="o">.</span><span class="p">void</span>
+    <span class="o">:</span> <span class="t">Effect</span><span class="o">.</span><span class="p">zipRight</span><span class="o">(</span>
+        <span class="t">Effect</span><span class="o">.</span><span class="p">log</span><span class="o">(</span>n<span class="o">)</span><span class="o">,</span>
+        <span class="t">Effect</span><span class="o">.</span><span class="p">suspend</span><span class="o">(</span><span class="o">(</span><span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span> <span class="f">countdown</span><span class="o">(</span>n <span class="o">-</span> <span class="n">1</span><span class="o">)</span><span class="o">)</span>
+      <span class="o">)</span></code></pre>
+
+        <p>現在建立 <code>countdown(n)</code> 時只建立目前這一層。runtime 執行到 <code>suspend</code> 才要求下一層描述，因此不會在一開始用 JavaScript 同步遞迴建立全部內容。</p>
+
+        <div class="callout warning">
+          <strong>精確說法</strong>
+          <p><code>suspend</code> 解決的是「建立遞迴 Effect 描述時的 eager recursion」。它不是讓所有任意遞迴演算法自動變快，也不是通用的演算法最佳化。</p>
+        </div>
+      </section>
+
+      <section id="callbacks">
+        <h2>7. 有些 callback 本來就已經提供延遲</h2>
+
+        <p>不要因為看到「下一步」就一律加 <code>suspend</code>。許多 Effect combinator 接受 callback；callback 本身已把函式內的程式碼推遲到前一步完成之後。</p>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">const</span> program <span class="o">=</span> <span class="t">Effect</span><span class="o">.</span><span class="p">succeed</span><span class="o">(</span><span class="n">41</span><span class="o">)</span><span class="o">.</span><span class="p">pipe</span><span class="o">(</span>
+  <span class="t">Effect</span><span class="o">.</span><span class="p">flatMap</span><span class="o">(</span><span class="o">(</span>n<span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span> <span class="t">Effect</span><span class="o">.</span><span class="p">succeed</span><span class="o">(</span>n <span class="o">+</span> <span class="n">1</span><span class="o">)</span><span class="o">)</span>
+<span class="o">)</span></code></pre>
+
+        <p><code>(n) =&gt; Effect.succeed(n + 1)</code> 不會在建立 <code>program</code> 時被呼叫。<code>flatMap</code> 會等前一個 Effect 成功後才呼叫它，所以再包一層通常沒有價值：</p>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="c">// 通常多餘</span>
+<span class="k">const</span> program <span class="o">=</span> <span class="t">Effect</span><span class="o">.</span><span class="p">succeed</span><span class="o">(</span><span class="n">41</span><span class="o">)</span><span class="o">.</span><span class="p">pipe</span><span class="o">(</span>
+  <span class="t">Effect</span><span class="o">.</span><span class="p">flatMap</span><span class="o">(</span><span class="o">(</span>n<span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span>
+    <span class="t">Effect</span><span class="o">.</span><span class="p">suspend</span><span class="o">(</span><span class="o">(</span><span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span> <span class="t">Effect</span><span class="o">.</span><span class="p">succeed</span><span class="o">(</span>n <span class="o">+</span> <span class="n">1</span><span class="o">)</span><span class="o">)</span>
+  <span class="o">)</span>
+<span class="o">)</span></code></pre>
+
+        <p>判斷方式不是看程式碼「位於右邊」或「看起來像下一步」，而是檢查 API 收到的是 Effect 值，還是一個日後才呼叫的函式。</p>
+
+        <div class="comparison">
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">形狀</th>
+                <th scope="col">何時求值</th>
+                <th scope="col">通常需要 suspend？</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>combine(nextEffect())</code></td>
+                <td>傳參數前立即呼叫 <code>nextEffect</code></td>
+                <td>若要延遲建立，可能需要</td>
+              </tr>
+              <tr>
+                <td><code>flatMap(() =&gt; nextEffect())</code></td>
+                <td>前一步成功後才呼叫 callback</td>
+                <td>通常不需要</td>
+              </tr>
+              <tr>
+                <td><code>suspend(() =&gt; nextEffect())</code></td>
+                <td>runtime 執行到此處才呼叫</td>
+                <td>這本身就是明確延遲</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="errors">
+        <h2>8. 延遲不等於錯誤處理</h2>
+
+        <p><code>Effect.sync</code> 或 <code>Effect.suspend</code> 的 thunk 若意外丟出 JavaScript exception，Effect 會把它視為 defect，而不是型別化的預期錯誤。延遲只改變「何時執行」，不會自動把 throw 轉成 error channel。</p>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">const</span> program <span class="o">=</span> <span class="t">Effect</span><span class="o">.</span><span class="p">suspend</span><span class="o">(</span><span class="o">(</span><span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span> <span class="o">{</span>
+  <span class="k">throw</span> <span class="k">new</span> <span class="f">Error</span><span class="o">(</span><span class="s">"unexpected"</span><span class="o">)</span> <span class="c">// defect</span>
+<span class="o">}</span><span class="o">)</span></code></pre>
+
+        <p>若某個同步 API 本來就可能 throw，而且這是你打算處理的正常失敗，應使用會捕捉例外並映射錯誤的建構方式，例如 <code>Effect.try</code>，而不是把它藏進 <code>suspend</code>。</p>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">const</span> parseJson <span class="o">=</span> <span class="o">(</span>input<span class="o">:</span> string<span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span>
+  <span class="t">Effect</span><span class="o">.</span><span class="k">try</span><span class="o">(</span><span class="o">{</span>
+    <span class="k">try</span><span class="o">:</span> <span class="o">(</span><span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span> <span class="t">JSON</span><span class="o">.</span><span class="p">parse</span><span class="o">(</span>input<span class="o">)</span> <span class="k">as</span> unknown<span class="o">,</span>
+    <span class="k">catch</span><span class="o">:</span> <span class="o">(</span>cause<span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span> <span class="k">new</span> <span class="f">Error</span><span class="o">(</span><span class="s">"JSON 格式錯誤"</span><span class="o">,</span> <span class="o">{</span> cause <span class="o">}</span><span class="o">)</span>
+  <span class="o">}</span><span class="o">)</span></code></pre>
+      </section>
+
+      <section id="types">
+        <h2>9. 額外用途：協助 TypeScript 統一分支型別</h2>
+
+        <p>當函式的不同分支直接回傳不同 Effect 時，TypeScript 有時會推導成 Effect union。把整個選擇放進 <code>suspend</code>，泛型參數可以在同一個建構器呼叫中統一。</p>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">const</span> divide <span class="o">=</span> <span class="o">(</span>a<span class="o">:</span> number<span class="o">,</span> b<span class="o">:</span> number<span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span>
+  <span class="t">Effect</span><span class="o">.</span><span class="p">suspend</span><span class="o">(</span><span class="o">(</span><span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span>
+    b <span class="o">=</span><span class="o">=</span><span class="o">=</span> <span class="n">0</span>
+      <span class="o">?</span> <span class="t">Effect</span><span class="o">.</span><span class="p">fail</span><span class="o">(</span><span class="k">new</span> <span class="f">Error</span><span class="o">(</span><span class="s">"Cannot divide by zero"</span><span class="o">)</span><span class="o">)</span>
+      <span class="o">:</span> <span class="t">Effect</span><span class="o">.</span><span class="p">succeed</span><span class="o">(</span>a / b<span class="o">)</span>
+  <span class="o">)</span>
+
+<span class="c">// Effect.Effect&lt;number, Error&gt;</span></code></pre>
+
+        <p>不過這是附帶好處，而不是看到 union 就必須套用的固定規則。若明確標註函式回傳型別更清楚，也可以直接標註；選擇應以可讀性與真正需要的執行語意為主。</p>
+      </section>
+
+      <section id="pitfalls">
+        <h2>10. 常見誤解與修正</h2>
+
+        <h3>誤解一：Effect 是 lazy，所以參數裡的所有東西都 lazy</h3>
+        <p>不是。函式參數先由 JavaScript 求值。只有明確放進 thunk 或 callback 的程式碼，才跨過了延遲邊界。</p>
+
+        <h3>誤解二：有副作用就用 <code>suspend</code></h3>
+        <p>若副作用回傳普通值，優先用 <code>Effect.sync</code>；若它可能有預期的同步失敗，考慮 <code>Effect.try</code>；若 thunk 回傳的是另一個 Effect，才是 <code>suspend</code> 的形狀。</p>
+
+        <h3>誤解三：<code>suspend</code> 只會建立內層 Effect 一次</h3>
+        <p>不是。外層 Effect 每次執行，thunk 都會再呼叫一次。它是 deferred construction，不是 memoized construction。</p>
+
+        <h3>誤解四：加上 <code>suspend</code> 一定更有效率</h3>
+        <p>不一定。它可以避免根本不需要的建構或一次展開巨大遞迴描述，但也多了一個 runtime 邊界，並可能每次重建內層 Effect。應用它來表達正確的時間語意，而不是當作通用效能技巧。</p>
+
+        <h3>誤解五：Effect 的 lazy 等於 JavaScript Promise 的行為</h3>
+        <p>Promise executor 通常在建立 Promise 時立即開始；Effect 描述通常要交給 runtime 才開始。兩者都能代表未來結果，但啟動時機不同。</p>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">const</span> promise <span class="o">=</span> <span class="k">new</span> <span class="t">Promise</span><span class="o">&lt;</span>number<span class="o">&gt;</span><span class="o">(</span><span class="o">(</span>resolve<span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span> <span class="o">{</span>
+  console<span class="o">.</span><span class="p">log</span><span class="o">(</span><span class="s">"立即開始"</span><span class="o">)</span>
+  <span class="f">resolve</span><span class="o">(</span><span class="n">42</span><span class="o">)</span>
+<span class="o">}</span><span class="o">)</span>
+
+<span class="k">const</span> effect <span class="o">=</span> <span class="t">Effect</span><span class="o">.</span><span class="p">sync</span><span class="o">(</span><span class="o">(</span><span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span> <span class="o">{</span>
+  console<span class="o">.</span><span class="p">log</span><span class="o">(</span><span class="s">"run 時開始"</span><span class="o">)</span>
+  <span class="k">return</span> <span class="n">42</span>
+<span class="o">}</span><span class="o">)</span></code></pre>
+      </section>
+
+      <section id="decision-rules">
+        <h2>11. 實用判斷規則</h2>
+
+        <ol class="rules">
+          <li><strong>已經有一個值：</strong>用 <code>Effect.succeed(value)</code>。</li>
+          <li><strong>要到執行時才計算同步值：</strong>用 <code>Effect.sync(() =&gt; value)</code>。</li>
+          <li><strong>同步計算可能 throw，而且是預期失敗：</strong>用 <code>Effect.try</code> 等能映射錯誤的 API。</li>
+          <li><strong>要到執行時才建立或選擇 Effect：</strong>用 <code>Effect.suspend(() =&gt; effect)</code>。</li>
+          <li><strong>遞迴函式在傳參數時立即呼叫自己：</strong>在遞迴邊界考慮 <code>suspend</code>。</li>
+          <li><strong>已經位於 <code>flatMap</code> 等 callback 中：</strong>先確認 callback 是否已提供需要的延遲，通常不用再包。</li>
+        </ol>
+
+        <div class="callout good">
+          <strong>一句話記憶</strong>
+          <p><code>succeed</code> 接受現在的值，<code>sync</code> 接受未來計算值的配方，<code>suspend</code> 接受未來建立 Effect 的配方。</p>
+        </div>
+      </section>
+
+      <section class="quiz" id="checks">
+        <h2>理解檢查</h2>
+        <p>先自己判斷，再展開答案。</p>
+
+        <details>
+          <summary><code>Effect.succeed(Date.now())</code> 何時讀取時間？</summary>
+          <p>建立 Effect 前。JavaScript 先呼叫 <code>Date.now()</code>，Effect 只保存那個數字。若要每次執行都讀取時間，使用 <code>Effect.sync(() =&gt; Date.now())</code>。</p>
+        </details>
+
+        <details>
+          <summary><code>Effect.suspend(() =&gt; Effect.succeed(Date.now()))</code> 每次 run 會得到新時間嗎？</summary>
+          <p>會。每次執行外層 Effect 都會重新呼叫 thunk，當時才執行 <code>Date.now()</code> 並建立內層 Effect。不過只是讀取普通值時，<code>Effect.sync(() =&gt; Date.now())</code> 更簡單。</p>
+        </details>
+
+        <details>
+          <summary><code>Effect.flatMap((value) =&gt; next(value))</code> 通常還要包 <code>suspend</code> 嗎？</summary>
+          <p>通常不用。callback 已經在前一個 Effect 成功後才會呼叫。除非 callback 內還有另一個特別需要延遲的建構邊界，否則多包一層只會增加噪音。</p>
+        </details>
+
+        <details>
+          <summary><code>suspend</code> 能把 throw 變成型別化失敗嗎？</summary>
+          <p>不能。thunk 意外 throw 通常會成為 defect。預期會 throw 的同步 API 應使用 <code>Effect.try</code> 等合適的建構器。</p>
+        </details>
+      </section>
+
+      <footer>
+        <p>本文以 Effect 3.x 的 API 與語意為準。API 名稱是 <code>Effect.suspend</code>；它與 React 的 <code>Suspense</code> 是不同概念。</p>
+      </footer>
+    </article>
+  </main>
+  <script>
+    (() => {
+      const copyIcon = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 8h10v12H8z"></path><path d="M6 16H4V4h12v2"></path></svg>';
+      const checkIcon = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"></path></svg>';
+
+      const copyText = async (text) => {
+        if (navigator.clipboard && window.isSecureContext) {
+          await navigator.clipboard.writeText(text);
+          return;
+        }
+
+        const textarea = document.createElement("textarea");
+        textarea.value = text;
+        textarea.setAttribute("readonly", "");
+        textarea.style.position = "fixed";
+        textarea.style.opacity = "0";
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand("copy");
+        textarea.remove();
+      };
+
+      document.querySelectorAll("pre").forEach((pre) => {
+        const code = pre.querySelector("code");
+        if (!code) return;
+
+        const button = document.createElement("button");
+        button.className = "copy-code";
+        button.type = "button";
+        button.setAttribute("aria-label", "複製程式碼");
+        button.innerHTML = copyIcon;
+        button.addEventListener("click", async () => {
+          await copyText(code.innerText);
+          button.classList.add("copied");
+          button.innerHTML = checkIcon;
+          window.setTimeout(() => {
+            button.classList.remove("copied");
+            button.innerHTML = copyIcon;
+          }, 1400);
+        });
+        pre.appendChild(button);
+
+        const scrollbar = document.createElement("div");
+        scrollbar.className = "code-scrollbar hidden";
+        const thumb = document.createElement("div");
+        thumb.className = "code-scrollbar-thumb";
+        scrollbar.appendChild(thumb);
+        pre.appendChild(scrollbar);
+
+        const update = () => {
+          const overflow = code.scrollWidth > code.clientWidth + 1;
+          scrollbar.classList.toggle("hidden", !overflow);
+          if (!overflow) return;
+          const ratio = code.clientWidth / code.scrollWidth;
+          const width = Math.max(28, scrollbar.clientWidth * ratio);
+          const maxLeft = scrollbar.clientWidth - width;
+          const left = maxLeft * (code.scrollLeft / (code.scrollWidth - code.clientWidth));
+          thumb.style.width = `${width}px`;
+          thumb.style.transform = `translateX(${left}px)`;
+        };
+
+        code.addEventListener("scroll", update);
+        window.addEventListener("resize", update);
+        update();
+
+        let dragging = false;
+        let startX = 0;
+        let startScroll = 0;
+
+        thumb.addEventListener("pointerdown", (event) => {
+          dragging = true;
+          startX = event.clientX;
+          startScroll = code.scrollLeft;
+          thumb.setPointerCapture(event.pointerId);
+        });
+
+        thumb.addEventListener("pointermove", (event) => {
+          if (!dragging) return;
+          const width = thumb.clientWidth;
+          const maxLeft = scrollbar.clientWidth - width;
+          const maxScroll = code.scrollWidth - code.clientWidth;
+          const delta = event.clientX - startX;
+          code.scrollLeft = startScroll + delta * (maxScroll / maxLeft);
+        });
+
+        thumb.addEventListener("pointerup", () => {
+          dragging = false;
+        });
+
+        scrollbar.addEventListener("click", (event) => {
+          if (event.target === thumb) return;
+          const rect = scrollbar.getBoundingClientRect();
+          const ratio = (event.clientX - rect.left) / rect.width;
+          code.scrollLeft = ratio * (code.scrollWidth - code.clientWidth);
+        });
+      });
+    })();
+  </script>
+</body>
+</html>

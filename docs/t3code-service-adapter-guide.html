@@ -1,0 +1,1034 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="用餐廳比喻理解 T3 Code 的 Service、Adapter、Layer 與 Live 命名，並整理 reviewstuff 可以採用的簡化版本。"
+    />
+    <title>用簡單例子理解 T3 Code 的 Service 與 Adapter 設計</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #f7f5ef;
+        --surface: #fffdf8;
+        --surface-strong: #ffffff;
+        --ink: #17201d;
+        --muted: #5c6964;
+        --line: #d8ded8;
+        --brand: #176b55;
+        --brand-dark: #0e4e3d;
+        --brand-soft: #dff1e9;
+        --warm: #a54f20;
+        --warm-soft: #f8e8dc;
+        --code-bg: #17221f;
+        --code-ink: #eaf5ef;
+        --shadow: 0 18px 48px rgb(29 44 38 / 9%);
+        --radius-sm: 0.65rem;
+        --radius-md: 1rem;
+        --radius-lg: 1.5rem;
+        --content: 72rem;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html {
+        scroll-behavior: smooth;
+      }
+
+      body {
+        margin: 0;
+        background:
+          radial-gradient(circle at 92% 3%, rgb(223 241 233 / 82%), transparent 28rem),
+          var(--bg);
+        color: var(--ink);
+        font-family:
+          Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+          sans-serif;
+        font-size: 1rem;
+        line-height: 1.72;
+      }
+
+      a {
+        color: var(--brand-dark);
+        text-decoration-thickness: 0.08em;
+        text-underline-offset: 0.18em;
+      }
+
+      a:hover {
+        color: var(--brand);
+      }
+
+      :focus-visible {
+        outline: 3px solid #e59b62;
+        outline-offset: 3px;
+      }
+
+      .skip-link {
+        position: fixed;
+        z-index: 10;
+        top: 0.75rem;
+        left: 0.75rem;
+        padding: 0.55rem 0.8rem;
+        border-radius: var(--radius-sm);
+        background: var(--ink);
+        color: #fff;
+        transform: translateY(-160%);
+      }
+
+      .skip-link:focus {
+        transform: translateY(0);
+      }
+
+      .page-shell {
+        width: min(calc(100% - 2rem), var(--content));
+        margin-inline: auto;
+      }
+
+      .hero {
+        padding: clamp(3.8rem, 9vw, 7.5rem) 0 3rem;
+      }
+
+      .eyebrow {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        margin: 0 0 1.1rem;
+        color: var(--brand-dark);
+        font-size: 0.78rem;
+        font-weight: 800;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+      }
+
+      .eyebrow::before {
+        width: 1.8rem;
+        height: 2px;
+        background: currentcolor;
+        content: "";
+      }
+
+      h1,
+      h2,
+      h3 {
+        margin-top: 0;
+        color: var(--ink);
+        font-family: Georgia, "Times New Roman", serif;
+        line-height: 1.18;
+        text-wrap: balance;
+      }
+
+      h1 {
+        max-width: 13ch;
+        margin-bottom: 1.25rem;
+        font-size: clamp(2.65rem, 7vw, 5.6rem);
+        letter-spacing: -0.045em;
+      }
+
+      h2 {
+        margin-bottom: 1rem;
+        font-size: clamp(1.85rem, 4vw, 3.15rem);
+        letter-spacing: -0.025em;
+      }
+
+      h3 {
+        margin-bottom: 0.55rem;
+        font-size: 1.38rem;
+      }
+
+      p {
+        margin: 0 0 1rem;
+      }
+
+      .deck {
+        max-width: 43rem;
+        margin-bottom: 1.6rem;
+        color: #35443e;
+        font-size: clamp(1.08rem, 2vw, 1.3rem);
+      }
+
+      .meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.65rem 1.4rem;
+        color: var(--muted);
+        font-size: 0.9rem;
+      }
+
+      .hero-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1.6fr) minmax(17rem, 0.8fr);
+        gap: clamp(2rem, 5vw, 5rem);
+        align-items: end;
+      }
+
+      .takeaway {
+        padding: 1.45rem;
+        border: 1px solid #b7d8ca;
+        border-radius: var(--radius-lg);
+        background: rgb(255 255 255 / 70%);
+        box-shadow: var(--shadow);
+      }
+
+      .takeaway strong {
+        display: block;
+        margin-bottom: 0.45rem;
+        color: var(--brand-dark);
+        font-size: 0.82rem;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .takeaway p:last-child {
+        margin-bottom: 0;
+      }
+
+      .toc {
+        margin-bottom: 5.5rem;
+        padding: 1.15rem 1.3rem;
+        border-block: 1px solid var(--line);
+      }
+
+      .toc ol {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem 1.35rem;
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+
+      .toc a {
+        color: var(--muted);
+        font-size: 0.9rem;
+        font-weight: 700;
+        text-decoration: none;
+      }
+
+      .toc a:hover {
+        color: var(--brand-dark);
+      }
+
+      main > section {
+        padding: clamp(3.2rem, 7vw, 6.2rem) 0;
+        border-top: 1px solid var(--line);
+      }
+
+      .section-heading {
+        display: grid;
+        grid-template-columns: 10rem minmax(0, 1fr);
+        gap: 1.4rem;
+        margin-bottom: 2.5rem;
+      }
+
+      .section-no {
+        color: var(--brand);
+        font-size: 0.78rem;
+        font-weight: 800;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+      }
+
+      .section-intro {
+        max-width: 43rem;
+        color: var(--muted);
+        font-size: 1.08rem;
+      }
+
+      .prose {
+        max-width: 48rem;
+        margin-inline: auto;
+      }
+
+      .analogy-grid,
+      .choice-grid,
+      .warning-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 1rem;
+      }
+
+      .analogy-card,
+      .choice-card,
+      .warning-card {
+        padding: 1.35rem;
+        border: 1px solid var(--line);
+        border-radius: var(--radius-md);
+        background: var(--surface);
+      }
+
+      .analogy-card .emoji {
+        display: block;
+        margin-bottom: 0.8rem;
+        font-size: 1.8rem;
+        line-height: 1;
+      }
+
+      .mapping {
+        display: inline-block;
+        margin-top: 0.35rem;
+        padding: 0.22rem 0.52rem;
+        border-radius: 999px;
+        background: var(--brand-soft);
+        color: var(--brand-dark);
+        font-size: 0.76rem;
+        font-weight: 800;
+      }
+
+      .note {
+        margin: 2rem 0;
+        padding: 1.25rem 1.4rem;
+        border-left: 0.28rem solid var(--brand);
+        border-radius: 0 var(--radius-md) var(--radius-md) 0;
+        background: var(--brand-soft);
+      }
+
+      .note.warm {
+        border-left-color: var(--warm);
+        background: var(--warm-soft);
+      }
+
+      .note strong {
+        color: var(--brand-dark);
+      }
+
+      .note.warm strong {
+        color: #783513;
+      }
+
+      .diagram-wrap {
+        margin: 2.6rem 0;
+        padding: clamp(1rem, 3vw, 2rem);
+        overflow: hidden;
+        border: 1px solid var(--line);
+        border-radius: var(--radius-lg);
+        background: var(--surface-strong);
+        box-shadow: var(--shadow);
+      }
+
+      .diagram-wrap figure {
+        margin: 0;
+      }
+
+      .diagram-wrap .flow-mobile {
+        display: none;
+      }
+
+      .diagram-wrap svg {
+        display: block;
+        max-width: 100%;
+        height: auto;
+        margin-inline: auto;
+      }
+
+      .diagram-wrap figcaption {
+        max-width: 42rem;
+        margin: 1.2rem auto 0;
+        color: var(--muted);
+        font-size: 0.88rem;
+        text-align: center;
+      }
+
+      .comparison {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 3.2rem minmax(0, 1fr);
+        gap: 1rem;
+        align-items: stretch;
+        margin: 2rem 0;
+      }
+
+      .comparison-card {
+        padding: 1.4rem;
+        border: 1px solid var(--line);
+        border-radius: var(--radius-md);
+        background: var(--surface);
+      }
+
+      .comparison-card.recommended {
+        border-color: #79ad97;
+        background: #f5fcf8;
+      }
+
+      .comparison-arrow {
+        display: grid;
+        place-items: center;
+        color: var(--brand);
+        font-size: 1.65rem;
+        font-weight: 900;
+      }
+
+      .status {
+        display: inline-block;
+        margin-bottom: 0.85rem;
+        padding: 0.18rem 0.48rem;
+        border-radius: 999px;
+        background: var(--warm-soft);
+        color: #793712;
+        font-size: 0.72rem;
+        font-weight: 800;
+      }
+
+      .recommended .status {
+        background: var(--brand-soft);
+        color: var(--brand-dark);
+      }
+
+      pre {
+        position: relative;
+        margin: 1rem 0 0;
+        padding: 2.75rem 1rem 1rem;
+        overflow: auto;
+        border-radius: var(--radius-sm);
+        background: var(--code-bg);
+        color: var(--code-ink);
+        font-size: 0.84rem;
+        line-height: 1.65;
+        tab-size: 2;
+      }
+
+      pre .label {
+        position: absolute;
+        top: 0.72rem;
+        left: 1rem;
+        color: #a8c7bb;
+        font-family: ui-sans-serif, system-ui, sans-serif;
+        font-size: 0.68rem;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      pre code {
+        font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+      }
+
+      .copy-button {
+        position: absolute;
+        z-index: 1;
+        top: 0.55rem;
+        right: 0.55rem;
+        padding: 0.3rem 0.55rem;
+        border: 1px solid #4b6159;
+        border-radius: 0.4rem;
+        background: #24332e;
+        color: #dbece5;
+        font: inherit;
+        font-size: 0.7rem;
+        cursor: pointer;
+      }
+
+      .copy-button:hover {
+        background: #31463f;
+      }
+
+      .choice-card h3 {
+        display: flex;
+        align-items: center;
+        gap: 0.55rem;
+      }
+
+      .choice-card ul,
+      .warning-card ul,
+      .steps {
+        margin: 0.8rem 0 0;
+        padding-left: 1.25rem;
+      }
+
+      li + li {
+        margin-top: 0.42rem;
+      }
+
+      .rule-table {
+        width: 100%;
+        margin: 1.8rem 0;
+        border-collapse: collapse;
+        border: 1px solid var(--line);
+        background: var(--surface);
+      }
+
+      .rule-table th,
+      .rule-table td {
+        padding: 0.85rem 1rem;
+        border-bottom: 1px solid var(--line);
+        text-align: left;
+        vertical-align: top;
+      }
+
+      .rule-table th {
+        background: #edf4f0;
+        color: var(--brand-dark);
+        font-size: 0.78rem;
+        letter-spacing: 0.04em;
+      }
+
+      .rule-table tr:last-child td {
+        border-bottom: 0;
+      }
+
+      code:not(pre code) {
+        padding: 0.12em 0.34em;
+        border: 1px solid #ccd8d2;
+        border-radius: 0.32em;
+        background: #eef4f1;
+        color: #174c3c;
+        font-family: "SFMono-Regular", Consolas, monospace;
+        font-size: 0.87em;
+      }
+
+      .steps {
+        display: grid;
+        gap: 0.85rem;
+        padding: 0;
+        list-style: none;
+        counter-reset: step;
+      }
+
+      .steps li {
+        position: relative;
+        min-height: 3.2rem;
+        margin: 0;
+        padding: 0.75rem 1rem 0.75rem 4rem;
+        border: 1px solid var(--line);
+        border-radius: var(--radius-md);
+        background: var(--surface);
+        counter-increment: step;
+      }
+
+      .steps li::before {
+        position: absolute;
+        top: 0.62rem;
+        left: 0.75rem;
+        display: grid;
+        width: 2.15rem;
+        height: 2.15rem;
+        place-items: center;
+        border-radius: 50%;
+        background: var(--brand);
+        color: #fff;
+        content: counter(step);
+        font-weight: 800;
+      }
+
+      .sources {
+        color: var(--muted);
+        font-size: 0.9rem;
+      }
+
+      .sources li {
+        padding-left: 0.25rem;
+      }
+
+      footer {
+        padding: 2.5rem 0 4rem;
+        border-top: 1px solid var(--line);
+        color: var(--muted);
+        font-size: 0.85rem;
+      }
+
+      @media (max-width: 760px) {
+        .page-shell {
+          width: min(calc(100% - 1.25rem), var(--content));
+        }
+
+        .hero-grid,
+        .section-heading {
+          grid-template-columns: 1fr;
+        }
+
+        .hero-grid {
+          align-items: start;
+        }
+
+        .section-heading {
+          gap: 0.4rem;
+        }
+
+        .analogy-grid,
+        .choice-grid,
+        .warning-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .comparison {
+          grid-template-columns: 1fr;
+        }
+
+        .comparison-arrow {
+          min-height: 1.5rem;
+          transform: rotate(90deg);
+        }
+
+        .diagram-wrap .flow-desktop {
+          display: none;
+        }
+
+        .diagram-wrap .flow-mobile {
+          display: block;
+        }
+
+        .rule-table,
+        .rule-table tbody,
+        .rule-table tr,
+        .rule-table th,
+        .rule-table td {
+          display: block;
+        }
+
+        .rule-table thead {
+          position: absolute;
+          width: 1px;
+          height: 1px;
+          overflow: hidden;
+          clip: rect(0 0 0 0);
+        }
+
+        .rule-table tr + tr {
+          border-top: 1px solid var(--line);
+        }
+
+        .rule-table td {
+          border: 0;
+        }
+
+        .rule-table td::before {
+          display: block;
+          margin-bottom: 0.15rem;
+          color: var(--brand-dark);
+          content: attr(data-label);
+          font-size: 0.7rem;
+          font-weight: 800;
+          letter-spacing: 0.05em;
+          text-transform: uppercase;
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        html {
+          scroll-behavior: auto;
+        }
+      }
+
+      @media print {
+        body {
+          background: #fff;
+        }
+
+        .toc,
+        .copy-button,
+        .skip-link {
+          display: none;
+        }
+
+        main > section {
+          break-inside: avoid;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <a class="skip-link" href="#main">跳到主要內容</a>
+
+    <header class="hero page-shell">
+      <div class="hero-grid">
+        <div>
+          <p class="eyebrow">Architecture field guide</p>
+          <h1>用簡單例子理解 T3 Code 的設計</h1>
+          <p class="deck">
+            不必先懂 Effect。這篇文章用一間餐廳解釋 Service、Adapter、Layer 與
+            <code>Live</code>，再把同一套想法套回 reviewstuff。
+          </p>
+          <div class="meta">
+            <span>閱讀時間：約 10 分鐘</span>
+            <span>研究基準：T3 Code @ 2026-07-12</span>
+          </div>
+        </div>
+        <aside class="takeaway" aria-label="一句話結論">
+          <strong>一句話結論</strong>
+          <p>
+            學 T3 Code 的「新方向」：只有一種做法時放在同一個 module；真的有多種外部實作時，才拆成 contract
+            與 adapters；<code>Live</code> 留給整組正式環境的組裝。
+          </p>
+        </aside>
+      </div>
+    </header>
+
+    <nav class="toc page-shell" aria-label="文章目錄">
+      <ol>
+        <li><a href="#restaurant">先開一間餐廳</a></li>
+        <li><a href="#chain">四層責任</a></li>
+        <li><a href="#t3code">T3 Code 怎麼做</a></li>
+        <li><a href="#choices">何時拆 Adapter</a></li>
+        <li><a href="#reviewstuff">套用到 reviewstuff</a></li>
+        <li><a href="#adoption">採用步驟</a></li>
+      </ol>
+    </nav>
+
+    <main id="main" class="page-shell">
+      <section id="restaurant">
+        <div class="section-heading">
+          <p class="section-no">01 · Analogy</p>
+          <div>
+            <h2>先別想程式，想像你在經營餐廳</h2>
+            <p class="section-intro">
+              客人不需要知道廚房有幾口鍋；廚房也不該決定客人今天為什麼點這道菜。好的 boundary，就是讓每個角色只處理自己的問題。
+            </p>
+          </div>
+        </div>
+
+        <div class="analogy-grid">
+          <article class="analogy-card">
+            <span class="emoji" aria-hidden="true">🧾</span>
+            <h3>點餐需求</h3>
+            <p>「我要一份不辣的炒飯。」描述的是目的，不談廚房怎麼炒。</p>
+            <span class="mapping">Use case</span>
+          </article>
+          <article class="analogy-card">
+            <span class="emoji" aria-hidden="true">📋</span>
+            <h3>菜單與承諾</h3>
+            <p>餐廳承諾「可以做炒飯」，但菜單不會寫瓦斯管線怎麼接。</p>
+            <span class="mapping">Service contract</span>
+          </article>
+          <article class="analogy-card">
+            <span class="emoji" aria-hidden="true">👩‍🍳</span>
+            <h3>真正的廚房</h3>
+            <p>廚師、鍋子與食材把承諾變成結果，細節留在廚房裡。</p>
+            <span class="mapping">Implementation / Adapter</span>
+          </article>
+          <article class="analogy-card">
+            <span class="emoji" aria-hidden="true">🔑</span>
+            <h3>開店前的安排</h3>
+            <p>店長排班、開瓦斯、準備食材，讓今天真的可以營業。</p>
+            <span class="mapping">Layer composition</span>
+          </article>
+        </div>
+
+        <div class="note">
+          <strong>最重要的觀念：</strong>
+          <span>boundary 不是為了把檔案切得越碎越好，而是為了避免「點餐的人還得知道鍋子放在哪裡」。</span>
+        </div>
+
+        <div class="prose">
+          <h3>Implementation 和 Adapter 差在哪裡？</h3>
+          <p>
+            <strong>Implementation</strong> 是很廣的詞：只要把承諾做出來，都算 implementation。<strong>Adapter</strong>
+            則更像翻譯員：它專門把我們的需求翻成 Git、Codex 或 filesystem 的操作，再把外部結果翻回來。
+          </p>
+          <p>
+            因此，餐廳自己的廚房是 implementation；如果它還要把 Uber Eats 的訂單格式轉成內部出單格式，那個轉換角色才特別像 adapter。
+          </p>
+        </div>
+      </section>
+
+      <section id="chain">
+        <div class="section-heading">
+          <p class="section-no">02 · Responsibility</p>
+          <div>
+            <h2>程式裡也是同一條責任鏈</h2>
+            <p class="section-intro">
+              換回 reviewstuff 的語言：use case 想完成一次 review，contract 說明有哪些能力，adapter 才去呼叫 Git、AI 或檔案系統。
+            </p>
+          </div>
+        </div>
+
+        <div class="diagram-wrap">
+<figure class="flow-figure">
+  <div class="flow-desktop">
+    <svg id="mermaid-mrkrpx45-my-svg" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" class="flowchart" viewBox="0 0 865.53125 94" aria-roledescription="flowchart-v2" role="img" aria-labelledby="mermaid-mrkrpx45-title mermaid-mrkrpx45-desc"><title id="mermaid-mrkrpx45-title">從需求到外部系統的責任鏈（桌面版）</title><desc id="mermaid-mrkrpx45-desc">由左至右：Use case 描述需求，service contract 定義承諾，concrete adapter 執行真實工作並連接外部系統。</desc><style>#mermaid-mrkrpx45-my-svg{font-family:ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;font-size:16px;fill:#141413;}@keyframes edge-animation-frame{from{stroke-dashoffset:0;}}@keyframes dash{to{stroke-dashoffset:0;}}#mermaid-mrkrpx45-my-svg .edge-animation-slow{stroke-dasharray:9,5!important;stroke-dashoffset:900;animation:dash 50s linear infinite;stroke-linecap:round;}#mermaid-mrkrpx45-my-svg .edge-animation-fast{stroke-dasharray:9,5!important;stroke-dashoffset:900;animation:dash 20s linear infinite;stroke-linecap:round;}#mermaid-mrkrpx45-my-svg .error-icon{fill:#FAF9F5;}#mermaid-mrkrpx45-my-svg .error-text{fill:#05060a;stroke:#05060a;}#mermaid-mrkrpx45-my-svg .edge-thickness-normal{stroke-width:1px;}#mermaid-mrkrpx45-my-svg .edge-thickness-thick{stroke-width:3.5px;}#mermaid-mrkrpx45-my-svg .edge-pattern-solid{stroke-dasharray:0;}#mermaid-mrkrpx45-my-svg .edge-thickness-invisible{stroke-width:0;fill:none;}#mermaid-mrkrpx45-my-svg .edge-pattern-dashed{stroke-dasharray:3;}#mermaid-mrkrpx45-my-svg .edge-pattern-dotted{stroke-dasharray:2;}#mermaid-mrkrpx45-my-svg .marker{fill:#D97757;stroke:#D97757;}#mermaid-mrkrpx45-my-svg .marker.cross{stroke:#D97757;}#mermaid-mrkrpx45-my-svg svg{font-family:ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;font-size:16px;}#mermaid-mrkrpx45-my-svg p{margin:0;}#mermaid-mrkrpx45-my-svg .label{font-family:ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;color:#141413;}#mermaid-mrkrpx45-my-svg .cluster-label text{fill:#05060a;}#mermaid-mrkrpx45-my-svg .cluster-label span{color:#05060a;}#mermaid-mrkrpx45-my-svg .cluster-label span p{background-color:transparent;}#mermaid-mrkrpx45-my-svg .label text,#mermaid-mrkrpx45-my-svg span{fill:#141413;color:#141413;}#mermaid-mrkrpx45-my-svg .node rect,#mermaid-mrkrpx45-my-svg .node circle,#mermaid-mrkrpx45-my-svg .node ellipse,#mermaid-mrkrpx45-my-svg .node polygon,#mermaid-mrkrpx45-my-svg .node path{fill:#FFFFFF;stroke:#E3DACC;stroke-width:1px;}#mermaid-mrkrpx45-my-svg .rough-node .label text,#mermaid-mrkrpx45-my-svg .node .label text,#mermaid-mrkrpx45-my-svg .image-shape .label,#mermaid-mrkrpx45-my-svg .icon-shape .label{text-anchor:middle;}#mermaid-mrkrpx45-my-svg .node .katex path{fill:#000;stroke:#000;stroke-width:1px;}#mermaid-mrkrpx45-my-svg .rough-node .label,#mermaid-mrkrpx45-my-svg .node .label,#mermaid-mrkrpx45-my-svg .image-shape .label,#mermaid-mrkrpx45-my-svg .icon-shape .label{text-align:center;}#mermaid-mrkrpx45-my-svg .node.clickable{cursor:pointer;}#mermaid-mrkrpx45-my-svg .root .anchor path{fill:#D97757!important;stroke-width:0;stroke:#D97757;}#mermaid-mrkrpx45-my-svg .arrowheadPath{fill:rgba(255, 255, 255, 0);}#mermaid-mrkrpx45-my-svg .edgePath .path{stroke:#D97757;stroke-width:1px;}#mermaid-mrkrpx45-my-svg .flowchart-link{stroke:#D97757;fill:none;}#mermaid-mrkrpx45-my-svg .edgeLabel{background-color:#F0EEE6;text-align:center;}#mermaid-mrkrpx45-my-svg .edgeLabel p{background-color:#F0EEE6;}#mermaid-mrkrpx45-my-svg .edgeLabel rect{opacity:0.5;background-color:#F0EEE6;fill:#F0EEE6;}#mermaid-mrkrpx45-my-svg .labelBkg{background-color:rgba(240, 238, 230, 0.5);}#mermaid-mrkrpx45-my-svg .cluster rect{fill:#FAF9F5;stroke:hsl(48, 0%, 87.0588235294%);stroke-width:1px;}#mermaid-mrkrpx45-my-svg .cluster text{fill:#05060a;}#mermaid-mrkrpx45-my-svg .cluster span{color:#05060a;}#mermaid-mrkrpx45-my-svg div.mermaidTooltip{position:absolute;text-align:center;max-width:200px;padding:2px;font-family:ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;font-size:12px;background:#FAF9F5;border:1px solid hsl(48, 0%, 87.0588235294%);border-radius:2px;pointer-events:none;z-index:100;}#mermaid-mrkrpx45-my-svg .flowchartTitleText{text-anchor:middle;font-size:18px;fill:#141413;}#mermaid-mrkrpx45-my-svg rect.text{fill:none;stroke-width:0;}#mermaid-mrkrpx45-my-svg .icon-shape,#mermaid-mrkrpx45-my-svg .image-shape{background-color:#F0EEE6;text-align:center;}#mermaid-mrkrpx45-my-svg .icon-shape p,#mermaid-mrkrpx45-my-svg .image-shape p{background-color:#F0EEE6;padding:2px;}#mermaid-mrkrpx45-my-svg .icon-shape .label rect,#mermaid-mrkrpx45-my-svg .image-shape .label rect{opacity:0.5;background-color:#F0EEE6;fill:#F0EEE6;}#mermaid-mrkrpx45-my-svg .label-icon{display:inline-block;height:1em;overflow:visible;vertical-align:-0.125em;}#mermaid-mrkrpx45-my-svg .node .label-icon path{fill:currentColor;stroke:revert;stroke-width:revert;}#mermaid-mrkrpx45-my-svg .node .neo-node{stroke:#E3DACC;}#mermaid-mrkrpx45-my-svg [data-look="neo"].node rect,#mermaid-mrkrpx45-my-svg [data-look="neo"].cluster rect,#mermaid-mrkrpx45-my-svg [data-look="neo"].node polygon{stroke:url(#mermaid-mrkrpx45-my-svg-gradient);filter:drop-shadow( 1px 2px 2px rgba(185,185,185,1));}#mermaid-mrkrpx45-my-svg [data-look="neo"].swimlane.cluster rect{filter:none;}#mermaid-mrkrpx45-my-svg [data-look="neo"].node path{stroke:url(#mermaid-mrkrpx45-my-svg-gradient);stroke-width:1px;}#mermaid-mrkrpx45-my-svg [data-look="neo"].node .outer-path{filter:drop-shadow( 1px 2px 2px rgba(185,185,185,1));}#mermaid-mrkrpx45-my-svg [data-look="neo"].node .neo-line path{stroke:#E3DACC;filter:none;}#mermaid-mrkrpx45-my-svg [data-look="neo"].node circle{stroke:url(#mermaid-mrkrpx45-my-svg-gradient);filter:drop-shadow( 1px 2px 2px rgba(185,185,185,1));}#mermaid-mrkrpx45-my-svg [data-look="neo"].node circle .state-start{fill:#000000;}#mermaid-mrkrpx45-my-svg [data-look="neo"].icon-shape .icon{fill:url(#mermaid-mrkrpx45-my-svg-gradient);filter:drop-shadow( 1px 2px 2px rgba(185,185,185,1));}#mermaid-mrkrpx45-my-svg [data-look="neo"].icon-shape .icon-neo path{stroke:url(#mermaid-mrkrpx45-my-svg-gradient);filter:drop-shadow( 1px 2px 2px rgba(185,185,185,1));}#mermaid-mrkrpx45-my-svg :root{--mermaid-font-family:"trebuchet ms",verdana,arial,sans-serif;}</style><g><marker id="mermaid-mrkrpx45-my-svg_flowchart-v2-pointEnd" class="marker flowchart-v2" viewBox="0 0 10 10" refX="5" refY="5" markerUnits="userSpaceOnUse" markerWidth="8" markerHeight="8" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" class="arrowMarkerPath" style="stroke-width: 1; stroke-dasharray: 1, 0;"/></marker><marker id="mermaid-mrkrpx45-my-svg_flowchart-v2-pointStart" class="marker flowchart-v2" viewBox="0 0 10 10" refX="4.5" refY="5" markerUnits="userSpaceOnUse" markerWidth="8" markerHeight="8" orient="auto"><path d="M 0 5 L 10 10 L 10 0 z" class="arrowMarkerPath" style="stroke-width: 1; stroke-dasharray: 1, 0;"/></marker><marker id="mermaid-mrkrpx45-my-svg_flowchart-v2-pointEnd-margin" class="marker flowchart-v2" viewBox="0 0 11.5 14" refX="11.5" refY="7" markerUnits="userSpaceOnUse" markerWidth="10.5" markerHeight="14" orient="auto"><path d="M 0 0 L 11.5 7 L 0 14 z" class="arrowMarkerPath" style="stroke-width: 0; stroke-dasharray: 1, 0;"/></marker><marker id="mermaid-mrkrpx45-my-svg_flowchart-v2-pointStart-margin" class="marker flowchart-v2" viewBox="0 0 11.5 14" refX="1" refY="7" markerUnits="userSpaceOnUse" markerWidth="11.5" markerHeight="14" orient="auto"><polygon points="0,7 11.5,14 11.5,0" class="arrowMarkerPath" style="stroke-width: 0; stroke-dasharray: 1, 0;"/></marker><marker id="mermaid-mrkrpx45-my-svg_flowchart-v2-circleEnd" class="marker flowchart-v2" viewBox="0 0 10 10" refX="11" refY="5" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" orient="auto"><circle cx="5" cy="5" r="5" class="arrowMarkerPath" style="stroke-width: 1; stroke-dasharray: 1, 0;"/></marker><marker id="mermaid-mrkrpx45-my-svg_flowchart-v2-circleStart" class="marker flowchart-v2" viewBox="0 0 10 10" refX="-1" refY="5" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" orient="auto"><circle cx="5" cy="5" r="5" class="arrowMarkerPath" style="stroke-width: 1; stroke-dasharray: 1, 0;"/></marker><marker id="mermaid-mrkrpx45-my-svg_flowchart-v2-circleEnd-margin" class="marker flowchart-v2" viewBox="0 0 10 10" refY="5" refX="12.25" markerUnits="userSpaceOnUse" markerWidth="14" markerHeight="14" orient="auto"><circle cx="5" cy="5" r="5" class="arrowMarkerPath" style="stroke-width: 0; stroke-dasharray: 1, 0;"/></marker><marker id="mermaid-mrkrpx45-my-svg_flowchart-v2-circleStart-margin" class="marker flowchart-v2" viewBox="0 0 10 10" refX="-2" refY="5" markerUnits="userSpaceOnUse" markerWidth="14" markerHeight="14" orient="auto"><circle cx="5" cy="5" r="5" class="arrowMarkerPath" style="stroke-width: 0; stroke-dasharray: 1, 0;"/></marker><marker id="mermaid-mrkrpx45-my-svg_flowchart-v2-crossEnd" class="marker cross flowchart-v2" viewBox="0 0 11 11" refX="12" refY="5.2" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" orient="auto"><path d="M 1,1 l 9,9 M 10,1 l -9,9" class="arrowMarkerPath" style="stroke-width: 2; stroke-dasharray: 1, 0;"/></marker><marker id="mermaid-mrkrpx45-my-svg_flowchart-v2-crossStart" class="marker cross flowchart-v2" viewBox="0 0 11 11" refX="-1" refY="5.2" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" orient="auto"><path d="M 1,1 l 9,9 M 10,1 l -9,9" class="arrowMarkerPath" style="stroke-width: 2; stroke-dasharray: 1, 0;"/></marker><marker id="mermaid-mrkrpx45-my-svg_flowchart-v2-crossEnd-margin" class="marker cross flowchart-v2" viewBox="0 0 15 15" refX="17.7" refY="7.5" markerUnits="userSpaceOnUse" markerWidth="12" markerHeight="12" orient="auto"><path d="M 1,1 L 14,14 M 1,14 L 14,1" class="arrowMarkerPath" style="stroke-width: 2.5;"/></marker><marker id="mermaid-mrkrpx45-my-svg_flowchart-v2-crossStart-margin" class="marker cross flowchart-v2" viewBox="0 0 15 15" refX="-3.5" refY="7.5" markerUnits="userSpaceOnUse" markerWidth="12" markerHeight="12" orient="auto"><path d="M 1,1 L 14,14 M 1,14 L 14,1" class="arrowMarkerPath" style="stroke-width: 2.5; stroke-dasharray: 1, 0;"/></marker><g class="root"><g class="clusters"/><g class="edgePaths"><path d="M147.391,47L151.557,47C155.724,47,164.057,47,171.724,47C179.391,47,186.391,47,189.891,47L193.391,47" id="mermaid-mrkrpx45-my-svg-L_UseCase_Contract_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" data-edge="true" data-et="edge" data-id="mermaid-mrkrpx45-L_UseCase_Contract_0" data-points="W3sieCI6MTQ3LjM5MDYyNSwieSI6NDd9LHsieCI6MTcyLjM5MDYyNSwieSI6NDd9LHsieCI6MTk3LjM5MDYyNSwieSI6NDd9XQ==" data-look="classic" marker-end="url(#mermaid-mrkrpx45-my-svg_flowchart-v2-pointEnd)"/><path d="M376.516,47L380.682,47C384.849,47,393.182,47,400.849,47C408.516,47,415.516,47,419.016,47L422.516,47" id="mermaid-mrkrpx45-my-svg-L_Contract_Adapter_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" data-edge="true" data-et="edge" data-id="mermaid-mrkrpx45-L_Contract_Adapter_0" data-points="W3sieCI6Mzc2LjUxNTYyNSwieSI6NDd9LHsieCI6NDAxLjUxNTYyNSwieSI6NDd9LHsieCI6NDI2LjUxNTYyNSwieSI6NDd9XQ==" data-look="classic" marker-end="url(#mermaid-mrkrpx45-my-svg_flowchart-v2-pointEnd)"/><path d="M613.234,47L617.401,47C621.568,47,629.901,47,637.568,47C645.234,47,652.234,47,655.734,47L659.234,47" id="mermaid-mrkrpx45-my-svg-L_Adapter_Outside_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" data-edge="true" data-et="edge" data-id="mermaid-mrkrpx45-L_Adapter_Outside_0" data-points="W3sieCI6NjEzLjIzNDM3NSwieSI6NDd9LHsieCI6NjM4LjIzNDM3NSwieSI6NDd9LHsieCI6NjYzLjIzNDM3NSwieSI6NDd9XQ==" data-look="classic" marker-end="url(#mermaid-mrkrpx45-my-svg_flowchart-v2-pointEnd)"/></g><g class="edgeLabels"><g class="edgeLabel"><g class="label" data-id="mermaid-mrkrpx45-L_UseCase_Contract_0" transform="translate(0, 0)"><text y="-10.1" text-anchor="middle"><tspan class="text-outer-tspan row" x="0" y="-0.1em" dy="1.1em" text-anchor="middle"/></text></g></g><g><rect class="background" style="stroke: none"/></g><g class="edgeLabel"><g class="label" data-id="mermaid-mrkrpx45-L_Contract_Adapter_0" transform="translate(0, 0)"><text y="-10.1" text-anchor="middle"><tspan class="text-outer-tspan row" x="0" y="-0.1em" dy="1.1em" text-anchor="middle"/></text></g></g><g><rect class="background" style="stroke: none"/></g><g class="edgeLabel"><g class="label" data-id="mermaid-mrkrpx45-L_Adapter_Outside_0" transform="translate(0, 0)"><text y="-10.1" text-anchor="middle"><tspan class="text-outer-tspan row" x="0" y="-0.1em" dy="1.1em" text-anchor="middle"/></text></g></g><g><rect class="background" style="stroke: none"/></g></g><g class="nodes"><g class="node default" id="mermaid-mrkrpx45-my-svg-flowchart-UseCase-0" data-look="classic" transform="translate(77.6953125, 47)"><rect class="basic label-container" x="-69.6953125" y="-39" width="139.390625" height="78"/><g class="label" transform="translate(-39.6953125, -24)"><rect/><foreignObject width="79.390625" height="48"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="nodeLabel"><p>Use case<br />只說要什麼</p></span></div></foreignObject></g></g><g class="node default" id="mermaid-mrkrpx45-my-svg-flowchart-Contract-1" data-look="classic" transform="translate(286.953125, 47)"><rect class="basic label-container" x="-89.5625" y="-39" width="179.125" height="78"/><g class="label" transform="translate(-59.5625, -24)"><rect/><foreignObject width="119.125" height="48"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="nodeLabel"><p>Service contract<br />承諾能做什麼</p></span></div></foreignObject></g></g><g class="node default" id="mermaid-mrkrpx45-my-svg-flowchart-Adapter-3" data-look="classic" transform="translate(519.875, 47)"><rect class="basic label-container" x="-93.359375" y="-39" width="186.71875" height="78"/><g class="label" transform="translate(-63.359375, -24)"><rect/><foreignObject width="126.71875" height="48"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="nodeLabel"><p>Concrete adapter<br />真的去做</p></span></div></foreignObject></g></g><g class="node default" id="mermaid-mrkrpx45-my-svg-flowchart-Outside-5" data-look="classic" transform="translate(760.3828125, 47)"><rect class="basic label-container" x="-97.1484375" y="-39" width="194.296875" height="78"/><g class="label" transform="translate(-67.1484375, -24)"><rect/><foreignObject width="134.296875" height="48"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="nodeLabel"><p>外部世界<br />Git · AI · filesystem</p></span></div></foreignObject></g></g></g></g></g><defs><filter id="mermaid-mrkrpx45-my-svg-drop-shadow" height="130%" width="130%"><feDropShadow dx="4" dy="4" stdDeviation="0" flood-opacity="0.06" flood-color="#000000"/></filter></defs><defs><filter id="mermaid-mrkrpx45-my-svg-drop-shadow-small" height="150%" width="150%"><feDropShadow dx="2" dy="2" stdDeviation="0" flood-opacity="0.06" flood-color="#000000"/></filter></defs><linearGradient id="mermaid-mrkrpx45-my-svg-gradient" gradientUnits="objectBoundingBox" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" stop-color="#E3DACC" stop-opacity="1"/><stop offset="100%" stop-color="hsl(48, 0%, 82.1568627451%)" stop-opacity="1"/></linearGradient></svg>
+  </div>
+  <div class="flow-mobile">
+  <svg id="mermaid-mrkqutec-my-svg" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" class="flowchart" viewBox="0 0 210.296875 478" aria-roledescription="flowchart-v2" role="img" aria-labelledby="mermaid-mrkqutec-title mermaid-mrkqutec-desc"><title id="mermaid-mrkqutec-title">從需求到外部系統的責任鏈</title><desc id="mermaid-mrkqutec-desc">Use case 只描述需要的能力；service contract 定義承諾；concrete adapter 執行真實工作並連接 Git、AI provider 或 filesystem。</desc><style>#mermaid-mrkqutec-my-svg{font-family:ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;font-size:16px;fill:#141413;}@keyframes edge-animation-frame{from{stroke-dashoffset:0;}}@keyframes dash{to{stroke-dashoffset:0;}}#mermaid-mrkqutec-my-svg .edge-animation-slow{stroke-dasharray:9,5!important;stroke-dashoffset:900;animation:dash 50s linear infinite;stroke-linecap:round;}#mermaid-mrkqutec-my-svg .edge-animation-fast{stroke-dasharray:9,5!important;stroke-dashoffset:900;animation:dash 20s linear infinite;stroke-linecap:round;}#mermaid-mrkqutec-my-svg .error-icon{fill:#FAF9F5;}#mermaid-mrkqutec-my-svg .error-text{fill:#05060a;stroke:#05060a;}#mermaid-mrkqutec-my-svg .edge-thickness-normal{stroke-width:1px;}#mermaid-mrkqutec-my-svg .edge-thickness-thick{stroke-width:3.5px;}#mermaid-mrkqutec-my-svg .edge-pattern-solid{stroke-dasharray:0;}#mermaid-mrkqutec-my-svg .edge-thickness-invisible{stroke-width:0;fill:none;}#mermaid-mrkqutec-my-svg .edge-pattern-dashed{stroke-dasharray:3;}#mermaid-mrkqutec-my-svg .edge-pattern-dotted{stroke-dasharray:2;}#mermaid-mrkqutec-my-svg .marker{fill:#D97757;stroke:#D97757;}#mermaid-mrkqutec-my-svg .marker.cross{stroke:#D97757;}#mermaid-mrkqutec-my-svg svg{font-family:ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;font-size:16px;}#mermaid-mrkqutec-my-svg p{margin:0;}#mermaid-mrkqutec-my-svg .label{font-family:ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;color:#141413;}#mermaid-mrkqutec-my-svg .cluster-label text{fill:#05060a;}#mermaid-mrkqutec-my-svg .cluster-label span{color:#05060a;}#mermaid-mrkqutec-my-svg .cluster-label span p{background-color:transparent;}#mermaid-mrkqutec-my-svg .label text,#mermaid-mrkqutec-my-svg span{fill:#141413;color:#141413;}#mermaid-mrkqutec-my-svg .node rect,#mermaid-mrkqutec-my-svg .node circle,#mermaid-mrkqutec-my-svg .node ellipse,#mermaid-mrkqutec-my-svg .node polygon,#mermaid-mrkqutec-my-svg .node path{fill:#FFFFFF;stroke:#E3DACC;stroke-width:1px;}#mermaid-mrkqutec-my-svg .rough-node .label text,#mermaid-mrkqutec-my-svg .node .label text,#mermaid-mrkqutec-my-svg .image-shape .label,#mermaid-mrkqutec-my-svg .icon-shape .label{text-anchor:middle;}#mermaid-mrkqutec-my-svg .node .katex path{fill:#000;stroke:#000;stroke-width:1px;}#mermaid-mrkqutec-my-svg .rough-node .label,#mermaid-mrkqutec-my-svg .node .label,#mermaid-mrkqutec-my-svg .image-shape .label,#mermaid-mrkqutec-my-svg .icon-shape .label{text-align:center;}#mermaid-mrkqutec-my-svg .node.clickable{cursor:pointer;}#mermaid-mrkqutec-my-svg .root .anchor path{fill:#D97757!important;stroke-width:0;stroke:#D97757;}#mermaid-mrkqutec-my-svg .arrowheadPath{fill:rgba(255, 255, 255, 0);}#mermaid-mrkqutec-my-svg .edgePath .path{stroke:#D97757;stroke-width:1px;}#mermaid-mrkqutec-my-svg .flowchart-link{stroke:#D97757;fill:none;}#mermaid-mrkqutec-my-svg .edgeLabel{background-color:#F0EEE6;text-align:center;}#mermaid-mrkqutec-my-svg .edgeLabel p{background-color:#F0EEE6;}#mermaid-mrkqutec-my-svg .edgeLabel rect{opacity:0.5;background-color:#F0EEE6;fill:#F0EEE6;}#mermaid-mrkqutec-my-svg .labelBkg{background-color:rgba(240, 238, 230, 0.5);}#mermaid-mrkqutec-my-svg .cluster rect{fill:#FAF9F5;stroke:hsl(48, 0%, 87.0588235294%);stroke-width:1px;}#mermaid-mrkqutec-my-svg .cluster text{fill:#05060a;}#mermaid-mrkqutec-my-svg .cluster span{color:#05060a;}#mermaid-mrkqutec-my-svg div.mermaidTooltip{position:absolute;text-align:center;max-width:200px;padding:2px;font-family:ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;font-size:12px;background:#FAF9F5;border:1px solid hsl(48, 0%, 87.0588235294%);border-radius:2px;pointer-events:none;z-index:100;}#mermaid-mrkqutec-my-svg .flowchartTitleText{text-anchor:middle;font-size:18px;fill:#141413;}#mermaid-mrkqutec-my-svg rect.text{fill:none;stroke-width:0;}#mermaid-mrkqutec-my-svg .icon-shape,#mermaid-mrkqutec-my-svg .image-shape{background-color:#F0EEE6;text-align:center;}#mermaid-mrkqutec-my-svg .icon-shape p,#mermaid-mrkqutec-my-svg .image-shape p{background-color:#F0EEE6;padding:2px;}#mermaid-mrkqutec-my-svg .icon-shape .label rect,#mermaid-mrkqutec-my-svg .image-shape .label rect{opacity:0.5;background-color:#F0EEE6;fill:#F0EEE6;}#mermaid-mrkqutec-my-svg .label-icon{display:inline-block;height:1em;overflow:visible;vertical-align:-0.125em;}#mermaid-mrkqutec-my-svg .node .label-icon path{fill:currentColor;stroke:revert;stroke-width:revert;}#mermaid-mrkqutec-my-svg .node .neo-node{stroke:#E3DACC;}#mermaid-mrkqutec-my-svg [data-look="neo"].node rect,#mermaid-mrkqutec-my-svg [data-look="neo"].cluster rect,#mermaid-mrkqutec-my-svg [data-look="neo"].node polygon{stroke:url(#mermaid-mrkqutec-my-svg-gradient);filter:drop-shadow( 1px 2px 2px rgba(185,185,185,1));}#mermaid-mrkqutec-my-svg [data-look="neo"].swimlane.cluster rect{filter:none;}#mermaid-mrkqutec-my-svg [data-look="neo"].node path{stroke:url(#mermaid-mrkqutec-my-svg-gradient);stroke-width:1px;}#mermaid-mrkqutec-my-svg [data-look="neo"].node .outer-path{filter:drop-shadow( 1px 2px 2px rgba(185,185,185,1));}#mermaid-mrkqutec-my-svg [data-look="neo"].node .neo-line path{stroke:#E3DACC;filter:none;}#mermaid-mrkqutec-my-svg [data-look="neo"].node circle{stroke:url(#mermaid-mrkqutec-my-svg-gradient);filter:drop-shadow( 1px 2px 2px rgba(185,185,185,1));}#mermaid-mrkqutec-my-svg [data-look="neo"].node circle .state-start{fill:#000000;}#mermaid-mrkqutec-my-svg [data-look="neo"].icon-shape .icon{fill:url(#mermaid-mrkqutec-my-svg-gradient);filter:drop-shadow( 1px 2px 2px rgba(185,185,185,1));}#mermaid-mrkqutec-my-svg [data-look="neo"].icon-shape .icon-neo path{stroke:url(#mermaid-mrkqutec-my-svg-gradient);filter:drop-shadow( 1px 2px 2px rgba(185,185,185,1));}#mermaid-mrkqutec-my-svg :root{--mermaid-font-family:"trebuchet ms",verdana,arial,sans-serif;}</style><g><marker id="mermaid-mrkqutec-my-svg_flowchart-v2-pointEnd" class="marker flowchart-v2" viewBox="0 0 10 10" refX="5" refY="5" markerUnits="userSpaceOnUse" markerWidth="8" markerHeight="8" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" class="arrowMarkerPath" style="stroke-width: 1; stroke-dasharray: 1, 0;"/></marker><marker id="mermaid-mrkqutec-my-svg_flowchart-v2-pointStart" class="marker flowchart-v2" viewBox="0 0 10 10" refX="4.5" refY="5" markerUnits="userSpaceOnUse" markerWidth="8" markerHeight="8" orient="auto"><path d="M 0 5 L 10 10 L 10 0 z" class="arrowMarkerPath" style="stroke-width: 1; stroke-dasharray: 1, 0;"/></marker><marker id="mermaid-mrkqutec-my-svg_flowchart-v2-pointEnd-margin" class="marker flowchart-v2" viewBox="0 0 11.5 14" refX="11.5" refY="7" markerUnits="userSpaceOnUse" markerWidth="10.5" markerHeight="14" orient="auto"><path d="M 0 0 L 11.5 7 L 0 14 z" class="arrowMarkerPath" style="stroke-width: 0; stroke-dasharray: 1, 0;"/></marker><marker id="mermaid-mrkqutec-my-svg_flowchart-v2-pointStart-margin" class="marker flowchart-v2" viewBox="0 0 11.5 14" refX="1" refY="7" markerUnits="userSpaceOnUse" markerWidth="11.5" markerHeight="14" orient="auto"><polygon points="0,7 11.5,14 11.5,0" class="arrowMarkerPath" style="stroke-width: 0; stroke-dasharray: 1, 0;"/></marker><marker id="mermaid-mrkqutec-my-svg_flowchart-v2-circleEnd" class="marker flowchart-v2" viewBox="0 0 10 10" refX="11" refY="5" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" orient="auto"><circle cx="5" cy="5" r="5" class="arrowMarkerPath" style="stroke-width: 1; stroke-dasharray: 1, 0;"/></marker><marker id="mermaid-mrkqutec-my-svg_flowchart-v2-circleStart" class="marker flowchart-v2" viewBox="0 0 10 10" refX="-1" refY="5" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" orient="auto"><circle cx="5" cy="5" r="5" class="arrowMarkerPath" style="stroke-width: 1; stroke-dasharray: 1, 0;"/></marker><marker id="mermaid-mrkqutec-my-svg_flowchart-v2-circleEnd-margin" class="marker flowchart-v2" viewBox="0 0 10 10" refY="5" refX="12.25" markerUnits="userSpaceOnUse" markerWidth="14" markerHeight="14" orient="auto"><circle cx="5" cy="5" r="5" class="arrowMarkerPath" style="stroke-width: 0; stroke-dasharray: 1, 0;"/></marker><marker id="mermaid-mrkqutec-my-svg_flowchart-v2-circleStart-margin" class="marker flowchart-v2" viewBox="0 0 10 10" refX="-2" refY="5" markerUnits="userSpaceOnUse" markerWidth="14" markerHeight="14" orient="auto"><circle cx="5" cy="5" r="5" class="arrowMarkerPath" style="stroke-width: 0; stroke-dasharray: 1, 0;"/></marker><marker id="mermaid-mrkqutec-my-svg_flowchart-v2-crossEnd" class="marker cross flowchart-v2" viewBox="0 0 11 11" refX="12" refY="5.2" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" orient="auto"><path d="M 1,1 l 9,9 M 10,1 l -9,9" class="arrowMarkerPath" style="stroke-width: 2; stroke-dasharray: 1, 0;"/></marker><marker id="mermaid-mrkqutec-my-svg_flowchart-v2-crossStart" class="marker cross flowchart-v2" viewBox="0 0 11 11" refX="-1" refY="5.2" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" orient="auto"><path d="M 1,1 l 9,9 M 10,1 l -9,9" class="arrowMarkerPath" style="stroke-width: 2; stroke-dasharray: 1, 0;"/></marker><marker id="mermaid-mrkqutec-my-svg_flowchart-v2-crossEnd-margin" class="marker cross flowchart-v2" viewBox="0 0 15 15" refX="17.7" refY="7.5" markerUnits="userSpaceOnUse" markerWidth="12" markerHeight="12" orient="auto"><path d="M 1,1 L 14,14 M 1,14 L 14,1" class="arrowMarkerPath" style="stroke-width: 2.5;"/></marker><marker id="mermaid-mrkqutec-my-svg_flowchart-v2-crossStart-margin" class="marker cross flowchart-v2" viewBox="0 0 15 15" refX="-3.5" refY="7.5" markerUnits="userSpaceOnUse" markerWidth="12" markerHeight="12" orient="auto"><path d="M 1,1 L 14,14 M 1,14 L 14,1" class="arrowMarkerPath" style="stroke-width: 2.5; stroke-dasharray: 1, 0;"/></marker><g class="root"><g class="clusters"/><g class="edgePaths"><path d="M105.148,86L105.148,90.167C105.148,94.333,105.148,102.667,105.148,110.333C105.148,118,105.148,125,105.148,128.5L105.148,132" id="mermaid-mrkqutec-my-svg-L_UseCase_Contract_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" data-edge="true" data-et="edge" data-id="mermaid-mrkqutec-L_UseCase_Contract_0" data-points="W3sieCI6MTA1LjE0ODQzNzUsInkiOjg2fSx7IngiOjEwNS4xNDg0Mzc1LCJ5IjoxMTF9LHsieCI6MTA1LjE0ODQzNzUsInkiOjEzNn1d" data-look="classic" marker-end="url(#mermaid-mrkqutec-my-svg_flowchart-v2-pointEnd)"/><path d="M105.148,214L105.148,218.167C105.148,222.333,105.148,230.667,105.148,238.333C105.148,246,105.148,253,105.148,256.5L105.148,260" id="mermaid-mrkqutec-my-svg-L_Contract_Adapter_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" data-edge="true" data-et="edge" data-id="mermaid-mrkqutec-L_Contract_Adapter_0" data-points="W3sieCI6MTA1LjE0ODQzNzUsInkiOjIxNH0seyJ4IjoxMDUuMTQ4NDM3NSwieSI6MjM5fSx7IngiOjEwNS4xNDg0Mzc1LCJ5IjoyNjR9XQ==" data-look="classic" marker-end="url(#mermaid-mrkqutec-my-svg_flowchart-v2-pointEnd)"/><path d="M105.148,342L105.148,346.167C105.148,350.333,105.148,358.667,105.148,366.333C105.148,374,105.148,381,105.148,384.5L105.148,388" id="mermaid-mrkqutec-my-svg-L_Adapter_Outside_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" data-edge="true" data-et="edge" data-id="mermaid-mrkqutec-L_Adapter_Outside_0" data-points="W3sieCI6MTA1LjE0ODQzNzUsInkiOjM0Mn0seyJ4IjoxMDUuMTQ4NDM3NSwieSI6MzY3fSx7IngiOjEwNS4xNDg0Mzc1LCJ5IjozOTJ9XQ==" data-look="classic" marker-end="url(#mermaid-mrkqutec-my-svg_flowchart-v2-pointEnd)"/></g><g class="edgeLabels"><g class="edgeLabel"><g class="label" data-id="mermaid-mrkqutec-L_UseCase_Contract_0" transform="translate(0, 0)"><text y="-10.1" text-anchor="middle"><tspan class="text-outer-tspan row" x="0" y="-0.1em" dy="1.1em" text-anchor="middle"/></text></g></g><g><rect class="background" style="stroke: none"/></g><g class="edgeLabel"><g class="label" data-id="mermaid-mrkqutec-L_Contract_Adapter_0" transform="translate(0, 0)"><text y="-10.1" text-anchor="middle"><tspan class="text-outer-tspan row" x="0" y="-0.1em" dy="1.1em" text-anchor="middle"/></text></g></g><g><rect class="background" style="stroke: none"/></g><g class="edgeLabel"><g class="label" data-id="mermaid-mrkqutec-L_Adapter_Outside_0" transform="translate(0, 0)"><text y="-10.1" text-anchor="middle"><tspan class="text-outer-tspan row" x="0" y="-0.1em" dy="1.1em" text-anchor="middle"/></text></g></g><g><rect class="background" style="stroke: none"/></g></g><g class="nodes"><g class="node default" id="mermaid-mrkqutec-my-svg-flowchart-UseCase-0" data-look="classic" transform="translate(105.1484375, 47)"><rect class="basic label-container" x="-69.6953125" y="-39" width="139.390625" height="78"/><g class="label" transform="translate(-39.6953125, -24)"><rect/><foreignObject width="79.390625" height="48"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="nodeLabel"><p>Use case<br />只說要什麼</p></span></div></foreignObject></g></g><g class="node default" id="mermaid-mrkqutec-my-svg-flowchart-Contract-1" data-look="classic" transform="translate(105.1484375, 175)"><rect class="basic label-container" x="-89.5625" y="-39" width="179.125" height="78"/><g class="label" transform="translate(-59.5625, -24)"><rect/><foreignObject width="119.125" height="48"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="nodeLabel"><p>Service contract<br />承諾能做什麼</p></span></div></foreignObject></g></g><g class="node default" id="mermaid-mrkqutec-my-svg-flowchart-Adapter-3" data-look="classic" transform="translate(105.1484375, 303)"><rect class="basic label-container" x="-93.359375" y="-39" width="186.71875" height="78"/><g class="label" transform="translate(-63.359375, -24)"><rect/><foreignObject width="126.71875" height="48"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="nodeLabel"><p>Concrete adapter<br />真的去做</p></span></div></foreignObject></g></g><g class="node default" id="mermaid-mrkqutec-my-svg-flowchart-Outside-5" data-look="classic" transform="translate(105.1484375, 431)"><rect class="basic label-container" x="-97.1484375" y="-39" width="194.296875" height="78"/><g class="label" transform="translate(-67.1484375, -24)"><rect/><foreignObject width="134.296875" height="48"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="nodeLabel"><p>外部世界<br />Git · AI · filesystem</p></span></div></foreignObject></g></g></g></g></g><defs><filter id="mermaid-mrkqutec-my-svg-drop-shadow" height="130%" width="130%"><feDropShadow dx="4" dy="4" stdDeviation="0" flood-opacity="0.06" flood-color="#000000"/></filter></defs><defs><filter id="mermaid-mrkqutec-my-svg-drop-shadow-small" height="150%" width="150%"><feDropShadow dx="2" dy="2" stdDeviation="0" flood-opacity="0.06" flood-color="#000000"/></filter></defs><linearGradient id="mermaid-mrkqutec-my-svg-gradient" gradientUnits="objectBoundingBox" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" stop-color="#E3DACC" stop-opacity="1"/><stop offset="100%" stop-color="hsl(48, 0%, 82.1568627451%)" stop-opacity="1"/></linearGradient></svg>
+  </div>
+  <figcaption>每一層只知道下一層公開的承諾，不需要知道更底層怎麼完成工作。</figcaption>
+</figure>
+        </div>
+
+        <div class="prose">
+          <p>
+            例如 <code>run-review</code> 只要說「取得變更、送去 review、整理結果」。它不需要知道 Git 是透過哪個 command 執行，也不需要知道 Codex 的參數怎麼拼。
+          </p>
+          <p>
+            這就是 module boundary 的價值：上層看得見「能做什麼」，看不見「底層怎麼做」。當外部工具換掉時，改的是 adapter，不是整條工作流程。
+          </p>
+        </div>
+      </section>
+
+      <section id="t3code">
+        <div class="section-heading">
+          <p class="section-no">03 · T3 Code</p>
+          <div>
+            <h2>T3 Code 有兩個世代同時存在</h2>
+            <p class="section-intro">
+              讀 repository 時容易困惑，是因為舊的 Services/Layers 分層仍在，但新的內部規範已經偏向「一個能力、一個主要 module」。
+            </p>
+          </div>
+        </div>
+
+        <div class="comparison">
+          <article class="comparison-card">
+            <span class="status">舊結構仍可看到</span>
+            <h3>按技術角色分資料夾</h3>
+            <p>先進 Services 找契約，再去 Layers 找實作。理解一個能力時常要來回跳檔。</p>
+            <pre><span class="label">Directory</span><code>provider/
+├── Services/
+│   └── ProviderAdapter.ts
+└── Layers/
+    └── CodexAdapter.ts</code></pre>
+          </article>
+
+          <div class="comparison-arrow" aria-hidden="true">→</div>
+
+          <article class="comparison-card recommended">
+            <span class="status">新的建議方向</span>
+            <h3>按「能力」聚在一起</h3>
+            <p>契約、建立方式與預設 layer 放在同一個 canonical module，找一個地方就看得懂。</p>
+            <pre><span class="label">Directory</span><code>server/
+└── processRunner.ts
+    ├── Service contract
+    ├── make implementation
+    └── default layer</code></pre>
+          </article>
+        </div>
+
+        <div class="prose">
+          <div class="note warm">
+            <strong>所以不要照著目前的資料夾逐字複製。</strong>
+            <span>T3 Code 本身正在演進。值得仿照的是它最新規範中的責任安排，不是每一個歷史路徑。</span>
+          </div>
+          <p>
+            它的 <code>ProcessRunner</code> 是最清楚的例子：同一個檔案包含「我提供什麼能力」、「預設怎麼建立」和「怎麼交給 Effect 環境」。這很適合只有一種正式實作的基礎能力。
+          </p>
+          <p>
+            但 provider 不一樣。T3 Code 真的支援 Codex、Claude、Cursor、OpenCode 等多種執行方式，所以保留共同的 <code>ProviderAdapter</code>，再讓各 provider 有自己的 adapter，是合理的拆分。
+          </p>
+        </div>
+      </section>
+
+      <section id="choices">
+        <div class="section-heading">
+          <p class="section-no">04 · Decision rule</p>
+          <div>
+            <h2>什麼時候放一起，什麼時候才拆 Adapter？</h2>
+            <p class="section-intro">
+              不要先問「業界是不是都叫 Live Adapter」。先問一個更實際的問題：現在真的有幾種正式做法？
+            </p>
+          </div>
+        </div>
+
+        <div class="choice-grid">
+          <article class="choice-card">
+            <h3><span aria-hidden="true">①</span> 只有一種正式做法</h3>
+            <p>把 contract、implementation、layer 放在同一個 module。檔名直接說明能力。</p>
+            <ul>
+              <li><code>platform/command-runner.ts</code></li>
+              <li><code>git/git-service.ts</code></li>
+              <li>對外匯出 <code>CommandRunner.layer</code></li>
+            </ul>
+          </article>
+          <article class="choice-card">
+            <h3><span aria-hidden="true">②</span> 有多種正式做法</h3>
+            <p>共同 contract 獨立出來，各外部系統用具名 adapter。名稱要讓人一眼知道接的是誰。</p>
+            <ul>
+              <li><code>engines/review-engine.ts</code></li>
+              <li><code>engines/codex-review-engine.ts</code></li>
+              <li><code>engines/anthropic-review-engine.ts</code></li>
+            </ul>
+          </article>
+        </div>
+
+        <div class="prose">
+          <div class="note">
+            <strong>Fake 不等於第二種 production implementation。</strong>
+            <span>測試用 fake 可以放在測試附近；不要只因為測試需要替身，就提早建立一整套 adapters 架構。</span>
+          </div>
+          <p>
+            「Adapter」是角色名稱：它把我們系統的語言翻成外部系統聽得懂的語言。真正有辨識力的檔名通常是 <code>CodexReviewEngine</code> 或 <code>GitCommandRunner</code>，而不是模糊的 <code>LiveAdapter</code>。
+          </p>
+          <p>
+            <strong><code>Live Adapter</code> 不是全業界統一的固定命名。</strong>在 Effect 生態裡，<code>Live</code>
+            常用來表示會連真實外部世界的 production layer；其他團隊可能叫 <code>Default</code>、<code>Production</code>、<code>Node</code>
+            或直接用供應商名稱。比起追求通用術語，讓檔名說清楚「它接到誰」更重要。
+          </p>
+        </div>
+      </section>
+
+      <section id="reviewstuff">
+        <div class="section-heading">
+          <p class="section-no">05 · Our shape</p>
+          <div>
+            <h2>reviewstuff 可以採用的最小版本</h2>
+            <p class="section-intro">
+              目標不是把 repository 變得像 T3 Code，而是借用它最成熟的規則，維持我們現在較小的規模。
+            </p>
+          </div>
+        </div>
+
+        <div class="prose">
+          <pre><span class="label">Proposed directory</span><code>src/
+├── platform/
+│   └── command-runner.ts
+├── git/
+│   └── git-service.ts
+├── engines/
+│   ├── review-engine.ts
+│   ├── codex-review-engine.ts
+│   └── anthropic-review-engine.ts
+├── use-cases/
+│   └── run-review.ts
+└── cli.ts</code></pre>
+
+          <p>
+            這裡的 <code>use-cases</code> 負責「流程」，<code>git</code> 與 <code>platform</code> 提供能力，<code>engines</code> 處理不同 AI provider。最後由 <code>cli.ts</code> 選擇今天要接哪些正式實作。
+          </p>
+
+          <table class="rule-table">
+            <thead>
+              <tr>
+                <th scope="col">東西</th>
+                <th scope="col">建議名稱</th>
+                <th scope="col">為什麼</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td data-label="東西">單一能力的預設 layer</td>
+                <td data-label="建議名稱"><code>CommandRunner.layer</code></td>
+                <td data-label="為什麼">名稱跟著能力走，不必多一個 <code>live.ts</code>。</td>
+              </tr>
+              <tr>
+                <td data-label="東西">特定 provider 的 layer</td>
+                <td data-label="建議名稱"><code>CodexReviewEngine.layer</code></td>
+                <td data-label="為什麼">直接說明它連到哪個外部系統。</td>
+              </tr>
+              <tr>
+                <td data-label="東西">完整正式環境</td>
+                <td data-label="建議名稱"><code>AppLive</code></td>
+                <td data-label="為什麼"><code>Live</code> 在這裡表示「整間店已準備好，可以開門」。</td>
+              </tr>
+              <tr>
+                <td data-label="東西">測試環境</td>
+                <td data-label="建議名稱"><code>TestLayer</code> 或測試內的 <code>layer</code></td>
+                <td data-label="為什麼">清楚表達用途，不冒充另一個 production adapter。</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="warning-grid">
+          <article class="warning-card">
+            <h3>值得仿照</h3>
+            <ul>
+              <li>use case 依賴能力，不依賴外部工具細節。</li>
+              <li>一種正式實作時，集中在一個 canonical module。</li>
+              <li>多 provider 時，才保留 contract 與具名 adapters。</li>
+              <li>在 composition root 決定正式環境。</li>
+            </ul>
+          </article>
+          <article class="warning-card">
+            <h3>不要一起複製</h3>
+            <ul>
+              <li>舊式大寫 <code>Services/</code> 與 <code>Layers/</code> 雙樹。</li>
+              <li>還沒有第二個 provider 就先做 registry。</li>
+              <li>把所有東西都命名成 <code>SomethingLive</code>。</li>
+              <li>讓單一 composition root 長成難以理解的巨型檔案。</li>
+            </ul>
+          </article>
+        </div>
+      </section>
+
+      <section id="adoption">
+        <div class="section-heading">
+          <p class="section-no">06 · Adoption</p>
+          <div>
+            <h2>我們可以怎麼一步一步採用</h2>
+            <p class="section-intro">
+              不需要一次大搬家。先從最沒有爭議的能力開始，每一步都能單獨驗證。
+            </p>
+          </div>
+        </div>
+
+        <div class="prose">
+          <ol class="steps">
+            <li><strong>先整理 CommandRunner。</strong> 把 contract、make、預設 layer 放在同一個 module。</li>
+            <li><strong>再整理 Git 能力。</strong> Git 專屬操作留在 <code>git/</code>，不要讓 use case 拼 shell command。</li>
+            <li><strong>保留 ReviewEngine contract。</strong> 因為 Codex 與 Anthropic 是真正不同的正式實作，值得各有具名 adapter。</li>
+            <li><strong>讓 CLI 只做組裝。</strong> 在入口選擇 <code>AppLive</code>，不要把商業流程寫回 CLI。</li>
+            <li><strong>用 boundary test 守規則。</strong> 確保 use case 不會繞過 contract，直接 import 底層工具。</li>
+          </ol>
+
+          <div class="note">
+            <strong>完成後的判斷標準：</strong>
+            <span>要換 AI provider 時，主要改 engine adapter 與組裝；要改 review 流程時，主要改 use case。兩者不應彼此牽動一大片。</span>
+          </div>
+        </div>
+      </section>
+
+      <section id="sources">
+        <div class="section-heading">
+          <p class="section-no">Sources</p>
+          <div>
+            <h2>研究依據</h2>
+            <p class="section-intro">
+              下列連結固定在同一個 commit，避免未來 repository 變動後，文章和程式碼對不上。
+            </p>
+          </div>
+        </div>
+
+        <div class="prose sources">
+          <ol>
+            <li>
+              <a href="https://github.com/pingdotgg/t3code/blob/c1ec1915fc16f3dc1ec5d47d9a97f6210a574526/docs/architecture/overview.md">T3 Code architecture overview</a>
+              — browser、WebSocket、server orchestration 與 provider 的整體關係。
+            </li>
+            <li>
+              <a href="https://github.com/pingdotgg/t3code/blob/c1ec1915fc16f3dc1ec5d47d9a97f6210a574526/.macroscope/check-run-agents/effect-service-conventions.md">Effect service conventions</a>
+              — single-file canonical module 與命名方向。
+            </li>
+            <li>
+              <a href="https://github.com/pingdotgg/t3code/blob/c1ec1915fc16f3dc1ec5d47d9a97f6210a574526/apps/server/src/processRunner.ts">ProcessRunner</a>
+              — contract、make、layer 放在同一檔案的實例。
+            </li>
+            <li>
+              <a href="https://github.com/pingdotgg/t3code/blob/c1ec1915fc16f3dc1ec5d47d9a97f6210a574526/apps/server/src/provider/Services/ProviderAdapter.ts">ProviderAdapter contract</a>
+              與
+              <a href="https://github.com/pingdotgg/t3code/blob/c1ec1915fc16f3dc1ec5d47d9a97f6210a574526/apps/server/src/provider/Layers/CodexAdapter.ts">Codex adapter</a>
+              — 多個正式 provider 共用契約的例子。
+            </li>
+            <li>
+              <a href="https://github.com/pingdotgg/t3code/blob/c1ec1915fc16f3dc1ec5d47d9a97f6210a574526/apps/server/src/server.ts">Server composition root</a>
+              — <code>*Live</code> 用於完整 production layer graph 的實際命名。
+            </li>
+          </ol>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <div class="page-shell">
+        <p>這份文件描述的是可借鏡的設計原則，不要求 reviewstuff 與 T3 Code 擁有相同規模或資料夾結構。</p>
+      </div>
+    </footer>
+
+    <script>
+      for (const block of document.querySelectorAll("pre")) {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "copy-button";
+        button.textContent = "複製";
+        button.setAttribute("aria-label", "複製這段內容");
+        button.addEventListener("click", async () => {
+          const code = block.querySelector("code");
+          if (!code) return;
+          await navigator.clipboard.writeText(code.textContent ?? "");
+          button.textContent = "已複製";
+          window.setTimeout(() => {
+            button.textContent = "複製";
+          }, 1400);
+        });
+        block.append(button);
+      }
+    </script>
+  </body>
+</html>
