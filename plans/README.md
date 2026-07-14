@@ -195,7 +195,7 @@ Effect 的採用節奏要保守：先建立 runtime entrypoint 和必要 service
 | --- | --- | --- | --- |
 | [x] DONE | 001 | [Project Bootstrap And Bun CLI](./001-project-bootstrap-and-bun-cli.md) | 最小 Bun standalone CLI 可 build/run |
 | [ ] TODO | 002 | [Binary Test Harness](./002-binary-test-harness.md) | 測試直接跑 compiled binary |
-| [ ] TODO | 003 | [Local Install Workflow](./003-local-install-workflow.md) | 本機 `reviewstuff` 指令可用 |
+| [ ] TODO | 003 | [Local CLI Workflow](./003-local-cli-workflow.md) | 可直接執行本機 compiled binary |
 | [ ] TODO | 004 | [Repository Structure Boundaries](./004-repository-structure-boundaries.md) | module 邊界固定 |
 | [ ] TODO | 005 | [Git Diff Review MVP](./005-git-diff-review-mvp.md) | 可 review git diff 並輸出 deterministic report |
 | [ ] TODO | 006 | [Config Profiles](./006-config-profiles-and-prompts.md) | 可用 config/profile 控制 review |

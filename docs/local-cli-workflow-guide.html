@@ -1,0 +1,426 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>本機 CLI 開發流程：直接執行，不修改全域 PATH</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --clay: #d97757;
+      --slate: #141413;
+      --ivory: #faf9f5;
+      --oat: #e3dacc;
+      --gray-100: #f0eee6;
+      --gray-300: #d1cfc5;
+      --gray-500: #87867f;
+      --gray-700: #3d3d3a;
+      --space-sm: 8px;
+      --space-md: 12px;
+      --space-lg: 16px;
+      --space-xl: 24px;
+      --space-2xl: 32px;
+      --space-3xl: 48px;
+      --radius-sm: 4px;
+      --radius-md: 8px;
+      --content-width: 68ch;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      background: var(--ivory);
+      color: var(--slate);
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 16px;
+      font-weight: 430;
+      line-height: 1.55;
+    }
+
+    main {
+      max-width: var(--content-width);
+      margin: 0 auto;
+      padding: var(--space-3xl) var(--space-xl);
+    }
+
+    article { background: transparent; }
+
+    h1 {
+      margin: 0 0 var(--space-lg);
+      font-size: 1.8rem;
+      line-height: 1.18;
+      text-wrap: balance;
+    }
+
+    h2 {
+      margin: var(--space-3xl) 0 var(--space-lg);
+      font-size: 1.22rem;
+      line-height: 1.25;
+    }
+
+    h3 {
+      margin: var(--space-2xl) 0 var(--space-md);
+      font-size: 1rem;
+      line-height: 1.35;
+    }
+
+    p, ul, ol, .deck, .callout, table, pre { max-width: var(--content-width); }
+    p, ul, ol { margin-top: 0; margin-bottom: var(--space-lg); }
+    li + li { margin-top: var(--space-sm); }
+
+    .deck {
+      margin: 0 0 var(--space-2xl);
+      color: var(--gray-700);
+      font-size: 1.05rem;
+    }
+
+    a {
+      color: var(--clay);
+      text-decoration-thickness: 1px;
+      text-underline-offset: 3px;
+    }
+
+    p code, li code, td code, th code {
+      padding: 0.08em 0.28em;
+      border: 1px solid var(--oat);
+      border-radius: var(--radius-sm);
+      background: var(--gray-100);
+      overflow-wrap: anywhere;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.9em;
+    }
+
+    .callout {
+      margin: var(--space-xl) 0;
+      padding: var(--space-lg);
+      border: 1px solid var(--oat);
+      border-left: 4px solid var(--clay);
+      border-radius: var(--radius-sm);
+      background: var(--gray-100);
+    }
+
+    .callout p:last-child { margin-bottom: 0; }
+
+    .table-wrap {
+      width: 100%;
+      margin: var(--space-lg) 0 var(--space-xl);
+      overflow-x: auto;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.94rem;
+    }
+
+    th, td {
+      padding: 10px 12px;
+      border: 1px solid var(--oat);
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th { background: var(--gray-100); }
+
+    pre {
+      position: relative;
+      width: 100%;
+      margin: var(--space-lg) 0 var(--space-xl);
+      border: 1px solid #26241f;
+      border-radius: var(--radius-md);
+      background: #11110f;
+      color: #d8d4ca;
+      overflow: hidden;
+    }
+
+    pre code {
+      display: block;
+      padding: 18px 64px 18px 22px;
+      border: 0;
+      background: transparent;
+      color: inherit;
+      overflow-x: auto;
+      white-space: pre;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.875rem;
+      font-weight: 400;
+      line-height: 1.62;
+      scrollbar-width: none;
+    }
+
+    pre code::-webkit-scrollbar { width: 0; height: 0; }
+    pre .label { display: none; }
+
+    .copy-code {
+      position: absolute;
+      top: 9px;
+      right: 9px;
+      z-index: 1;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 30px;
+      height: 30px;
+      padding: 0;
+      border: 1px solid rgba(250, 249, 245, 0.14);
+      border-radius: var(--radius-sm);
+      background: rgba(250, 249, 245, 0.06);
+      color: rgba(250, 249, 245, 0.72);
+      cursor: pointer;
+    }
+
+    .copy-code:hover, .copy-code:focus-visible {
+      border-color: rgba(250, 249, 245, 0.28);
+      background: rgba(250, 249, 245, 0.12);
+      color: var(--ivory);
+      outline: none;
+    }
+
+    .copy-code.copied {
+      border-color: rgba(143, 184, 106, 0.42);
+      background: rgba(143, 184, 106, 0.14);
+      color: #b8d99a;
+    }
+
+    .copy-code svg {
+      width: 13px;
+      height: 13px;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 1.8;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      pointer-events: none;
+    }
+
+    .code-scrollbar {
+      position: absolute;
+      right: 0;
+      bottom: 0;
+      left: 0;
+      height: 3px;
+      border-radius: 999px;
+      background: rgba(250, 249, 245, 0.1);
+      cursor: pointer;
+    }
+
+    .code-scrollbar.hidden { display: none; }
+    .code-scrollbar-thumb {
+      height: 100%;
+      border-radius: inherit;
+      background: rgba(255, 148, 110, 0.82);
+      transform: translateX(0);
+      cursor: grab;
+    }
+    .code-scrollbar-thumb:active { cursor: grabbing; }
+
+    pre code .k, pre code .o { color: #ff946e; font-weight: 400; }
+    pre code .s { color: #8fb86a; }
+    pre code .n, pre code .p { color: #d8d4ca; }
+    pre code .c { color: #858177; font-style: italic; }
+    pre code .f, pre code .t { color: #cfc6a2; font-weight: 400; }
+    pre.language-shell { background: #11110f; }
+    pre code .sh-command, pre code .sh-prompt { color: #ff946e; font-weight: 400; }
+    pre code .sh-flag, pre code .sh-var { color: #cfc6a2; font-weight: 400; }
+    pre code .sh-string { color: #8fb86a; }
+    pre code .sh-comment { color: #858177; font-style: italic; }
+
+    .sources {
+      margin-top: var(--space-3xl);
+      padding-top: var(--space-xl);
+      border-top: 1px solid var(--oat);
+      color: var(--gray-700);
+      font-size: 0.9rem;
+    }
+
+    @media (max-width: 640px) {
+      body { font-size: 15px; }
+      h1 { font-size: 1.65rem; }
+      main { padding: var(--space-xl); }
+      pre code { font-size: 0.8125rem; line-height: 1.5; }
+      p code, li code, td code { font-size: 0.9em; }
+      table, .deck, .sources { font-size: 0.875rem; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <article>
+      <h1>本機 CLI 開發流程：直接執行，不修改全域 PATH</h1>
+      <p class="deck">reviewstuff 的開發版從專案內直接執行，不寫入使用者的 binary 目錄。這讓本機開發、PATH 與 production 安裝彼此獨立。</p>
+
+      <div class="callout">
+        <p><strong>最短結論：</strong>平常開發使用 <code>bun run cli:local &lt;args&gt;</code>。它直接執行專案內的 compiled binary，不會改變電腦上的全域指令。</p>
+      </div>
+
+      <h2>1. 先理解三個不同範圍</h2>
+      <p>「可以執行一個 CLI」不等於「一定要把它安裝到全域」。實務上常見的範圍有三種：</p>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>範圍</th><th>例子</th><th>會不會影響其他 terminal</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>專案內直接執行</td><td><code>./dist/reviewstuff</code></td><td>不會</td></tr>
+            <tr><td>單一 process 的 PATH</td><td><code>PATH="...:$PATH" reviewstuff</code></td><td>不會，只影響這次指令</td></tr>
+            <tr><td>使用者層級安裝</td><td><code>~/.local/bin/reviewstuff</code></td><td>會，之後開啟的 terminal 都可能找到它</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p>開發時只想確認「目前這份程式碼能不能跑」，第一種就足夠。第三種比較接近真正安裝產品，應由 Homebrew、release installer 或其他正式發佈方式負責。</p>
+
+      <h2>2. 現在的日常流程</h2>
+      <p>程式碼改變後，先產生最新的 compiled binary，再透過專案 script 執行：</p>
+
+      <pre class="language-shell"><span class="label">Shell</span><code><span class="sh-command">bun</span> run build
+<span class="sh-command">bun</span> run cli:local <span class="sh-flag">--help</span>
+<span class="sh-command">bun</span> run cli:local <span class="sh-flag">--version</span></code></pre>
+
+      <p><code>package.json</code> 中的設定很單純：</p>
+
+      <pre><span class="label">JSON</span><code>{
+  "scripts": {
+    "cli:local": "./dist/reviewstuff"
+  }
+}</code></pre>
+
+      <p>當你輸入 <code>bun run cli:local --help</code>，Bun 會執行專案內的 <code>dist/reviewstuff</code>，並把 <code>--help</code> 傳給它。這個過程不會搜尋、建立或刪除任何全域指令。</p>
+
+      <h2>3. 為什麼直接執行是預設做法？</h2>
+      <p>日常開發的目標，是確認目前 repository 產生的 binary 能否正確執行。直接指定 <code>dist/reviewstuff</code>，會比要求 shell 透過 PATH 尋找指令更明確。</p>
+
+      <p>這個做法有幾個實際好處：</p>
+      <ul>
+        <li>執行目標明確，不受 PATH 順序影響。</li>
+        <li>不會覆蓋或遮蔽已安裝的 production binary。</li>
+        <li>不會在使用者環境留下需要清理的檔案。</li>
+        <li>不同 shell 與 PATH 設定下的行為一致。</li>
+        <li>測試失敗或中斷後，電腦的全域狀態仍然不變。</li>
+      </ul>
+
+      <p>因此，開發入口只負責「執行這份 repository 的 binary」。正式安裝則交給獨立的 release 流程負責。</p>
+
+      <h2>4. 不同需求應該怎麼驗證？</h2>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>想驗證的事情</th><th>適合的方法</th><th>影響範圍</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>手動試跑目前的 CLI</td><td><code>bun run cli:local &lt;args&gt;</code></td><td>目前 process</td></tr>
+            <tr><td>compiled binary 的輸出與 exit code</td><td>CLI e2e tests</td><td>測試 process</td></tr>
+            <tr><td>shell 能否透過 PATH 找到正式指令名稱</td><td>暫存目錄與單次 PATH</td><td>單一測試指令</td></tr>
+            <tr><td>一般使用者的安裝體驗</td><td>release artifact 與 package-manager 測試</td><td>隔離的安裝環境</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h2>5. 需要測 PATH lookup 時怎麼做？</h2>
+      <p>可以在測試中建立暫存資料夾，並只替單一指令改 PATH。測試結束後，暫存資料夾會被刪除，不會碰到 <code>~/.local/bin</code>：</p>
+
+      <pre class="language-shell"><span class="label">Shell</span><code><span class="sh-var">temp_bin="$(mktemp</span> <span class="sh-flag">-d)"</span>
+<span class="sh-command">trap</span> <span class="sh-string">'rm -rf "$temp_bin"'</span> EXIT
+
+<span class="sh-command">ln</span> <span class="sh-flag">-s</span> <span class="sh-string">"$PWD/dist/reviewstuff"</span> <span class="sh-string">"$temp_bin/reviewstuff"</span>
+<span class="sh-var">PATH="$temp_bin:$PATH"</span> <span class="sh-command">reviewstuff</span> <span class="sh-flag">--help</span></code></pre>
+
+      <p>關鍵是 <code>PATH="$temp_bin:$PATH" reviewstuff --help</code>。這個 PATH 只套用在右邊那一次 <code>reviewstuff</code> 執行，不會改寫 shell 設定，也不會遮蔽之後正常使用的 production 版本。</p>
+
+      <h2>6. Production 安裝應該放在哪裡？</h2>
+      <p>Production 安裝是另一個產品問題，通常還包含版本、更新、checksum、codesign、uninstall 和發佈來源。它不應依賴開發 repository 裡的一條 symlink。</p>
+
+      <p>對 reviewstuff 而言，未來可以由 release artifact 與 Homebrew workflow 負責。這樣使用者安裝的 <code>reviewstuff</code> 有明確版本，而開發者執行的則永遠是目前 repository 的 <code>dist/reviewstuff</code>。</p>
+
+      <h2>7. 最後的判斷規則</h2>
+      <ul>
+        <li>只想跑目前程式碼：用 <code>bun run cli:local &lt;args&gt;</code>。</li>
+        <li>想確認 binary 本身：用現有的 CLI e2e tests。</li>
+        <li>想測 PATH lookup：在測試內使用暫存目錄與 process-scoped PATH。</li>
+        <li>想讓一般使用者安裝：建立正式 release 與 package-manager 流程。</li>
+        <li>只有需要長期從任意資料夾啟動開發版時，才評估使用者層級的安裝方式。</li>
+      </ul>
+
+      <div class="callout">
+        <p><strong>設計原則：</strong>開發工具越少修改使用者環境，越不容易和 production 安裝互相干擾。沒有具體需求時，直接執行專案內 binary 就是最穩定的預設。</p>
+      </div>
+
+      <section class="sources" aria-label="專案對照">
+        <h2>專案中的對照位置</h2>
+        <ul>
+          <li><code>package.json</code>：定義 <code>cli:local</code>。</li>
+          <li><code>test/e2e/cli.e2e.test.ts</code>：直接驗證 compiled binary。</li>
+          <li><code>plans/003-local-cli-workflow.md</code>：記錄這套開發與安裝分離的決策。</li>
+        </ul>
+      </section>
+    </article>
+  </main>
+  <script>
+    const copyIcon = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="11" height="11" rx="2"></rect><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"></path></svg>';
+    const checkIcon = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"></path></svg>';
+
+    for (const pre of document.querySelectorAll('pre')) {
+      const code = pre.querySelector('code');
+      if (!code) continue;
+
+      const button = document.createElement('button');
+      button.className = 'copy-code';
+      button.type = 'button';
+      button.setAttribute('aria-label', '複製程式碼');
+      button.innerHTML = copyIcon;
+      button.addEventListener('click', async () => {
+        const value = code.textContent || '';
+        try {
+          await navigator.clipboard.writeText(value);
+        } catch {
+          const textarea = document.createElement('textarea');
+          textarea.value = value;
+          textarea.style.position = 'fixed';
+          textarea.style.opacity = '0';
+          document.body.appendChild(textarea);
+          textarea.select();
+          document.execCommand('copy');
+          textarea.remove();
+        }
+        button.classList.add('copied');
+        button.innerHTML = checkIcon;
+        window.setTimeout(() => {
+          button.classList.remove('copied');
+          button.innerHTML = copyIcon;
+        }, 1400);
+      });
+      pre.appendChild(button);
+
+      const track = document.createElement('div');
+      track.className = 'code-scrollbar';
+      const thumb = document.createElement('div');
+      thumb.className = 'code-scrollbar-thumb';
+      track.appendChild(thumb);
+      pre.appendChild(track);
+
+      const sync = () => {
+        const visibleRatio = Math.min(1, code.clientWidth / code.scrollWidth);
+        const trackWidth = track.clientWidth;
+        const thumbWidth = trackWidth * visibleRatio;
+        const maxScroll = Math.max(1, code.scrollWidth - code.clientWidth);
+        const maxTravel = Math.max(0, trackWidth - thumbWidth);
+        thumb.style.width = `${thumbWidth}px`;
+        thumb.style.transform = `translateX(${(code.scrollLeft / maxScroll) * maxTravel}px)`;
+        track.classList.toggle('hidden', visibleRatio === 1);
+      };
+
+      code.addEventListener('scroll', sync);
+      window.addEventListener('resize', sync);
+      track.addEventListener('click', (event) => {
+        if (event.target === thumb) return;
+        const rect = track.getBoundingClientRect();
+        const ratio = (event.clientX - rect.left) / rect.width;
+        code.scrollLeft = ratio * (code.scrollWidth - code.clientWidth);
+      });
+      requestAnimationFrame(sync);
+    }
+  </script>
+</body>
+</html>
