@@ -18,6 +18,7 @@
 
 - `src/storage/schema.ts`
 - `src/storage/service.ts`
+- `src/storage/live.ts`
 - session id / latest lookup
 - atomic JSON writes
 - `.reviewstuff/` gitignore guidance
@@ -33,10 +34,12 @@
 ## Implementation Steps
 
 1. 定義 `ReviewSessionV1`、`StoredFindingV1`。
-2. 保存 `session.json`、`git.json`、`diff.json`、`findings/*.json`。
+2. 定義不暴露 filesystem/path types 的 `StorageService` contract；live adapter 保存
+   `session.json`、`git.json`、`diff.json`、`findings/*.json`，fake adapter 供
+   use-case tests 使用。
 3. 所有寫入使用 temp file + rename。
 4. 路徑限制在 repo root。
-5. review command 完成後寫 session。
+5. review use-case 透過 `StorageService` 寫 session；command 只 render 結果。
 6. session metadata 記錄 createdAt、schemaVersion、redaction status、provider/model/scope summary。
 7. 預留 safe cleanup API，供 029 data retention policy 使用。
 
@@ -54,6 +57,7 @@ find .reviewstuff/sessions -type f
 - partial reviewer failure 仍保存成功 findings。
 - storage schema 有 version。
 - session storage 不保存 secrets；若 request/prompt 尚未有完整 redaction policy，metadata 要標示 redaction status。
+- review use-case 不直接依賴 filesystem/path/platform service。
 
 ## Learning Focus
 

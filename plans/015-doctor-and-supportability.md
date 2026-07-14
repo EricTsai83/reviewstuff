@@ -37,7 +37,9 @@ reviewstuff doctor --json
 ## Implementation Steps
 
 1. 定義 `DoctorReportV1`。
-2. 每個 check 有 id、status、message、remediation。
+2. 每個 semantic service 提供 typed health contribution；doctor use-case 聚合 checks，
+   每個 check 有 id、status、message、remediation，不直接取得 filesystem、network、
+   `CommandRunner` 或 provider SDK。
 3. AI credentials 缺失不阻止 doctor 執行。
 4. doctor 顯示 install channel：dev build、local symlink、npm、Homebrew、direct tarball、unknown。
 5. doctor 顯示 update policy 狀態；update manifest reachability 可 warn，不阻斷 local-only 使用。
@@ -71,6 +73,7 @@ cloud provider configured without privacy policy docs
 - warnings 不造成 non-zero exit；fail 才 exit 1。
 - provider/network checks 有 timeout，不會卡住 doctor。
 - doctor 可以讓使用者知道 review request 會走 local provider 還是 cloud provider。
+- doctor command 只 render `DoctorReportV1`；環境檢查位於對應 live adapter。
 
 ## Learning Focus
 

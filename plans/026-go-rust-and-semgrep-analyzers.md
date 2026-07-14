@@ -28,9 +28,10 @@
 ## Implementation Steps
 
 1. 擴充 analyzer registry 的 language selection。
-2. 實作 Go adapters 與 fixture tests。
-3. 實作 Rust adapters 與 fixture tests。
-4. 實作 optional Semgrep adapter，預設保守啟用策略。
+2. 透過 017 的 analyzer live adapter 與 `CommandRunner` 實作 Go adapters 和 fixture
+   tests；registry 只暴露 typed operations，不接受 shell string。
+3. 以相同 boundary 實作 Rust adapters 與 fixture tests。
+4. 以相同 boundary 實作 optional Semgrep adapter，預設保守啟用策略。
 5. doctor 顯示每個 analyzer 的 available/configured/skipped 狀態。
 
 ## Verification
@@ -48,6 +49,7 @@ AI_REVIEW_FAKE_ENGINE=1 ./dist/reviewstuff review --json
 - analyzer timeout/output cap 可測。
 - unrelated language changes 不觸發昂貴 analyzer。
 - diagnostics 在 session/report 中可追蹤。
+- analyzers 不直接使用 `@effect/platform/Command`、`Bun.spawn` 或 shell。
 
 ## Learning Focus
 

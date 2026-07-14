@@ -17,7 +17,8 @@
 - `ToolDiagnosticV1`
 - TypeScript first-pass adapter：`tsc --noEmit`
 - timeout/concurrency/cache
-- analyzer subprocess 透過 `src/platform/command-runner.ts` 與 `@effect/platform/Command`
+- analyzer live adapter 透過既有 `CommandRunner` service 執行 subprocess；
+  analyzer contract 不暴露 command/platform types
 
 不包含：
 
@@ -44,7 +45,9 @@ AI_REVIEW_FAKE_ENGINE=1 ./dist/reviewstuff review --json
 - analyzer output 正規化成 `ToolDiagnosticV1`。
 - missing tool 是 warning，不是 crash。
 - analyzer 有 timeout 和 output limit。
-- analyzer 不直接呼叫 `child_process`、`Bun.spawn` 或 shell string。
+- use-case/agent 只依賴 analyzer semantic service，不直接依賴 `CommandRunner`。
+- analyzer 不直接呼叫 `@effect/platform/Command`、`child_process`、`Bun.spawn`
+  或 shell string。
 
 ## Learning Focus
 

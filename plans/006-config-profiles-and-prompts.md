@@ -14,6 +14,7 @@
 
 - `src/config/schema.ts`
 - `src/config/service.ts`
+- `src/config/live.ts`
 - versioned config schema
 - profiles：`quick`、`standard`
 - default engine/provider/model selection
@@ -30,10 +31,12 @@
 ## Implementation Steps
 
 1. 定義 versioned config schema。
-2. 實作 config loading 與 validation。
+2. 定義不暴露 filesystem/platform types 的 `ConfigService` contract；live adapter
+   透過 platform filesystem 實作 loading，fake adapter 供 use-case tests 使用。
 3. 建立 `quick`、`standard` 兩個 profile。
-4. review use-case 根據 config/profile 決定 engine/provider/model、timeout/concurrency 與 fake reviewer behavior。
-5. config 錯誤轉成 usage error，不印 stack trace。
+4. review use-case 只透過 `ConfigService` 根據 config/profile 決定
+   engine/provider/model、timeout/concurrency 與 fake reviewer behavior。
+5. command/output layer 將 typed config error render 成 usage error，不印 stack trace。
 
 ## Config Shape
 
@@ -69,6 +72,7 @@ bun run test
 - 無 config 時使用安全預設值。
 - config error 有清楚 message。
 - profile 與 engine/provider/model resolution 可單元測試。
+- review use-case 不直接依賴 filesystem、platform service 或 renderer。
 
 ## Learning Focus
 

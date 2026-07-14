@@ -22,6 +22,7 @@ reviewstuff update --check
 - npm packages：darwin-arm64、darwin-x64、linux-x64、linux-arm64
 - unsupported platform error
 - update manifest
+- `UpdateService` contract、fake 與 live adapter
 - `reviewstuff update --check`
 - install type detection
 - update guidance per install channel
@@ -38,8 +39,9 @@ reviewstuff update --check
 1. 擴充 release manifest 多平台 artifacts。
 2. 建立 npm platform packages。
 3. npm meta package 做 platform selection。
-4. 實作 install type detection。
-5. 實作 update check。
+4. 在 `UpdateService` live adapter 實作 install type detection 與 network-backed update
+   check；contract 不暴露 filesystem/network/platform types，fake 供 use-case tests 使用。
+5. update use-case 只依賴 `UpdateService`，command 只 render typed result。
 6. 根據 install channel 顯示更新建議：npm 用 package manager、Homebrew 用 brew、direct tarball 指向 034。
 
 ## Verification
@@ -58,6 +60,7 @@ reviewstuff update --check
 - unsupported platform 有清楚錯誤。
 - update check 不會靜默修改使用者系統。
 - install channel detection 可被 doctor 使用。
+- update/doctor use-cases 不直接依賴 network、filesystem 或 platform service。
 
 ## Learning Focus
 

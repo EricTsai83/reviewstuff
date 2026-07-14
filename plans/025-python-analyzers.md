@@ -28,7 +28,9 @@
 ## Implementation Steps
 
 1. 擴充 analyzer registry，支援 language-specific analyzer group。
-2. 為 Python tools 定義 command、timeout、output cap、parser。
+2. 為 Python tools 定義 typed analyzer operation、timeout、output cap、parser；沿用
+   017 的 analyzer live adapter 與 `CommandRunner`，不得讓 use-case/agent 傳入
+   executable 或 shell string。
 3. missing tool 回 warning diagnostic。
 4. analyzer results merge into `ReviewRequestV1`。
 5. doctor 顯示 Python analyzer 可用性。
@@ -47,6 +49,7 @@ AI_REVIEW_FAKE_ENGINE=1 ./dist/reviewstuff review --json
 - missing optional tool 不 crash。
 - analyzer timeout/output cap 可測。
 - diagnostics 在 session/report 中可追蹤。
+- Python analyzer 不直接使用 `@effect/platform/Command`、`Bun.spawn` 或 shell。
 
 ## Learning Focus
 

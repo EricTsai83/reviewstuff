@@ -46,6 +46,10 @@ reviewstuff review --engine openai --model <model-id> --json
 
 provider adapter 只能接收 normalized `ReviewRequestV1`，不得直接讀 git 或 filesystem。
 
+`src/review/` 在這個 plan 才首次建立，只包含 pure prompt construction、review
+policy 與 request normalization；application flow 留在 `use-cases/`，provider IO 留在
+`engines/`。`review/` 不得依賴 platform service、provider SDK 或 runtime API。
+
 Anthropic 與 Codex CLI/local provider 留到 009，避免第一個 real-provider plan 同時學 cloud SDK、local subprocess provider、provider-specific error mapping。
 
 ## Model Selection

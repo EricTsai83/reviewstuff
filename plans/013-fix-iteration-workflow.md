@@ -17,6 +17,7 @@ reviewstuff fix --dry-run
 包含：
 
 - fix attempt schema
+- `FixWorkspace` 與 `GateRunner` semantic service contracts
 - temp worktree
 - gates validation
 - preimage hash check
@@ -34,7 +35,9 @@ reviewstuff fix --dry-run
 1. 從 session 載入 open findings。
 2. 產生 fix prompt。
 3. engine 回傳候選 file edits。
-4. 在 temp worktree 套用並跑 gates。
+4. fix use-case 透過 `FixWorkspace` 在 temp worktree 套用，並透過 `GateRunner`
+   執行 allowlisted gates；只有 live adapters 可依賴 filesystem、Git service 或
+   `CommandRunner`。
 5. 保存 fix attempt。
 6. dry-run 輸出會改哪些檔案、哪些 gates 通過或失敗。
 
@@ -50,6 +53,7 @@ AI_REVIEW_FAKE_ENGINE=1 ./dist/reviewstuff fix --dry-run
 - dry-run 不改 source files。
 - fix attempt 被保存。
 - preimage hash mismatch 會在 dry-run report 中標示，不寫回。
+- fix use-case 不直接依賴 filesystem、`CommandRunner` 或 renderer。
 
 ## Learning Focus
 

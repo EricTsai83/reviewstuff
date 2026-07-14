@@ -22,8 +22,9 @@
 - CLI command 只解析 flags、呼叫 use-case、render output。
 - Use-case 編排流程，但不直接碰 subprocess、filesystem、provider SDK。
 - Domain 放 versioned schema、純型別、純規則。
-- Platform layer 集中副作用，尤其是 command execution、filesystem、clock、environment。
-- Git、analyzer、engine、storage 都是 service boundary，透過 Effect dependency 注入。
+- Platform layer 集中低階副作用，尤其是 command execution、filesystem、clock、environment。
+- Git、analyzer、engine、storage 都是 semantic service boundary，透過 Effect dependency
+  注入；只有它們的 live adapter 可以依賴 platform，use-case 不直接取得低階 service。
 - 測試優先測純 domain/use-case；需要驗證 CLI 行為時才跑 compiled binary。
 
 Effect 的採用節奏要保守：先建立 runtime entrypoint 和必要 service interface，等功能真的需要 timeout/concurrency/error mapping 時再加 Layer 組合。不要為尚未出現的需求提前建立抽象。
@@ -35,7 +36,8 @@ Effect 的採用節奏要保守：先建立 runtime entrypoint 和必要 service
 - `commands`: CLI flags、usage errors、stdout/stderr rendering。
 - `use-cases`: review、fix、doctor、stats、update 等 application flow。
 - `domain`: versioned schemas、finding/report/scope/config rules，不碰 IO。
-- `platform`: filesystem、command runner、clock、environment、network wrapper。
+- `platform`: filesystem、command runner、clock、environment、network wrapper；不包含
+  Git/provider/storage 等 feature semantics。
 - `git`: repo detection、diff/scope、file metadata，只透過 platform command runner 執行 git。
 - `engines`: fake/cloud/local CLI providers，接收 normalized request，不直接讀 repo。
 - `storage`: sessions、findings、prompts、fix attempts、stats cache，所有寫入 atomic。
@@ -96,7 +98,8 @@ Effect 的採用節奏要保守：先建立 runtime entrypoint 和必要 service
 ## Test And Fake Strategy
 
 - Unit tests 優先測 domain rules、schema parsing、config precedence、scope selection、error mapping。
-- Use-case tests 使用 fake services：fake engine、fake git service、fake storage、fake clock、fake command runner。
+- Use-case tests 使用 fake semantic services：fake engine、fake git service、fake storage、
+  fake clock。Adapter tests 才注入 fake command runner、filesystem 或 network service。
 - Binary e2e tests 只測 CLI contract、exit code、stdout/stderr、compiled binary integration。
 - Fixture repos 用來測 git diff、language detection、analyzer output、provider request building。
 - Fake engine 必須 deterministic，並能產生：no findings、single finding、invalid output、provider failure、fix candidate。
@@ -194,9 +197,9 @@ Effect 的採用節奏要保守：先建立 runtime entrypoint 和必要 service
 | Status | Order | Plan | Working State |
 | --- | --- | --- | --- |
 | [x] DONE | 001 | [Project Bootstrap And Bun CLI](./001-project-bootstrap-and-bun-cli.md) | 最小 Bun standalone CLI 可 build/run |
-| [ ] TODO | 002 | [Binary Test Harness](./002-binary-test-harness.md) | 測試直接跑 compiled binary |
-| [ ] TODO | 003 | [Local CLI Workflow](./003-local-cli-workflow.md) | 可直接執行本機 compiled binary |
-| [ ] TODO | 004 | [Repository Structure Boundaries](./004-repository-structure-boundaries.md) | module 邊界固定 |
+| [x] DONE | 002 | [Binary Test Harness](./002-binary-test-harness.md) | 測試直接跑 compiled binary |
+| [x] DONE | 003 | [Local CLI Workflow](./003-local-cli-workflow.md) | 可直接執行本機 compiled binary |
+| [x] DONE | 004 | [Repository Structure Boundaries](./004-repository-structure-boundaries.md) | module 邊界固定 |
 | [ ] TODO | 005 | [Git Diff Review MVP](./005-git-diff-review-mvp.md) | 可 review git diff 並輸出 deterministic report |
 | [ ] TODO | 006 | [Config Profiles](./006-config-profiles-and-prompts.md) | 可用 config/profile 控制 review |
 | [ ] TODO | 007 | [Engine Adapters MVP](./007-engine-adapters-mvp.md) | fake engine 穩定，provider adapters 有清楚邊界 |

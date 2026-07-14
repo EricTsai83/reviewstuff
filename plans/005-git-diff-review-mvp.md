@@ -21,15 +21,20 @@ reviewstuff review --staged
 包含：
 
 - `src/git/service.ts`
+- `src/git/live.ts`
 - `src/domain/scope.ts`
 - `src/domain/finding.ts`
 - `src/domain/report.ts`
 - `src/use-cases/run-review.ts`
+- `src/platform/command-runner-live.ts`
 - terminal/json output
 - default working tree diff reading，包括 staged、unstaged tracked、untracked text files
 - optional staged diff reading
 - minimal changed file filtering
-- git subprocess 透過 `src/platform/command-runner.ts`，不得直接使用 `child_process`、`Bun.spawn` 或 shell string
+- 完成 004 定義的 `CommandRunner` Bun live adapter：timeout、combined output
+  limit、stdout/stderr、exit code、cancellation cleanup
+- Git live adapter 只透過 `CommandRunner` 執行 git，不得直接使用
+  `@effect/platform/Command`、`child_process`、`Bun.spawn` 或 shell string
 
 不包含：
 
@@ -41,11 +46,16 @@ reviewstuff review --staged
 
 ## Implementation Steps
 
-1. 實作 git repo detection。
-2. 支援預設 scope：working tree changes，也就是 staged + unstaged tracked changes + untracked text files。
-3. 支援 optional scope：`--staged` 只 review index。
-4. deterministic reviewer 對特定 marker 產生 finding，例如 `REVIEWSTUFF_FAKE_FINDING`。
-5. 產生 versioned report。
+1. 使用 `@effect/platform/Command.start` 實作 `CommandRunner` live adapter；並行消耗
+   stdout/stderr、streaming 計算 combined byte limit、timeout/cancellation 時中止並清理
+   process，將 platform failure 映射成 004 定義的 tagged errors。
+2. 定義不暴露 `CommandRunner` 或 platform types 的 `GitService` contract；
+   `GitServiceLive` 依賴 `CommandRunner`，`runReview` 只依賴 `GitService`。
+3. 實作 git repo detection。
+4. 支援預設 scope：working tree changes，也就是 staged + unstaged tracked changes + untracked text files。
+5. 支援 optional scope：`--staged` 只 review index。
+6. deterministic reviewer 對特定 marker 產生 finding，例如 `REVIEWSTUFF_FAKE_FINDING`。
+7. 產生 versioned report，並由 command 選擇 human/JSON renderer。
 
 ## Verification
 
@@ -64,7 +74,10 @@ AI_REVIEW_FAKE_ENGINE=1 ./dist/reviewstuff review --staged --json
 - 預設不要求 `git add`。
 - 預設會納入 untracked text files，並略過 binary/large files。
 - JSON output 穩定、可測。
-- git command timeout、output limit、exit-code mapping 有測試覆蓋。
+- `runReview` 的 dependency type 不包含 `CommandRunner`、platform service 或 renderer。
+- command runner 的 stdout/stderr concurrent drain、timeout、combined output limit、
+  non-zero exit result、spawn failure 與 interruption cleanup 有 deterministic 測試。
+- Git adapter 將 command exit code/runner error 映射成 Git-specific tagged error，且有測試覆蓋。
 
 ## Learning Focus
 
