@@ -28,7 +28,7 @@
 ## Implementation Steps
 
 1. 擴充 analyzer registry 的 language selection。
-2. 透過 017 的 analyzer live adapter 與 `CommandRunner` 實作 Go adapters 和 fixture
+2. 透過 017 的 analyzer concrete adapter 與 `CommandRunner` 實作 Go adapters 和 fixture
    tests；registry 只暴露 typed operations，不接受 shell string。
 3. 以相同 boundary 實作 Rust adapters 與 fixture tests。
 4. 以相同 boundary 實作 optional Semgrep adapter，預設保守啟用策略。

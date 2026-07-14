@@ -17,7 +17,7 @@
 - `ToolDiagnosticV1`
 - TypeScript first-pass adapter：`tsc --noEmit`
 - timeout/concurrency/cache
-- analyzer live adapter 透過既有 `CommandRunner` service 執行 subprocess；
+- analyzer concrete adapter 透過既有 `CommandRunner` service 執行 subprocess；
   analyzer contract 不暴露 command/platform types
 
 不包含：

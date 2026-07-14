@@ -18,7 +18,7 @@ reviewstuff review --engine openai --model <model-id> --json
 
 包含：
 
-- `src/engines/openai.ts`
+- `src/engines/openai-review-engine.ts`
 - `src/review/prompts/system.ts`
 - `src/review/prompts/build-review-request.ts`
 - structured finding response schema
@@ -122,7 +122,8 @@ OpenReview 的可借鑑部分：
 
 1. 定義 `ReviewRequestV1` 與 structured provider response schema。
 2. 建立 local review system prompt 與 request builder。
-3. 實作 OpenAI adapter。
+3. 在 `openai-review-engine.ts` 實作具名 OpenAI adapter；這是第二個真實
+   `ReviewEngine` implementation，此時才加入最小 selection/composition。
 4. 將 `review --engine openai --model <model-id>` 接到 real provider。
 5. provider error 轉成清楚的 CLI error 與 doctor diagnostics。
 6. 保存 request/response 的 redacted debug metadata，供 009 session storage 接入。

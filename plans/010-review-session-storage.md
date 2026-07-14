@@ -17,8 +17,7 @@
 包含：
 
 - `src/storage/schema.ts`
-- `src/storage/service.ts`
-- `src/storage/live.ts`
+- `src/storage/storage-service.ts`
 - session id / latest lookup
 - atomic JSON writes
 - `.reviewstuff/` gitignore guidance
@@ -34,9 +33,10 @@
 ## Implementation Steps
 
 1. 定義 `ReviewSessionV1`、`StoredFindingV1`。
-2. 定義不暴露 filesystem/path types 的 `StorageService` contract；live adapter 保存
-   `session.json`、`git.json`、`diff.json`、`findings/*.json`，fake adapter 供
-   use-case tests 使用。
+2. 在 `storage/storage-service.ts` 定義不暴露 filesystem/path types 的
+   `StorageService` contract，並在同一 canonical module 建立保存
+   `session.json`、`git.json`、`diff.json`、`findings/*.json` 的 implementation 與
+   `layer`；use-case tests 在測試附近建立 fake layer。
 3. 所有寫入使用 temp file + rename。
 4. 路徑限制在 repo root。
 5. review use-case 透過 `StorageService` 寫 session；command 只 render 結果。

@@ -45,7 +45,7 @@ proposeFinding
 ```
 
 後續若加入 `runAnalyzer` 與 `runGate`，agent tool 只能依賴 analyzer/gate
-semantic services；對應 live adapter 再透過既有 `CommandRunner` 執行 allowlisted
+semantic services；對應 concrete adapter 再透過既有 `CommandRunner` 執行 allowlisted
 program。agent/use-case 不得直接取得 `CommandRunner`，也不得提供任意 shell 執行能力。
 
 ## Guardrails

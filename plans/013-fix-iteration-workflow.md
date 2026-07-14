@@ -36,7 +36,7 @@ reviewstuff fix --dry-run
 2. 產生 fix prompt。
 3. engine 回傳候選 file edits。
 4. fix use-case 透過 `FixWorkspace` 在 temp worktree 套用，並透過 `GateRunner`
-   執行 allowlisted gates；只有 live adapters 可依賴 filesystem、Git service 或
+   執行 allowlisted gates；只有 concrete implementations 可依賴 filesystem、Git service 或
    `CommandRunner`。
 5. 保存 fix attempt。
 6. dry-run 輸出會改哪些檔案、哪些 gates 通過或失敗。

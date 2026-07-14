@@ -6,16 +6,14 @@
 
 ## Working State
 
-完成後 fake engine 是唯一可執行 engine，但 provider adapter 有明確落點。
+完成後 deterministic engine 是唯一可執行 engine，而未來 provider adapter 有明確落點。
 
 ## Scope
 
 包含：
 
-- `src/engines/engine.ts`
-- `src/engines/fake.ts`
-- `src/engines/registry.ts`
-- provider adapters skeleton：`openai`、`anthropic`、`codex-cli`
+- `src/engines/review-engine.ts`
+- `src/engines/deterministic-review-engine.ts`
 - timeout/retry/error mapping
 - structured output schema parsing
 
@@ -28,12 +26,12 @@
 
 ## Implementation Steps
 
-1. 定義 `ReviewEngine` interface。
+1. 在 `review-engine.ts` 定義 `ReviewEngine` interface。
 2. 定義 `EngineSelection`：`engine`、`provider`、`model`、`transport`。
-3. fake engine 回傳 deterministic findings。
-4. provider adapter skeleton 回傳清楚的 not-configured typed error。
-5. engine request/response 使用 versioned schema。
-6. engine call 有 timeout 與 output size limit，即使 fake engine 也走同一條路徑。
+3. `deterministic-review-engine.ts` 回傳 deterministic findings，供目前 CLI 與測試使用。
+4. engine request/response 使用 versioned schema。
+5. engine call 有 timeout 與 output size limit，即使 deterministic engine 也走同一條路徑。
+6. 不建立 provider skeleton 或 registry；等 008 出現第二個真實 implementation 時再加入 selection/composition。
 
 ## Engine Selection
 

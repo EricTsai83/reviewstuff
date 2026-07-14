@@ -20,7 +20,7 @@ CLI 會下載新版、驗 checksum，並 atomic replacement。
 
 - `reviewstuff update`
 - direct tarball install self-update
-- 擴充 `UpdateService` live adapter 的 verified replacement transaction
+- 擴充 `UpdateService` canonical implementation 的 verified replacement transaction
 - checksum verification
 - atomic binary replacement
 - rollback on failed replacement
@@ -38,11 +38,11 @@ CLI 會下載新版、驗 checksum，並 atomic replacement。
 1. 使用 033 的 install channel detection 判斷是否允許 self-update。
 2. update use-case 將 target version 交給 `UpdateService`；use-case 不直接取得
    network、filesystem 或 `CommandRunner`。
-3. `UpdateServiceLive` 下載符合目前平台的 artifact，驗證 checksum 後解壓到 temp
+3. `UpdateService.layer` 的 implementation 下載符合目前平台的 artifact，驗證 checksum 後解壓到 temp
    directory。
-4. live adapter 透過 `CommandRunner` 驗證新版 binary 可執行且 `--version` 符合
+4. concrete implementation 透過 `CommandRunner` 驗證新版 binary 可執行且 `--version` 符合
    manifest。
-5. live adapter 使用 platform filesystem atomic replacement 寫回目前 binary path。
+5. concrete implementation 使用 platform filesystem atomic replacement 寫回目前 binary path。
 6. replacement failure 時由 scoped transaction rollback/cleanup，並回傳 typed diagnostic。
 
 ## Verification

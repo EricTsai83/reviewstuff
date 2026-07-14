@@ -73,7 +73,7 @@ cloud provider configured without privacy policy docs
 - warnings 不造成 non-zero exit；fail 才 exit 1。
 - provider/network checks 有 timeout，不會卡住 doctor。
 - doctor 可以讓使用者知道 review request 會走 local provider 還是 cloud provider。
-- doctor command 只 render `DoctorReportV1`；環境檢查位於對應 live adapter。
+- doctor command 只 render `DoctorReportV1`；環境檢查位於對應 concrete implementation。
 
 ## Learning Focus
 

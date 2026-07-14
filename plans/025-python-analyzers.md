@@ -29,7 +29,7 @@
 
 1. 擴充 analyzer registry，支援 language-specific analyzer group。
 2. 為 Python tools 定義 typed analyzer operation、timeout、output cap、parser；沿用
-   017 的 analyzer live adapter 與 `CommandRunner`，不得讓 use-case/agent 傳入
+   017 的 analyzer concrete adapter 與 `CommandRunner`，不得讓 use-case/agent 傳入
    executable 或 shell string。
 3. missing tool 回 warning diagnostic。
 4. analyzer results merge into `ReviewRequestV1`。

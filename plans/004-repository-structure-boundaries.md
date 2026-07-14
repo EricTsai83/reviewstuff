@@ -33,8 +33,8 @@ plan 出現第一個真實需求時再建立，避免用空目錄和 pass-throug
 - 將 CLI command definitions 移出 composition root
 - 將最小 `review` command 委派給 `runReview` use-case；use-case 暫時只回傳
   semantic `void`，placeholder 文案仍由 command 負責
-- 只定義 `CommandRunner` port 與 future-safe request/result/error contract；live
-  `@effect/platform/Command` adapter 延後到 005 的第一個真實 subprocess use case
+- 只定義 `CommandRunner` port 與 future-safe request/result/error contract；canonical
+  `@effect/platform/Command` implementation 與 layer 延後到 005 的第一個真實 subprocess use case，屆時仍留在 `platform/command-runner.ts`
 
 不包含：
 
@@ -42,7 +42,7 @@ plan 出現第一個真實需求時再建立，避免用空目錄和 pass-throug
 - storage
 - analyzers
 - deep review
-- command execution live implementation
+- command execution production implementation
 
 ## Boundaries
 
@@ -51,13 +51,13 @@ plan 出現第一個真實需求時再建立，避免用空目錄和 pass-throug
 - `use-cases/`: 負責 application flow。
 - `domain/`: 純型別、schema、domain rules。
 - `platform/`: Effect platform services、Command runner、filesystem/time abstractions。
-- `git/`, `engines/`, `storage/`: semantic service boundary；live adapter 只透過
+- `git/`, `engines/`, `storage/`: semantic service boundary；concrete implementation 只透過
   `platform/` 的受控 wrapper 執行副作用。
 - use-case 只依賴 semantic services，不得直接 import `platform/`、`output/`、
   `@effect/platform` 或 runtime API。
 - use-case 回傳 domain/application result；human/JSON/NDJSON formatting 屬於
   `commands/` 與 `output/`。
-- `cli.ts` 是唯一 composition root，負責組合 live Layers 與 runtime。
+- `cli.ts` 是唯一 composition root，負責組合 `AppLive` 與 runtime。
 
 ## Verification
 
@@ -74,7 +74,7 @@ bun run build
 - `commands/` 沒有大型流程邏輯。
 - `runReview` 不回傳 CLI 顯示文案，且 error channel 不使用寬泛的 `Error`。
 - `CommandRunner` port 有明確的 timeout、output limit、stdout/stderr、exit-code
-  contract，但這一階段沒有未經測試的 live implementation。
+  contract，但這一階段沒有未經測試的 production implementation。
 - `docs/repository-structure.md` 清楚描述 module ownership。
 - architecture test 會阻止 domain/use-case/command 繞過依賴方向，以及 feature
   code 直接使用 platform/runtime subprocess API。

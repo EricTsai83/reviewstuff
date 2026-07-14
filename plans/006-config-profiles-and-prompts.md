@@ -13,8 +13,7 @@
 包含：
 
 - `src/config/schema.ts`
-- `src/config/service.ts`
-- `src/config/live.ts`
+- `src/config/config-service.ts`
 - versioned config schema
 - profiles：`quick`、`standard`
 - default engine/provider/model selection
@@ -31,8 +30,9 @@
 ## Implementation Steps
 
 1. 定義 versioned config schema。
-2. 定義不暴露 filesystem/platform types 的 `ConfigService` contract；live adapter
-   透過 platform filesystem 實作 loading，fake adapter 供 use-case tests 使用。
+2. 在 `config/config-service.ts` 定義不暴露 filesystem/platform types 的
+   `ConfigService` contract，並在同一 canonical module 透過 platform filesystem
+   實作 loading 與 `layer`；use-case tests 在測試附近建立 fake layer。
 3. 建立 `quick`、`standard` 兩個 profile。
 4. review use-case 只透過 `ConfigService` 根據 config/profile 決定
    engine/provider/model、timeout/concurrency 與 fake reviewer behavior。
