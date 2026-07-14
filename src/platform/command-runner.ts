@@ -1,4 +1,4 @@
-import { Context, type Duration, type Effect } from "effect";
+import { Context, Data, type Duration, type Effect } from "effect";
 
 export interface CommandRequest {
   readonly program: string;
@@ -14,22 +14,23 @@ export interface CommandResult {
   readonly exitCode: number;
 }
 
-export interface CommandStartError {
-  readonly _tag: "CommandStartError";
+export class CommandStartError extends Data.TaggedError("CommandStartError")<{
   readonly program: string;
   readonly cause: unknown;
-}
+}> {}
 
-export interface CommandTimeoutError {
-  readonly _tag: "CommandTimeoutError";
+export class CommandTimeoutError extends Data.TaggedError(
+  "CommandTimeoutError",
+)<{
   readonly program: string;
-}
+}> {}
 
-export interface CommandOutputLimitError {
-  readonly _tag: "CommandOutputLimitError";
+export class CommandOutputLimitError extends Data.TaggedError(
+  "CommandOutputLimitError",
+)<{
   readonly program: string;
   readonly maxOutputBytes: number;
-}
+}> {}
 
 export type CommandExecutionError =
   | CommandStartError

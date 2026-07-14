@@ -203,6 +203,43 @@ async function sourceFiles(): Promise<ReadonlyArray<string>> {
   return files.sort();
 }
 
+test("source layout uses capability names instead of DI roles", async () => {
+  const violations: Array<string> = [];
+
+  for (const file of await sourceFiles()) {
+    const relativeFile = path
+      .relative(sourceRoot, file)
+      .replaceAll("\\", "/");
+    const segments = relativeFile.split("/");
+    const fileName = segments.at(-1) ?? "";
+    const roleDirectory = segments.find((segment) => {
+      const normalized = segment.toLowerCase();
+
+      return normalized === "services" || normalized === "layers";
+    });
+
+    if (roleDirectory !== undefined) {
+      violations.push(
+        `${relativeFile}: use a capability directory instead of ${roleDirectory}/`,
+      );
+    }
+
+    const genericRoleFile =
+      fileName === "service.ts" ||
+      fileName === "adapter.ts" ||
+      fileName === "layer.ts" ||
+      fileName === "live.ts";
+
+    if (genericRoleFile || fileName.endsWith("-live.ts")) {
+      violations.push(
+        `${relativeFile}: name the concrete capability instead of its DI role`,
+      );
+    }
+  }
+
+  expect(violations).toEqual([]);
+});
+
 test("source modules preserve the documented dependency direction", async () => {
   const violations: Array<string> = [];
 

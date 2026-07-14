@@ -24,7 +24,10 @@
 - Domain 放 versioned schema、純型別、純規則。
 - Platform layer 集中低階副作用，尤其是 command execution、filesystem、clock、environment。
 - Git、analyzer、engine、storage 都是 semantic service boundary，透過 Effect dependency
-  注入；只有它們的 live adapter 可以依賴 platform，use-case 不直接取得低階 service。
+  注入；只有它們的 concrete implementation 可以依賴 platform，use-case 不直接取得低階 service。
+- 單一 canonical implementation 與 service contract 留在同一個 capability module；
+  只有多個真實 production implementations 時才拆具名 adapters。`Live` 保留給
+  `AppLive` 這類完整 production graph，不建立 generic `live.ts`。
 - 測試優先測純 domain/use-case；需要驗證 CLI 行為時才跑 compiled binary。
 
 Effect 的採用節奏要保守：先建立 runtime entrypoint 和必要 service interface，等功能真的需要 timeout/concurrency/error mapping 時再加 Layer 組合。不要為尚未出現的需求提前建立抽象。
@@ -103,7 +106,7 @@ Effect 的採用節奏要保守：先建立 runtime entrypoint 和必要 service
 - Binary e2e tests 只測 CLI contract、exit code、stdout/stderr、compiled binary integration。
 - Fixture repos 用來測 git diff、language detection、analyzer output、provider request building。
 - Fake engine 必須 deterministic，並能產生：no findings、single finding、invalid output、provider failure、fix candidate。
-- External tools 和 provider live tests 是 smoke tests，不應成為一般 `bun run test` 的必要條件。
+- External tools 和 provider integration tests 是 smoke tests，不應成為一般 `bun run test` 的必要條件。
 - 每個 public/persisted schema 都要有 fixture snapshot；schema 變更要新增版本或 migration test。
 
 ## Schema And Compatibility Policy
@@ -202,7 +205,7 @@ Effect 的採用節奏要保守：先建立 runtime entrypoint 和必要 service
 | [x] DONE | 004 | [Repository Structure Boundaries](./004-repository-structure-boundaries.md) | module 邊界固定 |
 | [ ] TODO | 005 | [Git Diff Review MVP](./005-git-diff-review-mvp.md) | 可 review git diff 並輸出 deterministic report |
 | [ ] TODO | 006 | [Config Profiles](./006-config-profiles-and-prompts.md) | 可用 config/profile 控制 review |
-| [ ] TODO | 007 | [Engine Adapters MVP](./007-engine-adapters-mvp.md) | fake engine 穩定，provider adapters 有清楚邊界 |
+| [ ] TODO | 007 | [Engine Adapters MVP](./007-engine-adapters-mvp.md) | deterministic engine 穩定，provider adapters 有清楚邊界 |
 | [ ] TODO | 008 | [Real AI Review Provider](./008-real-ai-review-provider.md) | 第一個真實 cloud provider 可 review local changes |
 | [ ] TODO | 009 | [Additional Provider Adapters](./009-additional-provider-adapters.md) | Anthropic 與 local CLI provider 接上同一 contract |
 | [ ] TODO | 010 | [Review Session Storage](./010-review-session-storage.md) | review 結果可保存並載入 |
