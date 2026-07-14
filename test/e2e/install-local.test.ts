@@ -57,6 +57,19 @@ const makeFixture = async (): Promise<Fixture> => {
   return { binary, installDir, root };
 };
 
+const makeExecutable = async (dir: string, name: string): Promise<string> => {
+  const executable = path.join(dir, name);
+
+  await run(fs.makeDirectory(dir, { recursive: true }));
+  await run(
+    fs.writeFileString(executable, "#!/usr/bin/env sh\nexit 0\n", {
+      mode: 0o755,
+    }),
+  );
+
+  return executable;
+};
+
 const runBunWithoutHome = async (
   args: ReadonlyArray<string>,
   extraEnv: Readonly<Record<string, string>> = {},
@@ -184,6 +197,57 @@ describe("installLocal", () => {
     );
   });
 
+  test("reports when the local command overrides an existing command on PATH", async () => {
+    const { binary, installDir, root } = await makeFixture();
+    const productionDir = await makeTempDir();
+    const otherProductionDir = await makeTempDir();
+    const productionBinary = await makeExecutable(productionDir, binaryName);
+    const otherProductionBinary = await makeExecutable(
+      otherProductionDir,
+      binaryName,
+    );
+    const messages: Array<string> = [];
+
+    const result = await installLocal({
+      installDir,
+      pathEnv: `${installDir}:${productionDir}:${otherProductionDir}`,
+      log: (message) => messages.push(message),
+      repoRoot: root,
+    });
+
+    expect(messages).toContain(`Local ${binaryName} is active.`);
+    expect(messages).toContain(`  command: ${result.linkPath}`);
+    expect(messages).toContain(`  target:  ${binary}`);
+    expect(messages).toContain(`  previous: ${productionBinary}`);
+    expect(messages).toContain(`  also on PATH: ${otherProductionBinary}`);
+    expect(messages).toContain(
+      `Run "bun run uninstall:local" to restore ${productionBinary}.`,
+    );
+  });
+
+  test("reports when an earlier PATH entry keeps the production command active", async () => {
+    const { installDir, root } = await makeFixture();
+    const productionDir = await makeTempDir();
+    const productionBinary = await makeExecutable(productionDir, binaryName);
+    const messages: Array<string> = [];
+
+    const result = await installLocal({
+      installDir,
+      pathEnv: `${productionDir}:${installDir}`,
+      log: (message) => messages.push(message),
+      repoRoot: root,
+    });
+
+    expect(messages).toContain(
+      `Local ${binaryName} is linked but is not active.`,
+    );
+    expect(messages).toContain(`  active: ${productionBinary}`);
+    expect(messages).toContain(`  local:  ${result.linkPath}`);
+    expect(messages).toContain(
+      `Move ${installDir} before ${productionDir} in PATH to activate the local build.`,
+    );
+  });
+
   test("requires the built binary to exist and be executable", async () => {
     const root = await makeTempDir();
     const installDir = await makeTempDir();
@@ -224,6 +288,30 @@ describe("uninstallLocal", () => {
 
     expect(result.removed).toBe(true);
     expect(await run(fs.exists(installed.linkPath))).toBe(false);
+  });
+
+  test("reports the production command restored after removing the local link", async () => {
+    const { installDir, root } = await makeFixture();
+    const productionDir = await makeTempDir();
+    const productionBinary = await makeExecutable(productionDir, binaryName);
+    const pathEnv = `${installDir}:${productionDir}`;
+    const messages: Array<string> = [];
+
+    await installLocal({
+      installDir,
+      pathEnv,
+      log: () => {},
+      repoRoot: root,
+    });
+    await uninstallLocal({
+      installDir,
+      pathEnv,
+      log: (message) => messages.push(message),
+      repoRoot: root,
+    });
+
+    expect(messages).toContain(`${binaryName} now resolves to:`);
+    expect(messages).toContain(`  ${productionBinary}`);
   });
 
   test("succeeds when the symlink is already absent", async () => {

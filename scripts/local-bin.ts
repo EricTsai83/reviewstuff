@@ -1,5 +1,5 @@
 import { constants } from "node:fs";
-import { access } from "node:fs/promises";
+import { access, stat } from "node:fs/promises";
 import { FileSystem, Path } from "@effect/platform";
 import type { PlatformError } from "@effect/platform/Error";
 import { BunContext, BunRuntime } from "@effect/platform-bun";
@@ -26,6 +26,7 @@ export interface UninstallLocalOptions {
   /** Defaults to `$HOME/.local/bin`. */
   readonly installDir?: string;
   readonly log?: (message: string) => void;
+  readonly pathEnv?: string;
   readonly repoRoot?: string;
 }
 
@@ -66,23 +67,91 @@ const requireHome = (): Effect.Effect<string, LocalBinError> =>
     ? Effect.fail(new LocalBinError({ message: "$HOME is not set." }))
     : Effect.succeed(Bun.env.HOME);
 
-const isDirOnEnvPath = (
+const resolveEnvPathEntries = (
   path: Path.Path,
-  dir: string,
   pathEnv: string,
-): boolean => {
+): ReadonlyArray<string> => {
   const home = Bun.env.HOME;
-  const entries = pathEnv
+  const seen = new Set<string>();
+
+  return pathEnv
     .split(pathDelimiter)
     .filter((entry) => entry.length > 0)
     .map((entry) =>
       path.resolve(
         home === undefined ? entry : entry.replace(/^~(?=$|\/)/, home),
       ),
+    )
+    .filter((entry) => {
+      if (seen.has(entry)) {
+        return false;
+      }
+
+      seen.add(entry);
+      return true;
+    });
+};
+
+const isDirOnEnvPath = (
+  path: Path.Path,
+  dir: string,
+  pathEnv: string,
+): boolean =>
+  resolveEnvPathEntries(path, pathEnv).includes(path.resolve(dir));
+
+const findExecutablesOnPath = (
+  path: Path.Path,
+  binaryName: string,
+  pathEnv: string,
+): Effect.Effect<ReadonlyArray<string>> =>
+  Effect.promise(async () => {
+    const candidates = await Promise.all(
+      resolveEnvPathEntries(path, pathEnv).map(async (dir) => {
+        const candidate = path.join(dir, binaryName);
+
+        try {
+          const stats = await stat(candidate);
+
+          if (!stats.isFile()) {
+            return undefined;
+          }
+
+          await access(candidate, constants.X_OK);
+          return candidate;
+        } catch {
+          return undefined;
+        }
+      }),
     );
 
-  return entries.includes(path.resolve(dir));
-};
+    return candidates.filter(
+      (candidate): candidate is string => candidate !== undefined,
+    );
+  });
+
+const logCurrentCommand = (
+  path: Path.Path,
+  binaryName: string,
+  pathEnv: string,
+  log: (message: string) => void,
+): Effect.Effect<void> =>
+  Effect.gen(function* () {
+    const activeCommand = (yield* findExecutablesOnPath(
+      path,
+      binaryName,
+      pathEnv,
+    ))[0];
+
+    log("");
+
+    if (activeCommand === undefined) {
+      log(`${binaryName} is no longer available on PATH.`);
+      return;
+    }
+
+    log(`${binaryName} now resolves to:`);
+    log(`  ${activeCommand}`);
+  });
 
 const resolveInstallDir = (
   path: Path.Path,
@@ -229,7 +298,56 @@ export const installLocalEffect = ({
       log(`Linked ${linkPath} -> ${targetBinary}`);
     }
 
-    if (!isDirOnEnvPath(path, binDir, pathEnv)) {
+    const binDirIsOnPath = isDirOnEnvPath(path, binDir, pathEnv);
+    const commandsOnPath = yield* findExecutablesOnPath(
+      path,
+      binaryName,
+      pathEnv,
+    );
+    const activeCommand = commandsOnPath[0];
+
+    log("");
+
+    if (activeCommand === linkPath) {
+      const otherCommands = commandsOnPath.filter(
+        (command) => command !== linkPath,
+      );
+      const previousCommand = otherCommands[0];
+
+      log(`Local ${binaryName} is active.`);
+      log(`  command: ${linkPath}`);
+      log(`  target:  ${targetBinary}`);
+
+      if (previousCommand === undefined) {
+        log(`Run "bun run uninstall:local" to remove the local command.`);
+      } else {
+        log(`  previous: ${previousCommand}`);
+
+        for (const command of otherCommands.slice(1)) {
+          log(`  also on PATH: ${command}`);
+        }
+
+        log(
+          `Run "bun run uninstall:local" to restore ${previousCommand}.`,
+        );
+      }
+    } else {
+      log(`Local ${binaryName} is linked but is not active.`);
+
+      if (activeCommand !== undefined) {
+        log(`  active: ${activeCommand}`);
+      }
+
+      log(`  local:  ${linkPath}`);
+
+      if (binDirIsOnPath && activeCommand !== undefined) {
+        log(
+          `Move ${binDir} before ${path.dirname(activeCommand)} in PATH to activate the local build.`,
+        );
+      }
+    }
+
+    if (!binDirIsOnPath) {
       log("");
       log(`${binDir} is not on PATH.`);
       log(`Add this to your shell profile: export PATH="${binDir}:$PATH"`);
@@ -240,6 +358,7 @@ export const installLocalEffect = ({
 
 export const uninstallLocalEffect = ({
   installDir,
+  pathEnv = Bun.env.PATH ?? "",
   repoRoot,
   log = console.log,
 }: UninstallLocalOptions = {}): Effect.Effect<
@@ -260,6 +379,7 @@ export const uninstallLocalEffect = ({
 
     if (symlinkStatus._tag === "Missing") {
       log(`${binaryName} is not installed at ${linkPath}`);
+      yield* logCurrentCommand(path, binaryName, pathEnv, log);
       return { linkPath, removed: false, targetBinary };
     }
 
@@ -274,6 +394,7 @@ export const uninstallLocalEffect = ({
 
     yield* fs.remove(linkPath);
     log(`Removed ${linkPath}`);
+    yield* logCurrentCommand(path, binaryName, pathEnv, log);
 
     return { linkPath, removed: true, targetBinary };
   });

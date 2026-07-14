@@ -271,10 +271,10 @@
   <main>
     <article>
       <h1>從零讀懂 <code>scripts/local-bin.ts</code></h1>
-      <p class="deck">這是一份給完全沒有命令列、檔案系統或 Effect 經驗讀者的導讀。讀完後，你會知道它如何把專案裡的程式變成全域可呼叫的 <code>reviewstuff</code> 指令，以及它如何避免誤刪使用者的檔案。</p>
+      <p class="deck">這是一份給完全沒有命令列、檔案系統或 Effect 經驗讀者的導讀。讀完後，你會知道它如何把專案裡的程式變成可直接呼叫的 <code>reviewstuff</code> 指令、如何辨認 production 與 local 版本，以及如何避免誤刪使用者的檔案。</p>
 
       <aside class="summary">
-        <p><strong>一句話版本：</strong>這個檔案會在 <code>~/.local/bin</code> 建立一個 symbolic link，讓 shell 能透過 <code>reviewstuff</code> 找到專案 build 出來的 <code>dist/reviewstuff</code>；解除安裝時，它只會刪除確定屬於這個專案的連結。</p>
+        <p><strong>一句話版本：</strong>這個檔案會在 <code>~/.local/bin</code> 建立一個 symbolic link，讓 shell 能透過 <code>reviewstuff</code> 找到本機 build；它也會掃描 PATH，說明 local 是否接管了 production 指令，並在解除安裝後顯示實際恢復到哪個版本。</p>
       </aside>
 
       <nav aria-label="文章目錄">
@@ -287,6 +287,7 @@
           <li><a href="#helpers">輔助函式</a></li>
           <li><a href="#install">安裝流程</a></li>
           <li><a href="#uninstall">解除安裝流程</a></li>
+          <li><a href="#activation">Local 與 production 共存</a></li>
           <li><a href="#effect">Effect 如何執行</a></li>
           <li><a href="#entry">實際命令如何串起來</a></li>
           <li><a href="#rules">最後應記住的規則</a></li>
@@ -358,7 +359,7 @@
         <h2>4. Imports：它借用了哪些工具？</h2>
 
         <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">import</span> <span class="o">{</span> constants <span class="o">}</span> <span class="k">from</span> <span class="s">"node:fs"</span><span class="o">;</span>
-<span class="k">import</span> <span class="o">{</span> access <span class="o">}</span> <span class="k">from</span> <span class="s">"node:fs/promises"</span><span class="o">;</span>
+<span class="k">import</span> <span class="o">{</span> access<span class="o">,</span> stat <span class="o">}</span> <span class="k">from</span> <span class="s">"node:fs/promises"</span><span class="o">;</span>
 <span class="k">import</span> <span class="o">{</span> <span class="t">FileSystem</span><span class="o">,</span> <span class="t">Path</span> <span class="o">}</span> <span class="k">from</span> <span class="s">"@effect/platform"</span><span class="o">;</span>
 <span class="k">import</span> <span class="k">type</span> <span class="o">{</span> <span class="t">PlatformError</span> <span class="o">}</span> <span class="k">from</span> <span class="s">"@effect/platform/Error"</span><span class="o">;</span>
 <span class="k">import</span> <span class="o">{</span> <span class="t">BunContext</span><span class="o">,</span> <span class="t">BunRuntime</span> <span class="o">}</span> <span class="k">from</span> <span class="s">"@effect/platform-bun"</span><span class="o">;</span>
@@ -366,7 +367,7 @@
 <span class="k">import</span> packageJson <span class="k">from</span> <span class="s">"../package.json"</span><span class="o">;</span></code></pre>
 
         <ul>
-          <li><code>constants.X_OK</code> 和 <code>access()</code>：檢查目前使用者是否能執行 binary。</li>
+          <li><code>stat()</code>、<code>constants.X_OK</code> 和 <code>access()</code>：確認 PATH 中的候選項目是檔案，而且目前使用者能執行。</li>
           <li><code>FileSystem</code>：讀取、建立與刪除檔案或 symbolic link。</li>
           <li><code>Path</code>：組合、整理與比較路徑。</li>
           <li><code>PlatformError</code>：描述底層檔案系統錯誤。</li>
@@ -394,7 +395,7 @@
             <tbody>
               <tr><td><code>installDir</code></td><td>指令 link 要安裝到哪個資料夾</td><td><code>$HOME/.local/bin</code></td></tr>
               <tr><td><code>log</code></td><td>訊息要如何輸出；測試可以傳入假的函式</td><td><code>console.log</code></td></tr>
-              <tr><td><code>pathEnv</code></td><td>用來檢查安裝目錄是否在 PATH</td><td><code>Bun.env.PATH</code></td></tr>
+              <tr><td><code>pathEnv</code></td><td>檢查安裝目錄、找出所有同名指令，並判斷實際啟用哪一版；解除安裝也接受相同選項</td><td><code>Bun.env.PATH</code></td></tr>
               <tr><td><code>replaceExisting</code></td><td>是否取代已存在、但不屬於這個專案的內容</td><td><code>false</code></td></tr>
               <tr><td><code>repoRoot</code></td><td>專案根目錄；主要方便測試注入假目錄</td><td>從目前檔案位置推算</td></tr>
             </tbody>
@@ -442,8 +443,14 @@
         <h3><code>requireHome()</code>：取得使用者家目錄</h3>
         <p>如果 <code>Bun.env.HOME</code> 存在，就成功回傳它；不存在則產生 <code>LocalBinError</code>。預設安裝位置和以 <code>~</code> 開頭的路徑都需要 HOME。</p>
 
-        <h3><code>isDirOnEnvPath()</code>：檢查 PATH</h3>
-        <p>它把 PATH 用冒號拆開、移除空項目、把開頭的 <code>~</code> 展開成 HOME，再用 <code>path.resolve()</code> 整理成絕對路徑。最後比較安裝目錄是否出現在清單裡。</p>
+        <h3><code>resolveEnvPathEntries()</code> 與 <code>isDirOnEnvPath()</code>：整理 PATH</h3>
+        <p>前者把 PATH 用冒號拆開、移除空項目、把開頭的 <code>~</code> 展開成 HOME，再用 <code>path.resolve()</code> 整理成絕對路徑，同時移除重複資料夾。後者重用這份結果，判斷安裝目錄是否在 PATH 裡。</p>
+
+        <h3><code>findExecutablesOnPath()</code>：找出所有同名指令</h3>
+        <p>它依照 PATH 順序，在每個資料夾尋找名為 <code>reviewstuff</code> 的項目。候選項目必須是檔案，而且目前使用者具備執行權限，才會被保留下來。回傳陣列的第一個項目，就是 shell 正常情況下會執行的版本；後面的項目則是被遮蔽的其他版本。</p>
+
+        <h3><code>logCurrentCommand()</code>：解除後重新確認</h3>
+        <p>解除安裝不能只說「link 已刪除」，因為使用者真正關心的是現在輸入 <code>reviewstuff</code> 會執行什麼。這個函式重新掃描 PATH：找到版本時顯示實際路徑；完全找不到時則明確說明指令已不在 PATH 上。</p>
 
         <aside class="note">
           <p><strong>平台界線：</strong>這裡把分隔字元固定為 <code>:</code>，符合 macOS/Linux 的 PATH 格式，並不是為 Windows PATH 設計。</p>
@@ -503,7 +510,8 @@
           <li><strong>建立安裝資料夾。</strong><code>recursive: true</code> 讓缺少的父資料夾一起建立，已存在時也不報錯。</li>
           <li><strong>查看安裝位置。</strong>判斷它不存在、不是 link，或是一條指向某處的 link。</li>
           <li><strong>套用安全規則。</strong>依現況保持不動、建立 link、拒絕覆蓋，或在明確的 force 模式下取代。</li>
-          <li><strong>檢查 PATH。</strong>如果 shell 找不到安裝資料夾，顯示應加入 shell profile 的設定。</li>
+          <li><strong>掃描 PATH。</strong>找出所有同名且可執行的指令，判斷 local 版是否真的成為第一順位。</li>
+          <li><strong>說明接管結果。</strong>顯示目前 active、local target，以及解除後會恢復的 production 路徑；安裝目錄不在 PATH 時仍提供設定建議。</li>
           <li><strong>回傳結果。</strong>把三個重要路徑交給呼叫者。</li>
         </ol>
 
@@ -535,7 +543,7 @@
 
         <pre class="language-shell"><span class="label">Shell</span><code><span class="sh-command">export</span> <span class="sh-var">PATH="/Users/eric/.local/bin:$PATH"</span></code></pre>
 
-        <p>程式只顯示建議，不會擅自修改 <code>.zshrc</code> 或其他設定檔。</p>
+        <p>程式只顯示建議，不會擅自修改 <code>.zshrc</code> 或其他設定檔。即使安裝目錄已在 PATH，如果另一個 production 目錄排在它前面，程式也會明確說明 local link 已建立、但目前並未生效。</p>
       </section>
 
       <section id="uninstall">
@@ -554,11 +562,56 @@
           </table>
         </div>
 
-        <p>解除安裝沒有 <code>--force</code>，也不會刪除 <code>dist/reviewstuff</code>、整個 <code>~/.local/bin</code> 或專案本身。</p>
+        <p>解除安裝沒有 <code>--force</code>，也不會刪除 <code>dist/reviewstuff</code>、整個 <code>~/.local/bin</code> 或專案本身。刪除成功或 link 原本就不存在時，它都會重新掃描 PATH，顯示現在輸入 <code>reviewstuff</code> 實際會執行哪個版本。</p>
+      </section>
+
+      <section id="activation">
+        <h2>9. 為什麼 local 與 production 使用同一個名稱？</h2>
+        <p>一般開發不需要把開發版永久裝進全域環境。平常直接執行 <code>./dist/reviewstuff</code> 最簡單；只有需要驗證使用者真實體驗時，才暫時讓 local 版以正式名稱 <code>reviewstuff</code> 接管指令。</p>
+
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>情境</th><th>建議執行方式</th><th>是否影響 production</th></tr></thead>
+            <tbody>
+              <tr><td>平常開發</td><td><code>./dist/reviewstuff</code></td><td>完全不影響</td></tr>
+              <tr><td>測試真實 CLI 名稱</td><td>暫時 <code>install:local</code>，測完 <code>uninstall:local</code></td><td>可能暫時遮蔽，但不刪除其他目錄裡的 production</td></tr>
+              <tr><td>兩版需要長期並存</td><td>明確路徑或另外命名成 <code>reviewstuff-dev</code></td><td>不依賴 PATH 順序</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>Local 版成功接管</h3>
+        <p>假設 PATH 中 <code>~/.local/bin</code> 排在 Homebrew 前面，安裝後的第一個同名指令就是 local link。程式會顯示 target，也會把下一個同名指令標成 <code>previous</code>，因為解除 local link 後它會成為第一順位：</p>
+
+        <pre><span class="label">Text</span><code>Local reviewstuff is active.
+  command: /Users/eric/.local/bin/reviewstuff
+  target:  /Users/eric/personal-project/reviewstuff/dist/reviewstuff
+  previous: /opt/homebrew/bin/reviewstuff
+Run "bun run uninstall:local" to restore /opt/homebrew/bin/reviewstuff.</code></pre>
+
+        <h3>Production 仍排在前面</h3>
+        <p>如果 Homebrew 目錄排在 <code>~/.local/bin</code> 前面，link 雖然建立成功，shell 仍會先找到 production。程式不會誤稱 local 已啟用，而是顯示目前的 active 路徑和調整方式：</p>
+
+        <pre><span class="label">Text</span><code>Local reviewstuff is linked but is not active.
+  active: /opt/homebrew/bin/reviewstuff
+  local:  /Users/eric/.local/bin/reviewstuff
+Move /Users/eric/.local/bin before /opt/homebrew/bin in PATH to activate the local build.</code></pre>
+
+        <h3>解除後確認恢復結果</h3>
+        <p>解除安裝不保存或重裝 production；production binary 從頭到尾都留在原本目錄。local link 刪除後，程式重新按 PATH 順序尋找，並報告實際結果：</p>
+
+        <pre class="language-shell"><span class="label">Text</span><code><span class="sh-command">Removed</span> /Users/eric/.local/bin/reviewstuff
+
+<span class="sh-command">reviewstuff</span> now resolves to:
+  <span class="sh-command">/opt/homebrew/bin/reviewstuff</span></code></pre>
+
+        <aside class="warning">
+          <p><strong>這不是備份系統。</strong>如果使用 <code>--force</code> 覆蓋的正是同一路徑 <code>~/.local/bin/reviewstuff</code>，原本內容已被移除，解除安裝無法把它變回來。自動恢復只適用於 production 位在 PATH 的另一個目錄、local 版只是暫時遮蔽它的情況。</p>
+        </aside>
       </section>
 
       <section id="effect">
-        <h2>9. <code>yield*</code>、Effect 與 Bun runtime</h2>
+        <h2>10. <code>yield*</code>、Effect 與 Bun runtime</h2>
 
         <h3><code>Effect.gen()</code> 讓流程像同步程式</h3>
         <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="t">Effect</span><span class="o">.</span><span class="p">gen</span><span class="o">(</span><span class="k">function</span><span class="o">*</span> <span class="o">(</span><span class="o">)</span> <span class="o">{</span>
@@ -587,7 +640,7 @@
       </section>
 
       <section id="entry">
-        <h2>10. 從命令一路追到核心函式</h2>
+        <h2>11. 從命令一路追到核心函式</h2>
 
         <h3>安裝</h3>
         <pre class="language-shell"><span class="label">Shell</span><code><span class="sh-command">bun</span> run install:local</code></pre>
@@ -605,20 +658,21 @@
       </section>
 
       <section id="rules">
-        <h2>11. 最後應記住的判斷規則</h2>
+        <h2>12. 最後應記住的判斷規則</h2>
         <ul class="checklist">
           <li>先 build，因為安裝器不負責產生 <code>dist/reviewstuff</code>。</li>
           <li>Symbolic link 是捷徑，不是 binary 的副本。</li>
-          <li>PATH 決定 shell 能否只靠指令名稱找到程式。</li>
+          <li>PATH 不只決定找不找得到指令；第一個同名且可執行的檔案，決定實際啟用哪一版。</li>
           <li>安裝可以重複執行；已正確連結時不會重建。</li>
+          <li>安裝完成後會掃描所有同名指令，區分 local 已接管或 production 仍在前面。</li>
           <li>預設不覆蓋未知內容；<code>--force</code> 必須明確要求。</li>
-          <li>解除安裝沒有 force，只刪除指向目前 repo 的 link。</li>
+          <li>解除安裝沒有 force，只刪除指向目前 repo 的 link，之後重新顯示 PATH 的第一順位。</li>
           <li>binary 已不存在時，屬於本 repo 的失效 link 仍可解除安裝。</li>
           <li>Effect 把成功、錯誤和外部依賴放進型別，最後再由 Bun runtime 執行。</li>
         </ul>
 
         <aside class="summary">
-          <p><strong>最值得學的設計：</strong>這份程式不只是「建立一條 link」，而是先辨認 ownership，再決定能否覆蓋或刪除。真正重要的是可重複執行和預設安全，而不是檔案操作本身。</p>
+          <p><strong>最值得學的設計：</strong>這份程式同時處理兩種 ownership：檔案系統 ownership 決定能不能覆蓋或刪除，PATH 順序則決定哪一版真正接管指令。安全不只是不誤刪，也包括不讓使用者誤會目前正在執行哪個版本。</p>
         </aside>
       </section>
 
