@@ -1,6 +1,6 @@
 ---
 name: implement-with-claude-review
-description: Implement a plan or scoped code change as Codex, verify it, ask Claude Code for a read-only review, then have Codex validate the findings, fix confirmed issues, rerun verification, and report the result. Use when the user provides a plan or specification and asks for implementation with Claude review, or requests an end-to-end Codex implementation and cross-model review workflow. If Claude quota is unavailable, fall back to an independent Codex review and clearly disclose it.
+description: Implement a plan or scoped code change as Codex, verify it, ask Claude Code for a read-only review, then have Codex validate the findings, fix confirmed issues, rerun verification, and report the result. Use when the user provides a plan or specification and asks for implementation with Claude review, or requests an end-to-end Codex implementation and cross-model review workflow. If Claude cannot complete the review for any reason, fall back to an independent Codex review and clearly disclose the specific cause.
 ---
 
 # Implement with Claude Review
@@ -25,20 +25,19 @@ Use Claude Opus by default unless the user requests another Claude model. Run Cl
 A typical invocation is:
 
 ```bash
-claude -p \
+claude -p "<focused review prompt>" \
   --model opus \
   --permission-mode plan \
-  --tools "Read,Grep,Glob,Bash" \
-  "<focused review prompt>"
+  --tools "Read,Grep,Glob,Bash"
 ```
 
 Tell Claude not to edit files. Ask it to prioritize findings over summary and include severity, file and line, concrete failure mode, and suggested fix direction. Ignore formatting, naming, subjective style, and unrelated future improvements.
 
 Treat Claude's review as evidence, not authority. Codex must verify each finding before changing code.
 
-## Quota Fallback
+## Claude Failure Fallback
 
-If Claude clearly fails because of quota, credits, usage limits, rate limits, or billing limits, use an independent Codex review instead:
+If Claude does not complete a usable review for any reason, use an independent Codex review instead. This includes quota, credits, rate limits, billing, authentication, organization policy, missing CLI access, context limits, invalid input, timeouts, tool failures, and malformed or empty review output. If the failure is an obviously correctable invocation error, correct it and retry Claude once before falling back; do not repeatedly retry unavailable external access.
 
 ```bash
 codex -C "$PWD" review -
@@ -46,15 +45,15 @@ codex -C "$PWD" review -
 
 Pass a focused review prompt through stdin with the original plan, acceptance criteria, implementation scope, verification results, and pre-existing changes to ignore.
 
-Immediately tell the user:
+Immediately tell the user that Claude did not complete the review, state the specific reason in plain language, and identify the replacement reviewer. Use this format, replacing the reason with the actual failure:
 
 ```text
-Review provider: Codex (fallback — Claude quota insufficient)
+Review provider: Codex (fallback — Claude unavailable: <specific reason>)
 ```
 
-After fallback, use Codex for any remaining review pass in that task. Count fallback reviews toward the two-pass limit. State that the review was independent but not cross-model.
+Classify the cause accurately instead of collapsing every failure into quota. Preserve enough detail to distinguish, for example, insufficient quota from disabled organization access or an invalid invocation, but do not expose secrets, credentials, or sensitive command output.
 
-Do not label authentication, organization-policy, context-size, or invalid-input errors as quota failures. Report those errors directly. If the Codex fallback also fails, report both failures and stop the review workflow.
+After fallback, use Codex for any remaining review pass in that task. Count fallback reviews toward the two-pass limit. State that the review was independent and not cross-model. Never imply that Claude reviewed or approved the implementation. If the Codex fallback also fails, report both the Claude failure and the Codex failure, then stop the review workflow.
 
 ## Final Report
 
@@ -82,4 +81,4 @@ A compact entry should look like:
   - Why: ...
 ```
 
-If Claude completed review, say so. If quota fallback occurred, use the exact provider label above and never imply Claude approved the implementation.
+If Claude completed review, say so. If fallback occurred, include the exact provider label and specific reason reported when fallback began, and never imply Claude approved the implementation.
