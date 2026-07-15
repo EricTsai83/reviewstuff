@@ -1,0 +1,560 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="理解 Effect.flatMap 與 pipe 的責任、型別語意與實際使用時機。">
+  <title>Effect.flatMap 與 pipe：作用、差異與使用時機</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --clay: #D97757;
+      --slate: #141413;
+      --ivory: #FAF9F5;
+      --oat: #E3DACC;
+      --white: #FFFFFF;
+      --gray-100: #F0EEE6;
+      --gray-300: #D1CFC5;
+      --gray-500: #87867F;
+      --gray-700: #3D3D3A;
+      --space-sm: 8px;
+      --space-md: 12px;
+      --space-lg: 16px;
+      --space-xl: 24px;
+      --space-2xl: 32px;
+      --space-3xl: 48px;
+      --radius-sm: 4px;
+      --radius-md: 8px;
+      --content-width: 68ch;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      background: var(--ivory);
+      color: var(--slate);
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 16px;
+      font-weight: 430;
+      line-height: 1.55;
+      letter-spacing: 0;
+    }
+
+    main {
+      max-width: var(--content-width);
+      margin: 0 auto;
+      padding: var(--space-3xl) var(--space-xl);
+    }
+
+    article {
+      background: transparent;
+      border: 0;
+      border-radius: 0;
+      box-shadow: none;
+      padding: 0;
+    }
+
+    h1, h2, h3 { letter-spacing: -0.018em; }
+    h1 {
+      max-width: none;
+      margin: 0 0 var(--space-lg);
+      font-size: 1.8rem;
+      line-height: 1.18;
+      text-wrap: balance;
+      overflow-wrap: normal;
+    }
+    h2 {
+      margin: var(--space-3xl) 0 var(--space-lg);
+      font-size: 1.22rem;
+      line-height: 1.25;
+    }
+    h3 {
+      margin: var(--space-xl) 0 var(--space-md);
+      font-size: 1rem;
+      line-height: 1.35;
+    }
+
+    p, ul, ol, .deck, .callout, table, pre { max-width: var(--content-width); }
+    p { margin: 0 0 var(--space-lg); }
+    ul, ol { margin: 0 0 var(--space-xl); padding-left: 1.35rem; }
+    li + li { margin-top: var(--space-sm); }
+    .deck {
+      margin: 0 0 var(--space-2xl);
+      color: var(--gray-700);
+      font-size: 1.08rem;
+    }
+
+    a {
+      color: var(--clay);
+      text-decoration: underline;
+      text-underline-offset: 0.18em;
+    }
+
+    p code, li code, td code, th code {
+      padding: 0.08em 0.28em;
+      border: 1px solid var(--oat);
+      border-radius: var(--radius-sm);
+      background: var(--gray-100);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.9em;
+      overflow-wrap: anywhere;
+    }
+
+    .callout {
+      margin: var(--space-xl) 0;
+      padding: var(--space-lg);
+      border: 1px solid var(--oat);
+      border-left: 4px solid var(--clay);
+      border-radius: 0 var(--radius-md) var(--radius-md) 0;
+      background: var(--gray-100);
+    }
+    .callout p:last-child { margin-bottom: 0; }
+    .callout strong { display: block; margin-bottom: var(--space-sm); }
+
+    .table-wrap {
+      width: 100%;
+      margin: var(--space-lg) 0 var(--space-xl);
+      overflow-x: auto;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.94rem;
+    }
+    th, td {
+      padding: 10px 12px;
+      border: 1px solid var(--oat);
+      text-align: left;
+      vertical-align: top;
+    }
+    th { background: var(--gray-100); font-weight: 650; }
+    td { background: rgba(255, 255, 255, 0.35); }
+
+    pre {
+      position: relative;
+      width: 100%;
+      margin: var(--space-lg) 0 var(--space-xl);
+      border: 1px solid #26241f;
+      border-radius: var(--radius-md);
+      background: #11110f;
+      color: #d8d4ca;
+      overflow: hidden;
+    }
+    pre code {
+      display: block;
+      border: 0;
+      background: transparent;
+      padding: 18px 64px 18px 22px;
+      color: inherit;
+      overflow-x: auto;
+      white-space: pre;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.875rem;
+      font-weight: 400;
+      line-height: 1.62;
+      scrollbar-width: none;
+    }
+    pre code::-webkit-scrollbar { width: 0; height: 0; }
+    pre .label { display: none; }
+
+    .copy-code {
+      position: absolute;
+      top: 9px;
+      right: 9px;
+      z-index: 1;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 30px;
+      height: 30px;
+      padding: 0;
+      border: 1px solid rgba(250, 249, 245, 0.14);
+      border-radius: var(--radius-sm);
+      background: rgba(250, 249, 245, 0.06);
+      color: rgba(250, 249, 245, 0.72);
+      cursor: pointer;
+    }
+    .copy-code:hover, .copy-code:focus-visible {
+      border-color: rgba(250, 249, 245, 0.28);
+      background: rgba(250, 249, 245, 0.12);
+      color: var(--ivory);
+      outline: none;
+    }
+    .copy-code.copied {
+      border-color: rgba(143, 184, 106, 0.42);
+      background: rgba(143, 184, 106, 0.14);
+      color: #b8d99a;
+    }
+    .copy-code svg {
+      width: 13px;
+      height: 13px;
+      stroke: currentColor;
+      stroke-width: 1.8;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      fill: none;
+      pointer-events: none;
+    }
+    .code-scrollbar {
+      position: absolute;
+      right: 0;
+      bottom: 0;
+      left: 0;
+      height: 3px;
+      border-radius: 999px;
+      background: rgba(250, 249, 245, 0.1);
+      cursor: pointer;
+    }
+    .code-scrollbar.hidden { display: none; }
+    .code-scrollbar-thumb {
+      height: 100%;
+      border-radius: inherit;
+      background: rgba(255, 148, 110, 0.82);
+      transform: translateX(0);
+      cursor: grab;
+    }
+    .code-scrollbar-thumb:active { cursor: grabbing; }
+
+    pre code .k { color: #ff946e; font-weight: 400; }
+    pre code .s { color: #8fb86a; }
+    pre code .n, pre code .p { color: #d8d4ca; }
+    pre code .c { color: #858177; font-style: italic; }
+    pre code .f { color: #cfc6a2; }
+    pre code .t { color: #cfc6a2; font-weight: 400; }
+    pre code .o { color: #ff946e; }
+
+    .sources {
+      margin-top: var(--space-3xl);
+      padding-top: var(--space-xl);
+      border-top: 1px solid var(--oat);
+      color: var(--gray-700);
+      font-size: 0.9rem;
+    }
+    .sources h2 { margin-top: 0; }
+
+    @media (max-width: 640px) {
+      body { font-size: 15px; }
+      h1 { font-size: 1.65rem; }
+      main { padding: var(--space-xl); }
+      pre code { font-size: 0.8125rem; line-height: 1.5; }
+      p code, li code, td code { font-size: 0.9em; }
+      table, .deck, .sources { font-size: 0.875rem; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <article>
+      <h1>Effect.flatMap 與 pipe：作用、差異與使用時機</h1>
+      <p class="deck"><code>Effect.flatMap</code> 決定 Effect 如何依賴前一步結果繼續執行；<code>pipe</code> 則只是把值依序交給函式。理解這個責任邊界，就能看懂大部分 Effect pipeline。</p>
+
+      <div class="callout">
+        <strong>先記住一句話</strong>
+        <p><code>pipe</code> 是組合函式的語法工具；<code>Effect.flatMap</code> 是帶有 Effect 執行、錯誤與依賴語意的操作。</p>
+      </div>
+
+      <h2>從一個有前後依賴的任務開始</h2>
+      <p>假設程式要先取得使用者，再用使用者 ID 查詢訂單。第二步無法預先建立，因為它需要第一步成功後產生的值：</p>
+
+      <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">import</span> <span class="o">{</span> <span class="t">Effect</span> <span class="o">}</span> <span class="k">from</span> <span class="s">"effect"</span>
+
+<span class="k">type</span> <span class="t">User</span> <span class="o">=</span> <span class="o">{</span> readonly id<span class="o">:</span> number <span class="o">}</span>
+
+<span class="k">const</span> getUser<span class="o">:</span> <span class="t">Effect</span><span class="o">.</span><span class="p">Effect</span><span class="o">&lt;</span><span class="t">User</span><span class="o">&gt;</span> <span class="o">=</span>
+  <span class="t">Effect</span><span class="o">.</span><span class="p">succeed</span><span class="o">(</span><span class="o">{</span> id<span class="o">:</span> <span class="n">1</span> <span class="o">}</span><span class="o">)</span>
+
+<span class="k">const</span> getOrders <span class="o">=</span> <span class="o">(</span>userId<span class="o">:</span> number<span class="o">)</span><span class="o">:</span> <span class="t">Effect</span><span class="o">.</span><span class="p">Effect</span><span class="o">&lt;</span><span class="t">ReadonlyArray</span><span class="o">&lt;</span>string<span class="o">&gt;</span><span class="o">&gt;</span> <span class="o">=</span><span class="o">&gt;</span>
+  <span class="t">Effect</span><span class="o">.</span><span class="p">succeed</span><span class="o">(</span><span class="o">[</span><span class="s">`order-${userId}`</span><span class="o">]</span><span class="o">)</span></code></pre>
+
+      <p><code>Effect.flatMap</code> 先建立一個新的 Effect 描述。當這個 Effect 被 runtime 執行時，它會執行第一步、把成功值交給回呼函式，再執行回呼所回傳的下一個 Effect：</p>
+
+      <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">const</span> program <span class="o">=</span> <span class="t">Effect</span><span class="o">.</span><span class="p">flatMap</span><span class="o">(</span>
+  getUser<span class="o">,</span>
+  <span class="o">(</span>user<span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span> <span class="f">getOrders</span><span class="o">(</span>user<span class="o">.</span><span class="p">id</span><span class="o">)</span>
+<span class="o">)</span></code></pre>
+
+      <p>建立 <code>program</code> 時，這些工作尚未真正執行。如果 runtime 執行它之後 <code>getUser</code> 失敗，查詢訂單就不會開始；如果查詢訂單失敗，整個 <code>program</code> 也會失敗。這種惰性、短路與錯誤傳遞是 Effect 的語意，不是 <code>pipe</code> 提供的。</p>
+
+      <h2>flatMap 做了什麼</h2>
+      <p>可以把 <code>flatMap</code> 理解成四個連續動作：</p>
+      <ol>
+        <li>描述第一個 Effect。</li>
+        <li>在執行時取得它的成功值。</li>
+        <li>用成功值建立下一個 Effect。</li>
+        <li>把兩層 Effect 攤平成單一 Effect，並合併錯誤與環境依賴。</li>
+      </ol>
+
+      <p>簡化後的型別關係如下：</p>
+
+      <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="t">Effect</span><span class="o">&lt;</span><span class="t">A</span><span class="o">,</span> <span class="t">E</span><span class="o">,</span> <span class="t">R</span><span class="o">&gt;</span>
+  <span class="o">+</span> <span class="o">(</span><span class="t">A</span> <span class="o">=</span><span class="o">&gt;</span> <span class="t">Effect</span><span class="o">&lt;</span><span class="t">B</span><span class="o">,</span> <span class="t">E2</span><span class="o">,</span> <span class="t">R2</span><span class="o">&gt;</span><span class="o">)</span>
+  → <span class="t">Effect</span><span class="o">&lt;</span><span class="t">B</span><span class="o">,</span> <span class="t">E</span> <span class="o">|</span> <span class="t">E2</span><span class="o">,</span> <span class="t">R</span> <span class="o">|</span> <span class="t">R2</span><span class="o">&gt;</span></code></pre>
+
+      <p>成功型別從 <code>A</code> 變成 <code>B</code>；兩個步驟可能產生的錯誤 <code>E</code>、<code>E2</code>，以及需要的環境 <code>R</code>、<code>R2</code> 都會反映在結果型別中。</p>
+
+      <h2>pipe 做了什麼</h2>
+      <p><code>pipe</code> 不認識 Effect。它只把第一個參數交給下一個函式，再把結果交給後面的函式：</p>
+
+      <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="f">pipe</span><span class="o">(</span>value<span class="o">,</span> fn1<span class="o">,</span> fn2<span class="o">)</span>
+
+<span class="c">// 概念上等同於：</span>
+<span class="f">fn2</span><span class="o">(</span><span class="f">fn1</span><span class="o">(</span>value<span class="o">)</span><span class="o">)</span></code></pre>
+
+      <p><code>pipe</code> 會立即呼叫這些一般函式，但若其中傳遞的是 Effect，得到的仍然只是組合完成的 Effect 描述。真正執行工作的是 Effect runtime。</p>
+      <p>因此，使用 <code>pipe</code> 並不會自動處理 Effect 的失敗、環境依賴或巢狀結構。這些行為仍然來自放進 pipeline 的 <code>Effect.flatMap</code>、<code>Effect.map</code>、<code>Effect.catchAll</code> 等操作。</p>
+
+      <h2>pipe 裡可以放 Effect function 嗎？</h2>
+      <p>可以。更精確地說，<code>pipe</code> 的第一個參數是一個值，後面的參數都必須是函式；這些函式既可以處理普通值，也可以處理 Effect。唯一的接續條件是：</p>
+
+      <div class="callout">
+        <strong>Pipeline 的型別規則</strong>
+        <p>前一步的輸出型別，必須能作為下一個函式的輸入型別。<code>pipe</code> 不會在兩步之間自動轉換或解開值。</p>
+      </div>
+
+      <h3>普通值的 pipeline</h3>
+      <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">const</span> result <span class="o">=</span> <span class="f">pipe</span><span class="o">(</span>
+  <span class="n">10</span><span class="o">,</span>                    <span class="c">// number</span>
+  <span class="o">(</span>n<span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span> n <span class="o">*</span> <span class="n">2</span><span class="o">,</span>         <span class="c">// number → number</span>
+  <span class="o">(</span>n<span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span> <span class="f">String</span><span class="o">(</span>n<span class="o">)</span>      <span class="c">// number → string</span>
+<span class="o">)</span>
+
+<span class="c">// result: "20"</span></code></pre>
+
+      <p>每一步都能接起來，因為前一步輸出的 <code>number</code> 正好是下一步需要的輸入。</p>
+
+      <h3>Effect 的 pipeline</h3>
+      <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">const</span> program <span class="o">=</span> <span class="f">pipe</span><span class="o">(</span>
+  getUser<span class="o">,</span>                                      <span class="c">// Effect&lt;User&gt;</span>
+  <span class="t">Effect</span><span class="o">.</span><span class="p">flatMap</span><span class="o">(</span><span class="o">(</span>user<span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span> <span class="f">getOrders</span><span class="o">(</span>user<span class="o">.</span><span class="p">id</span><span class="o">)</span><span class="o">)</span><span class="o">,</span> <span class="c">// Effect&lt;User&gt; → Effect&lt;Order[]&gt;</span>
+  <span class="t">Effect</span><span class="o">.</span><span class="p">map</span><span class="o">(</span><span class="o">(</span>orders<span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span> orders<span class="o">.</span><span class="p">length</span><span class="o">)</span>         <span class="c">// Effect&lt;Order[]&gt; → Effect&lt;number&gt;</span>
+<span class="o">)</span></code></pre>
+
+      <p>這裡放進 <code>pipe</code> 的確實是 Effect 相關函式。以 <code>Effect.map(transform)</code> 和 <code>Effect.flatMap(next)</code> 這種寫法呼叫時，它們會先回傳一個等待接收 Effect 的函式：</p>
+
+      <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="t">Effect</span><span class="o">.</span><span class="p">map</span><span class="o">(</span>transform<span class="o">)</span>
+<span class="c">// Effect&lt;A, E, R&gt; → Effect&lt;B, E, R&gt;</span>
+
+<span class="t">Effect</span><span class="o">.</span><span class="p">flatMap</span><span class="o">(</span>next<span class="o">)</span>
+<span class="c">// Effect&lt;A, E, R&gt; → Effect&lt;B, E | E2, R | R2&gt;</span></code></pre>
+
+      <p>因此它們能直接成為 pipeline 的某一步。它們仍然是普通的 TypeScript 函式，只是輸入與輸出型別都是 Effect。</p>
+
+      <h3>為什麼直接放 getOrders 不行？</h3>
+      <p>假設 <code>getOrders</code> 的輸入是使用者 ID：</p>
+
+      <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">const</span> getOrders <span class="o">=</span> <span class="o">(</span>
+  userId<span class="o">:</span> number
+<span class="o">)</span><span class="o">:</span> <span class="t">Effect</span><span class="o">.</span><span class="p">Effect</span><span class="o">&lt;</span><span class="t">ReadonlyArray</span><span class="o">&lt;</span>string<span class="o">&gt;</span><span class="o">&gt;</span> <span class="o">=</span><span class="o">&gt;</span>
+  <span class="t">Effect</span><span class="o">.</span><span class="p">succeed</span><span class="o">(</span><span class="o">[</span><span class="s">`order-${userId}`</span><span class="o">]</span><span class="o">)</span></code></pre>
+
+      <p>那麼以下 pipeline 的型別無法接續：</p>
+
+      <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">const</span> program <span class="o">=</span> <span class="f">pipe</span><span class="o">(</span>
+  getUser<span class="o">,</span>   <span class="c">// 輸出：Effect&lt;User&gt;</span>
+  getOrders  <span class="c">// 輸入：number</span>
+<span class="o">)</span>
+
+<span class="c">// 實際上等同於 getOrders(getUser)</span>
+<span class="c">// 但 Effect&lt;User&gt; 不是 number</span></code></pre>
+
+      <p>問題不在於 <code>getOrders</code> 回傳 Effect，而在於它需要 <code>number</code>，前一步給它的卻是整個 <code>Effect&lt;User&gt;</code>。<code>pipe</code> 不會執行 <code>getUser</code>，也不會從中取出 <code>User</code>。</p>
+
+      <p><code>Effect.flatMap</code> 會建立正確的橋接：它接收前一步的 <code>Effect&lt;User&gt;</code>，等 Effect 執行成功後，再把裡面的 <code>User</code> 交給回呼函式。</p>
+
+      <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">const</span> program <span class="o">=</span> <span class="f">pipe</span><span class="o">(</span>
+  getUser<span class="o">,</span>
+  <span class="t">Effect</span><span class="o">.</span><span class="p">flatMap</span><span class="o">(</span><span class="o">(</span>user<span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span> <span class="f">getOrders</span><span class="o">(</span>user<span class="o">.</span><span class="p">id</span><span class="o">)</span><span class="o">)</span>
+<span class="o">)</span></code></pre>
+
+      <p>可以把兩者的差異濃縮成：<code>pipe</code> 把「整個前一步結果」傳給下一個函式；<code>Effect.flatMap</code> 則讓回呼函式取得「Effect 成功後的值」。</p>
+
+      <h2>同一段程式的三種寫法</h2>
+      <p>以下三種寫法具有相同語意。選擇差異主要在可讀性，而不是執行行為。</p>
+
+      <h3>直接呼叫</h3>
+      <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">const</span> program <span class="o">=</span> <span class="t">Effect</span><span class="o">.</span><span class="p">flatMap</span><span class="o">(</span>
+  getUser<span class="o">,</span>
+  <span class="o">(</span>user<span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span> <span class="f">getOrders</span><span class="o">(</span>user<span class="o">.</span><span class="p">id</span><span class="o">)</span>
+<span class="o">)</span></code></pre>
+
+      <h3>使用獨立的 pipe</h3>
+      <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">import</span> <span class="o">{</span> <span class="t">Effect</span><span class="o">,</span> pipe <span class="o">}</span> <span class="k">from</span> <span class="s">"effect"</span>
+
+<span class="k">const</span> program <span class="o">=</span> <span class="f">pipe</span><span class="o">(</span>
+  getUser<span class="o">,</span>
+  <span class="t">Effect</span><span class="o">.</span><span class="p">flatMap</span><span class="o">(</span><span class="o">(</span>user<span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span> <span class="f">getOrders</span><span class="o">(</span>user<span class="o">.</span><span class="p">id</span><span class="o">)</span><span class="o">)</span>
+<span class="o">)</span></code></pre>
+
+      <h3>使用 Effect 的 .pipe()</h3>
+      <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">const</span> program <span class="o">=</span> getUser<span class="o">.</span><span class="p">pipe</span><span class="o">(</span>
+  <span class="t">Effect</span><span class="o">.</span><span class="p">flatMap</span><span class="o">(</span><span class="o">(</span>user<span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span> <span class="f">getOrders</span><span class="o">(</span>user<span class="o">.</span><span class="p">id</span><span class="o">)</span><span class="o">)</span>
+<span class="o">)</span></code></pre>
+
+      <p>當步驟增多時，後兩種 pipeline 寫法通常比較容易由上往下閱讀；只有一個操作時，直接呼叫也很清楚。</p>
+
+      <h2>pipe、map 與 flatMap 的責任比較</h2>
+      <div class="table-wrap" role="region" aria-label="pipe、map 與 flatMap 比較" tabindex="0">
+        <table>
+          <thead>
+            <tr>
+              <th scope="col">工具</th>
+              <th scope="col">回呼／輸入</th>
+              <th scope="col">主要責任</th>
+              <th scope="col">何時使用</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>pipe</code></td>
+              <td>接收前一步結果的函式，可以是 Effect operator</td>
+              <td>立即依序呼叫函式、組織程式碼</td>
+              <td>把多個操作寫成由上往下的流程</td>
+            </tr>
+            <tr>
+              <td><code>Effect.map</code></td>
+              <td><code>A → B</code></td>
+              <td>轉換成功值</td>
+              <td>下一步只是純計算，不需要建立新 Effect</td>
+            </tr>
+            <tr>
+              <td><code>Effect.flatMap</code></td>
+              <td><code>A → Effect&lt;B, E, R&gt;</code></td>
+              <td>串接相依 Effect 並攤平結果</td>
+              <td>下一步本身可能失敗、需要服務或執行非同步工作</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h2>為什麼不能一律使用 map</h2>
+      <p>如果在 <code>map</code> 的回呼中回傳另一個 Effect，得到的是「Effect 裡面還有 Effect」：</p>
+
+      <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">const</span> nested <span class="o">=</span> getUser<span class="o">.</span><span class="p">pipe</span><span class="o">(</span>
+  <span class="t">Effect</span><span class="o">.</span><span class="p">map</span><span class="o">(</span><span class="o">(</span>user<span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span> <span class="f">getOrders</span><span class="o">(</span>user<span class="o">.</span><span class="p">id</span><span class="o">)</span><span class="o">)</span>
+<span class="o">)</span>
+
+<span class="c">// Effect&lt;Effect&lt;ReadonlyArray&lt;string&gt;&gt;&gt;</span></code></pre>
+
+      <p><code>map</code> 只轉換成功值，不會把回傳的 Effect 當成下一個步驟執行。改用 <code>flatMap</code>，結果才是單層的訂單 Effect：</p>
+
+      <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">const</span> program <span class="o">=</span> getUser<span class="o">.</span><span class="p">pipe</span><span class="o">(</span>
+  <span class="t">Effect</span><span class="o">.</span><span class="p">flatMap</span><span class="o">(</span><span class="o">(</span>user<span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span> <span class="f">getOrders</span><span class="o">(</span>user<span class="o">.</span><span class="p">id</span><span class="o">)</span><span class="o">)</span>
+<span class="o">)</span>
+
+<span class="c">// Effect&lt;ReadonlyArray&lt;string&gt;&gt;</span></code></pre>
+
+      <h2>實用判斷規則</h2>
+      <ul>
+        <li><code>pipe</code> 的第一個參數是值，後面都是函式；函式可以處理普通值，也可以處理 Effect。</li>
+        <li>每加入一步，就檢查前一步輸出型別是否等於下一步輸入型別。</li>
+        <li>回呼回傳普通值：使用 <code>Effect.map</code>。</li>
+        <li>回呼回傳另一個 Effect，而且需要上一個成功值：使用 <code>Effect.flatMap</code>。</li>
+        <li>下一個 Effect 不需要上一個結果：可考慮 <code>Effect.andThen</code> 或其他明確的 sequencing 操作。</li>
+        <li>pipeline 很長、變數彼此依賴很多：可考慮 <code>Effect.gen</code> 改善可讀性。</li>
+        <li>看到 pipeline 時，分開判斷「JavaScript 函式如何組合」與「Effect 何時由 runtime 執行」。</li>
+      </ul>
+
+      <div class="callout">
+        <strong>最後的心智模型</strong>
+        <p><code>pipe</code> 像輸送帶，決定值如何由左到右流動；<code>flatMap</code> 是輸送帶上的加工步驟，決定前一個 Effect 成功後要建立與執行哪一個 Effect。</p>
+      </div>
+
+      <section class="sources" aria-labelledby="sources-heading">
+        <h2 id="sources-heading">延伸閱讀</h2>
+        <ul>
+          <li><a href="https://effect-ts.github.io/effect/effect/Effect.ts.html#flatmap">Effect API：flatMap</a></li>
+        </ul>
+      </section>
+    </article>
+  </main>
+
+  <script>
+    (() => {
+      const copyIcon = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="11" height="11" rx="2"></rect><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"></path></svg>'
+      const checkIcon = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"></path></svg>'
+
+      const copyText = async (text) => {
+        if (navigator.clipboard && window.isSecureContext) {
+          await navigator.clipboard.writeText(text)
+          return
+        }
+        const textarea = document.createElement('textarea')
+        textarea.value = text
+        textarea.style.position = 'fixed'
+        textarea.style.opacity = '0'
+        document.body.appendChild(textarea)
+        textarea.select()
+        document.execCommand('copy')
+        textarea.remove()
+      }
+
+      document.querySelectorAll('pre').forEach((pre) => {
+        const code = pre.querySelector('code')
+        if (!code) return
+
+        const button = document.createElement('button')
+        button.className = 'copy-code'
+        button.type = 'button'
+        button.setAttribute('aria-label', '複製程式碼')
+        button.innerHTML = copyIcon
+        button.addEventListener('click', async () => {
+          await copyText(code.textContent || '')
+          button.classList.add('copied')
+          button.innerHTML = checkIcon
+          button.setAttribute('aria-label', '已複製')
+          window.setTimeout(() => {
+            button.classList.remove('copied')
+            button.innerHTML = copyIcon
+            button.setAttribute('aria-label', '複製程式碼')
+          }, 1400)
+        })
+        pre.appendChild(button)
+
+        const track = document.createElement('div')
+        track.className = 'code-scrollbar'
+        track.setAttribute('aria-hidden', 'true')
+        const thumb = document.createElement('div')
+        thumb.className = 'code-scrollbar-thumb'
+        track.appendChild(thumb)
+        pre.appendChild(track)
+
+        const updateThumb = () => {
+          const ratio = Math.min(1, code.clientWidth / code.scrollWidth)
+          const trackWidth = track.clientWidth
+          const thumbWidth = Math.max(28, trackWidth * ratio)
+          const maxThumbX = Math.max(0, trackWidth - thumbWidth)
+          const maxScroll = Math.max(1, code.scrollWidth - code.clientWidth)
+          thumb.style.width = `${thumbWidth}px`
+          thumb.style.transform = `translateX(${maxThumbX * code.scrollLeft / maxScroll}px)`
+          track.classList.toggle('hidden', ratio >= 1)
+        }
+
+        code.addEventListener('scroll', updateThumb, { passive: true })
+        window.addEventListener('resize', updateThumb)
+
+        let dragStartX = 0
+        let dragStartScroll = 0
+        thumb.addEventListener('pointerdown', (event) => {
+          dragStartX = event.clientX
+          dragStartScroll = code.scrollLeft
+          thumb.setPointerCapture(event.pointerId)
+        })
+        thumb.addEventListener('pointermove', (event) => {
+          if (!thumb.hasPointerCapture(event.pointerId)) return
+          const movable = Math.max(1, track.clientWidth - thumb.clientWidth)
+          const scrollable = Math.max(0, code.scrollWidth - code.clientWidth)
+          code.scrollLeft = dragStartScroll + (event.clientX - dragStartX) * scrollable / movable
+        })
+        track.addEventListener('click', (event) => {
+          if (event.target === thumb) return
+          const rect = track.getBoundingClientRect()
+          const ratio = (event.clientX - rect.left) / rect.width
+          code.scrollLeft = ratio * (code.scrollWidth - code.clientWidth)
+        })
+        updateThumb()
+      })
+    })()
+  </script>
+</body>
+</html>
