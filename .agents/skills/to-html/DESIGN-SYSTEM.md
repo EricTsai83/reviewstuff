@@ -109,7 +109,8 @@ pre {
 
 - Start the article with the `<h1>` topic title. Do not place eyebrow/kicker text, badges, metadata rows, or decorative labels above the title by default.
 - Use one `.deck` paragraph immediately after the title when a summary is useful.
-- Keep technical articles in a prose-first layout: title, deck, ordered sections, examples, decision rules, and optional references.
+- Keep technical articles prose-first. Decks, reading paths, examples, diagrams, tables, decision rules, and references are optional elements to select according to the content, not required slots.
+- Do not add a TL;DR or summary callout by default, especially when the deck already provides the same orientation.
 - Do not use hero sections, marketing layouts, split media/text layouts, or decorative section cards for guides and notes.
 - Use tables only for comparisons or decision rules that are easier to scan than prose.
 
@@ -121,7 +122,7 @@ pre {
 - Code block labels: keep `.label` in the markup for tooling context, but hide it by default. If a page truly needs visible language labels, show them as a small unobtrusive corner pill, never as a full-height toolbar.
 - Copy buttons: add a small top-right icon-only `.copy-code` button to each code block with local JS; copy only `pre code` text, keep `aria-label`, use clipboard API with a textarea fallback, and briefly switch the icon to a check mark after a successful click.
 - Tables: same width as prose, collapsed borders, `--gray-100` header, `--oat` borders, compact padding.
-- Callouts: `--gray-100` background, `--oat` border, left accent using `--clay`; warning callouts may use `--warning`.
+- Callouts: use only for a relevant warning, caveat, exception, or constraint; do not use them as automatic summaries. Style them with a `--gray-100` background, `--oat` border, and left accent using `--clay`; warning callouts may use `--warning`.
 - Sources/reference sections: use a concise `<ul>` list by default; add a top border using `--oat` and smaller text.
 
 Default code block CSS. Use this compact pattern rather than adding a toolbar:

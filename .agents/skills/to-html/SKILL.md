@@ -13,7 +13,7 @@ Turn the durable knowledge in the current context into an independently readable
 1. Extract explanations, examples, tradeoffs, caveats, code, commands, links, and next steps worth rereading. Omit tool logs, acknowledgements, and irrelevant back-and-forth.
 2. Identify the background, terminology, system context, and connective explanations a new reader needs. Supply them in the article instead of relying on the conversation, repository, another document, or unstated prior knowledge.
 3. Treat the conversation as source material, not as the outline. Organize the article around the subject and preserve the user's primary language unless asked otherwise.
-4. If the article teaches or explains a subject, plan its learning path before drafting by following `Learning Articles` below.
+4. If the article teaches or explains a subject, choose a useful learning path and article elements by following `Article Composition` below.
 5. Choose the format:
    - Use a clean prose article by default.
    - Read `HTML-ARTICLE-DESIGN-PATTERNS.md` when a comparison, plan, report, code review, design sheet, diagram, table, or small interactive tool would communicate the material better.
@@ -50,18 +50,44 @@ If the available context cannot support an accurate independent explanation, res
 - For general learning articles, prefer small pedagogical examples over repository-specific code.
 - Add outside context or research only when needed for accuracy or standalone completeness, and verify it before inclusion.
 - Explain rationale, boundaries, and tradeoffs when they affect how the reader should understand or apply the subject.
+- Do not add a TL;DR, “one thing to remember,” key-fact card, or summary callout by default. A short deck usually provides enough orientation; add a separate summary only when it contributes information the deck and conclusion do not already provide.
 
-## Learning Articles
+## Article Composition
 
-For educational or explainer content:
+Treat article structure as a palette, not a template or checklist. Select only the elements that help the specific subject, reader, and learning outcome. Do not include an element merely because it appears in this list, and do not force every article into the same sequence.
 
-1. Define the reader's likely starting point and the concrete understanding or ability they should gain.
-2. Order concepts by prerequisite: foundation, mental model, guided example, mechanics, tradeoffs, application, and practical checks. Adjust this sequence when the subject requires it.
-3. Merge fragmented questions into concepts and add the connective explanations needed by a reader who never saw the source conversation.
-4. Prefer one running example that gains complexity. Introduce each concept before examples or decisions that depend on it.
-5. End with durable decision rules, checks, or a useful next exercise when they help the reader apply the material independently.
+First identify the reader's likely starting point and what they should understand or be able to do afterward. Then compose the article from any useful combination of these elements:
 
-Before delivery, confirm that the headings express the subject's progression, every section advances the learning outcome, and the article is understandable without the source conversation or access to the codebase.
+| Element | What it can provide | Use it when |
+| --- | --- | --- |
+| Topic title | A direct statement of the article's subject | Always provide one semantic `<h1>` for the document |
+| Short deck | Topic, relevance, scope, or expected outcome in one short paragraph | The title alone does not orient a first-time reader |
+| Reading path or TOC | Links to major sections and a preview of the learning path | The article is long, has several distinct sections, or benefits from non-linear reading |
+| Foundation section | Background, terminology, assumptions, or the problem being solved | Later material depends on concepts the reader may not know |
+| Mental model | A reusable way to reason about the subject | The topic becomes easier when readers can predict behavior rather than memorize facts |
+| Running or guided example | A concrete example that gains detail across sections | Continuity helps connect abstract ideas to behavior |
+| Code block or command | Exact syntax, implementation, configuration, or observable behavior | The code itself materially advances understanding |
+| Figure or diagram | Flow, state, hierarchy, boundary, ownership, or relationships | Spatial structure is harder to understand from prose alone |
+| Table | Compact comparison, mapping, responsibility split, or decision criteria | Repeated fields or options are easier to scan side by side |
+| Callout | A warning, caveat, exception, or unusually important constraint | The information needs emphasis at the point where it becomes relevant |
+| Checklist or decision rules | Practical checks readers can apply independently | The article should support action or repeated decisions |
+| Glossary | Short definitions for several domain terms | Terminology density would otherwise interrupt the main explanation |
+| Closing synthesis or next exercise | A durable takeaway, application step, or way to test understanding | It adds value beyond repeating the introduction |
+| Sources or references | Attribution and optional paths for deeper reading | The article relies on external research, standards, or documentation |
+
+Use placement as guidance rather than a rigid order:
+
+- Put a short deck directly after the title when one is useful. Do not repeat it with an automatic summary card.
+- Put a reading path after the opening and before the main body when the article needs one.
+- Introduce a concept before showing a figure, table, code block, or decision that depends on it.
+- Give code and commands a purpose before the block and explain the important behavior afterward.
+- Place diagrams after the prose that introduces the relationship and before detailed explanation that relies on the figure.
+- Place callouts beside the relevant material, not automatically at the top of the article or at the end of every section.
+- Keep sources near supported claims or in a concise reference section when the article uses outside material.
+
+For educational content, order selected concepts by prerequisite. Foundation, mental model, guided example, mechanics, tradeoffs, application, and practical checks are possible stages, not mandatory sections. Merge fragmented questions into coherent concepts and add the connective explanation needed by someone who never saw the source conversation.
+
+Before delivery, confirm that every included element earns its place, the headings express a coherent progression, and the article is understandable without the source conversation or access to the codebase.
 
 ## HTML Requirements
 
