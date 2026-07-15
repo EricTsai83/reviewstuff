@@ -19,6 +19,11 @@ export interface GitDiff {
   readonly files: ReadonlyArray<GitFilePatch>;
 }
 
+interface GitChangedPath {
+  readonly path: string;
+  readonly pathspecs: ReadonlyArray<string>;
+}
+
 export class GitNotRepositoryError extends Data.TaggedError(
   "GitNotRepositoryError",
 )<{}> {}
@@ -94,6 +99,71 @@ const nulSeparatedPaths = (output: string): ReadonlyArray<string> =>
     .split("\0")
     .filter((path) => path.length > 0)
     .sort((left, right) => (left < right ? -1 : left > right ? 1 : 0));
+
+const nulSeparatedChangedPaths = (
+  output: string,
+): ReadonlyArray<GitChangedPath> => {
+  const fields = output.split("\0");
+  const changes: Array<GitChangedPath> = [];
+
+  for (let index = 0; index < fields.length;) {
+    const status = fields[index];
+
+    if (status === undefined || status.length === 0) {
+      break;
+    }
+
+    const sourcePath = fields[index + 1];
+
+    if (sourcePath === undefined) {
+      break;
+    }
+
+    if (status.startsWith("R") || status.startsWith("C")) {
+      const targetPath = fields[index + 2];
+
+      if (targetPath === undefined) {
+        break;
+      }
+
+      changes.push({
+        path: targetPath,
+        pathspecs: [sourcePath, targetPath],
+      });
+      index += 3;
+      continue;
+    }
+
+    changes.push({ path: sourcePath, pathspecs: [sourcePath] });
+    index += 2;
+  }
+
+  return changes.sort((left, right) =>
+    left.path < right.path ? -1 : left.path > right.path ? 1 : 0
+  );
+};
+
+const mergeChangedPaths = (
+  changes: ReadonlyArray<GitChangedPath>,
+): ReadonlyArray<GitChangedPath> => {
+  const merged = new Map<string, Set<string>>();
+
+  for (const change of changes) {
+    const pathspecs = merged.get(change.path) ?? new Set<string>();
+
+    for (const pathspec of change.pathspecs) {
+      pathspecs.add(pathspec);
+    }
+
+    merged.set(change.path, pathspecs);
+  }
+
+  return [...merged.entries()]
+    .map(([path, pathspecs]) => ({ path, pathspecs: [...pathspecs].sort() }))
+    .sort((left, right) =>
+      left.path < right.path ? -1 : left.path > right.path ? 1 : 0
+    );
+};
 
 const isBinaryPatch = (patch: string): boolean =>
   patch.split("\n").some((line) =>
@@ -225,12 +295,12 @@ const readPatch = (
 const collectPatches = (
   runner: CommandRunner.Service,
   inspector: FileInspector.Service,
-  paths: ReadonlyArray<string>,
+  changes: ReadonlyArray<GitChangedPath>,
   kind: GitFilePatch["source"],
   repositoryRoot: string,
   base: string = "HEAD",
 ): Effect.Effect<ReadonlyArray<GitFilePatch>, GitError> =>
-  Effect.forEach(paths, (path) =>
+  Effect.forEach(changes, ({ path, pathspecs }) =>
     withinFileSizeLimit(runner, inspector, path, kind, repositoryRoot).pipe(
       Effect.flatMap((withinLimit) => {
         if (!withinLimit) {
@@ -254,7 +324,16 @@ const collectPatches = (
         return readPatch(
           runner,
           `read ${kind} diff`,
-          ["diff", ...diffTarget, "--no-color", "--no-ext-diff", "--unified=3", "--", path],
+          [
+            "diff",
+            ...diffTarget,
+            "--find-renames",
+            "--no-color",
+            "--no-ext-diff",
+            "--unified=3",
+            "--",
+            ...pathspecs,
+          ],
           path,
           kind,
           new Set([0]),
@@ -295,11 +374,12 @@ const readDiff = (
       ])
     ).replace(/\r?\n$/, "");
 
-    const stagedPaths = nulSeparatedPaths(
+    const stagedPaths = nulSeparatedChangedPaths(
       yield* requireSuccess(runner, "list staged files", [
         "diff",
         "--cached",
-        "--name-only",
+        "--find-renames",
+        "--name-status",
         "-z",
         "--diff-filter=ACDMRTUXB",
         "--",
@@ -318,10 +398,11 @@ const readDiff = (
       return { files: staged };
     }
 
-    const unstagedPaths = nulSeparatedPaths(
+    const unstagedPaths = nulSeparatedChangedPaths(
       yield* requireSuccess(runner, "list unstaged files", [
         "diff",
-        "--name-only",
+        "--find-renames",
+        "--name-status",
         "-z",
         "--diff-filter=ACDMRTUXB",
         "--",
@@ -344,9 +425,14 @@ const readDiff = (
       repositoryRoot,
     );
     const base = baseResult.exitCode === 0 ? "HEAD" : emptyTree;
-    const trackedPaths = [...new Set([...stagedPaths, ...unstagedPaths])].sort(
-      (left, right) => (left < right ? -1 : left > right ? 1 : 0),
-    );
+    const trackedPaths = mergeChangedPaths([
+      ...stagedPaths,
+      ...unstagedPaths,
+    ]);
+    const untrackedChanges = untrackedPaths.map((path) => ({
+      path,
+      pathspecs: [path],
+    }));
     const [tracked, untracked] = yield* Effect.all(
       [
         collectPatches(
@@ -360,7 +446,7 @@ const readDiff = (
         collectPatches(
           runner,
           inspector,
-          untrackedPaths,
+          untrackedChanges,
           "untracked",
           repositoryRoot,
         ),

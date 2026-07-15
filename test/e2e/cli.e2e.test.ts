@@ -286,6 +286,27 @@ describe("reviewstuff binary", () => {
     expect(new Set(report.findings.map((finding) => finding.id)).size).toBe(2);
   });
 
+  test("pure renames do not report existing markers as added lines", async () => {
+    const cwd = await makeRepository();
+    await Bun.write(
+      `${cwd}/old.ts`,
+      "// REVIEWSTUFF_FAKE_FINDING existing\n",
+    );
+    await runGit(cwd, ["add", "old.ts"]);
+    await runGit(cwd, ["commit", "--quiet", "-m", "add rename fixture"]);
+    await runGit(cwd, ["mv", "old.ts", "new.ts"]);
+
+    for (const args of [["review", "--json"], ["review", "--staged", "--json"]]) {
+      const report = JSON.parse(await runCli(args, { cwd })) as {
+        summary: { changedFiles: number; findings: number };
+        findings: ReadonlyArray<unknown>;
+      };
+
+      expect(report.summary).toEqual({ changedFiles: 1, findings: 0 });
+      expect(report.findings).toEqual([]);
+    }
+  });
+
   test("review anchors literal paths at the repository root", async () => {
     const cwd = await makeRepository();
     await Bun.write(`${cwd}/:literal.ts`, "export const initial = true;\n");
