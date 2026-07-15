@@ -37,6 +37,9 @@ Do not report a pattern solely because `rg` found it. Explicit service values ar
 
 ## Reporting
 
+Write the entire review response in Traditional Chinese. Keep severity labels,
+file paths, code identifiers, API names, and tags in their original form.
+
 Lead with findings ordered by severity. For each finding include:
 
 - severity
@@ -53,5 +56,5 @@ Use these levels:
 Do not emit a general summary before findings. If there are no qualifying findings, make the entire response exactly:
 
 ```text
-All clear
+沒有發現問題
 ```
