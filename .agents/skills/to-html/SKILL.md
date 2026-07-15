@@ -51,6 +51,7 @@ If the available context cannot support an accurate independent explanation, res
 - Add outside context or research only when needed for accuracy or standalone completeness, and verify it before inclusion.
 - Explain rationale, boundaries, and tradeoffs when they affect how the reader should understand or apply the subject.
 - Do not add a TL;DR, “one thing to remember,” key-fact card, or summary callout by default. A short deck usually provides enough orientation; add a separate summary only when it contributes information the deck and conclusion do not already provide.
+- Do not add a “next exercise,” practice task, or homework section unless the user explicitly requests one.
 
 ## Article Composition
 
@@ -72,7 +73,7 @@ First identify the reader's likely starting point and what they should understan
 | Callout | A warning, caveat, exception, or unusually important constraint | The information needs emphasis at the point where it becomes relevant |
 | Checklist or decision rules | Practical checks readers can apply independently | The article should support action or repeated decisions |
 | Glossary | Short definitions for several domain terms | Terminology density would otherwise interrupt the main explanation |
-| Closing synthesis or next exercise | A durable takeaway, application step, or way to test understanding | It adds value beyond repeating the introduction |
+| Closing synthesis | A durable takeaway or final integration of the article's ideas | It adds value beyond repeating the introduction |
 | Sources or references | Attribution and optional paths for deeper reading | The article relies on external research, standards, or documentation |
 
 Use placement as guidance rather than a rigid order:

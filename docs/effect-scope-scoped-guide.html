@@ -1,0 +1,1051 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>Effect Scope 與 Effect.scoped：資源生命週期完整教學</title>
+  <style>
+    :root {
+      --paper: #f7f4ed;
+      --surface: #fffdf8;
+      --surface-strong: #ffffff;
+      --ink: #1e2421;
+      --muted: #626a65;
+      --line: #d9d5ca;
+      --line-strong: #b7b2a6;
+      --accent: #be583c;
+      --accent-soft: #f5dfd5;
+      --green: #2d6a55;
+      --green-soft: #dcebe4;
+      --code-bg: #202622;
+      --code-ink: #f4f1e8;
+      --shadow: 0 16px 40px rgba(37, 41, 38, 0.08);
+      --radius: 12px;
+      --content: 760px;
+    }
+
+    * { box-sizing: border-box; }
+
+    html {
+      scroll-behavior: smooth;
+      background: var(--paper);
+    }
+
+    body {
+      margin: 0;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 10% 0%, rgba(190, 88, 60, 0.08), transparent 28rem),
+        var(--paper);
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 17px;
+      line-height: 1.72;
+    }
+
+    main {
+      width: min(calc(100% - 40px), var(--content));
+      margin: 0 auto;
+      padding: 72px 0 96px;
+    }
+
+    h1, h2, h3 {
+      color: var(--ink);
+      line-height: 1.2;
+      letter-spacing: -0.025em;
+      text-wrap: balance;
+    }
+
+    h1 {
+      max-width: 720px;
+      margin: 0 0 20px;
+      font-size: clamp(2.45rem, 7vw, 4.7rem);
+      font-weight: 780;
+    }
+
+    h2 {
+      margin: 72px 0 18px;
+      padding-top: 8px;
+      font-size: clamp(1.75rem, 4vw, 2.35rem);
+    }
+
+    h3 {
+      margin: 38px 0 12px;
+      font-size: 1.28rem;
+    }
+
+    p { margin: 0 0 20px; }
+
+    a {
+      color: var(--accent);
+      text-decoration-thickness: 1px;
+      text-underline-offset: 3px;
+    }
+
+    code {
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+      font-size: 0.9em;
+    }
+
+    p code, li code, td code {
+      padding: 0.14em 0.34em;
+      color: #8f3f2d;
+      background: rgba(190, 88, 60, 0.1);
+      border: 1px solid rgba(190, 88, 60, 0.15);
+      border-radius: 5px;
+    }
+
+    .deck {
+      max-width: 650px;
+      margin-bottom: 34px;
+      color: var(--muted);
+      font-size: 1.2rem;
+      line-height: 1.65;
+    }
+
+    .summary {
+      margin: 36px 0;
+      padding: 24px 26px;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-left: 5px solid var(--accent);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+    }
+
+    .summary strong {
+      display: block;
+      margin-bottom: 7px;
+      font-size: 1.05rem;
+    }
+
+    .summary p:last-child { margin-bottom: 0; }
+
+    .toc {
+      margin: 44px 0 64px;
+      padding: 24px 28px;
+      background: rgba(255, 253, 248, 0.72);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+    }
+
+    .toc h2 {
+      margin: 0 0 12px;
+      padding: 0;
+      font-size: 1rem;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    .toc ol {
+      margin: 0;
+      padding-left: 1.25rem;
+      columns: 2;
+      column-gap: 32px;
+    }
+
+    .toc li { margin: 5px 0; }
+
+    .toc a {
+      color: var(--ink);
+      text-decoration-color: var(--line-strong);
+    }
+
+    pre {
+      position: relative;
+      overflow-x: auto;
+      margin: 24px 0 30px;
+      padding: 48px 22px 22px;
+      color: var(--code-ink);
+      background: var(--code-bg);
+      border: 1px solid #343c37;
+      border-radius: var(--radius);
+      box-shadow: 0 12px 28px rgba(26, 31, 28, 0.12);
+      line-height: 1.6;
+      tab-size: 2;
+    }
+
+    pre .label {
+      position: absolute;
+      top: 13px;
+      left: 18px;
+      color: #aab6ad;
+      font-family: ui-sans-serif, system-ui, sans-serif;
+      font-size: 0.72rem;
+      font-weight: 700;
+      letter-spacing: 0.09em;
+      text-transform: uppercase;
+    }
+
+    pre code {
+      display: block;
+      min-width: max-content;
+      font-size: 0.88rem;
+    }
+
+    .analogy {
+      display: grid;
+      grid-template-columns: 1fr auto 1fr;
+      align-items: center;
+      gap: 18px;
+      margin: 28px 0;
+      padding: 24px;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+    }
+
+    .analogy-block {
+      min-width: 0;
+      text-align: center;
+    }
+
+    .analogy-block strong {
+      display: block;
+      margin-bottom: 5px;
+    }
+
+    .analogy-block span {
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+
+    .analogy-arrow {
+      color: var(--accent);
+      font-size: 1.5rem;
+      font-weight: 700;
+    }
+
+    .flow-figure {
+      margin: 30px 0 38px;
+      padding: 20px;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+    }
+
+    .flow-figure svg {
+      display: block;
+      width: 100%;
+      height: auto;
+    }
+
+    .flow-figure .flow-mobile { display: none; }
+
+    .flow-figure figcaption {
+      margin-top: 16px;
+      color: var(--muted);
+      font-size: 0.9rem;
+      line-height: 1.55;
+      text-align: center;
+    }
+
+    .flow-figure .node rect,
+    .flow-figure .node polygon,
+    .flow-figure .node circle,
+    .flow-figure .node path {
+      fill: var(--surface-strong) !important;
+      stroke: var(--line) !important;
+      stroke-width: 1.5px !important;
+    }
+
+    .flow-figure .label,
+    .flow-figure .nodeLabel {
+      color: var(--ink) !important;
+      font-family: ui-sans-serif, system-ui, sans-serif !important;
+    }
+
+    .flow-figure .edgeLabel {
+      color: var(--muted) !important;
+      background: var(--surface) !important;
+    }
+
+    .type-shift {
+      display: grid;
+      grid-template-columns: 1fr auto 1fr;
+      align-items: center;
+      gap: 18px;
+      margin: 28px 0;
+    }
+
+    .type-card {
+      min-width: 0;
+      padding: 20px;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+    }
+
+    .type-card small {
+      display: block;
+      margin-bottom: 9px;
+      color: var(--muted);
+      font-weight: 700;
+    }
+
+    .type-card code {
+      color: #8f3f2d;
+      overflow-wrap: anywhere;
+    }
+
+    .type-arrow {
+      color: var(--accent);
+      font-size: 1.5rem;
+      font-weight: 750;
+    }
+
+    .callout {
+      margin: 28px 0;
+      padding: 20px 22px;
+      background: var(--green-soft);
+      border: 1px solid rgba(45, 106, 85, 0.28);
+      border-radius: var(--radius);
+    }
+
+    .callout strong {
+      display: block;
+      margin-bottom: 6px;
+      color: var(--green);
+    }
+
+    table {
+      width: 100%;
+      margin: 26px 0 34px;
+      border-collapse: separate;
+      border-spacing: 0;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      overflow: hidden;
+      font-size: 0.95rem;
+    }
+
+    th, td {
+      padding: 14px 16px;
+      text-align: left;
+      vertical-align: top;
+      border-bottom: 1px solid var(--line);
+    }
+
+    th {
+      color: var(--muted);
+      background: rgba(217, 213, 202, 0.24);
+      font-size: 0.8rem;
+      letter-spacing: 0.04em;
+    }
+
+    tr:last-child td { border-bottom: 0; }
+
+    ul, ol { padding-left: 1.35rem; }
+    li { margin: 8px 0; }
+
+    .checklist {
+      list-style: none;
+      padding: 0;
+    }
+
+    .checklist li {
+      position: relative;
+      padding: 12px 16px 12px 45px;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-bottom: 0;
+    }
+
+    .checklist li:first-child { border-radius: var(--radius) var(--radius) 0 0; }
+    .checklist li:last-child {
+      border-bottom: 1px solid var(--line);
+      border-radius: 0 0 var(--radius) var(--radius);
+    }
+
+    .checklist li::before {
+      content: "✓";
+      position: absolute;
+      left: 17px;
+      top: 12px;
+      color: var(--green);
+      font-weight: 800;
+    }
+
+    .closing {
+      margin-top: 70px;
+      padding-top: 34px;
+      border-top: 2px solid var(--ink);
+    }
+
+    @media (max-width: 640px) {
+      body { font-size: 16px; }
+
+      main {
+        width: min(calc(100% - 28px), var(--content));
+        padding: 44px 0 68px;
+      }
+
+      h1 { font-size: clamp(2.25rem, 12vw, 3.35rem); }
+      h2 { margin-top: 56px; }
+
+      .toc ol { columns: 1; }
+
+      .analogy,
+      .type-shift {
+        grid-template-columns: 1fr;
+      }
+
+      .analogy-arrow,
+      .type-arrow {
+        transform: rotate(90deg);
+        justify-self: center;
+      }
+
+      .flow-figure { padding: 12px; }
+
+      .flow-figure .flow-desktop { display: none; }
+
+      .flow-figure .flow-mobile {
+        display: block;
+        max-width: 230px;
+        margin-inline: auto;
+      }
+
+      table {
+        display: block;
+        overflow-x: auto;
+        white-space: nowrap;
+      }
+
+      th, td { min-width: 150px; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --paper: #171b18;
+        --surface: #202521;
+        --surface-strong: #252b27;
+        --ink: #eef1eb;
+        --muted: #b6bcb7;
+        --line: #3a423c;
+        --line-strong: #5b655e;
+        --accent: #ee987d;
+        --accent-soft: #4a2c24;
+        --green: #8cc9ad;
+        --green-soft: #213c32;
+      }
+
+      p code, li code, td code,
+      .type-card code { color: #f3ad96; }
+    }
+
+    /* Final visual-system pass */
+    :root {
+      color-scheme: light;
+      --clay: #d97757;
+      --slate: #141413;
+      --ivory: #faf9f5;
+      --oat: #e3dacc;
+      --white: #ffffff;
+      --gray-100: #f0eee6;
+      --gray-300: #d1cfc5;
+      --gray-500: #87867f;
+      --gray-700: #3d3d3a;
+      --space-sm: 8px;
+      --space-md: 12px;
+      --space-lg: 16px;
+      --space-xl: 24px;
+      --space-2xl: 32px;
+      --space-3xl: 48px;
+      --radius-sm: 4px;
+      --radius-md: 8px;
+      --content-width: 68ch;
+      --paper: var(--ivory);
+      --surface: var(--white);
+      --surface-strong: var(--white);
+      --ink: var(--slate);
+      --muted: var(--gray-700);
+      --line: var(--oat);
+      --line-strong: var(--gray-300);
+      --accent: var(--clay);
+      --green: #47705d;
+      --green-soft: var(--gray-100);
+      --code-bg: #11110f;
+      --code-ink: #d8d4ca;
+      --shadow: none;
+      --radius: var(--radius-md);
+      --content: var(--content-width);
+    }
+
+    body {
+      background: var(--ivory);
+      color: var(--slate);
+      font-size: 16px;
+      font-weight: 430;
+      line-height: 1.55;
+      letter-spacing: 0;
+    }
+
+    main {
+      width: auto;
+      max-width: var(--content-width);
+      margin: 0 auto;
+      padding: var(--space-3xl) var(--space-xl) 80px;
+    }
+
+    article {
+      padding: 0;
+      background: transparent;
+      border: 0;
+      border-radius: 0;
+      box-shadow: none;
+    }
+
+    h1 {
+      max-width: none;
+      margin-bottom: var(--space-lg);
+      font-size: 1.8rem;
+      line-height: 1.18;
+      overflow-wrap: normal;
+    }
+
+    h1 code { font-size: 0.88em; }
+
+    h2 {
+      margin: var(--space-3xl) 0 var(--space-lg);
+      font-size: 1.22rem;
+      line-height: 1.25;
+    }
+
+    h3 {
+      margin: var(--space-2xl) 0 var(--space-md);
+      font-size: 1rem;
+      line-height: 1.35;
+    }
+
+    p, ul, ol, .deck, .callout, table, pre, .flow-figure {
+      max-width: var(--content-width);
+    }
+
+    .deck {
+      margin-bottom: var(--space-2xl);
+      color: var(--gray-700);
+      font-size: 1.05rem;
+      line-height: 1.6;
+    }
+
+    a { color: var(--clay); }
+
+    p code, li code, td code {
+      padding: 0.12em 0.32em;
+      color: var(--slate);
+      background: var(--gray-100);
+      border: 1px solid var(--oat);
+      border-radius: var(--radius-sm);
+      overflow-wrap: anywhere;
+    }
+
+    .summary, .callout {
+      margin: var(--space-xl) 0;
+      padding: var(--space-lg) var(--space-xl);
+      background: var(--gray-100);
+      border: 1px solid var(--oat);
+      border-left: 4px solid var(--clay);
+      border-radius: var(--radius-md);
+      box-shadow: none;
+    }
+
+    .summary strong, .callout strong { color: var(--slate); }
+
+    .toc {
+      margin: var(--space-2xl) 0 var(--space-3xl);
+      padding: var(--space-lg) var(--space-xl);
+      background: transparent;
+      border: 1px solid var(--oat);
+      border-radius: var(--radius-md);
+    }
+
+    .toc h2 {
+      margin-bottom: var(--space-sm);
+      color: var(--gray-700);
+      font-size: 0.78rem;
+    }
+
+    pre {
+      width: 100%;
+      margin: var(--space-lg) 0 var(--space-xl);
+      padding: 0;
+      color: #d8d4ca;
+      background: #11110f;
+      border: 1px solid #26241f;
+      border-radius: var(--radius-md);
+      box-shadow: none;
+      overflow: hidden;
+    }
+
+    pre code {
+      display: block;
+      min-width: 0;
+      padding: 18px 64px 18px 22px;
+      color: inherit;
+      background: transparent;
+      border: 0;
+      overflow-x: auto;
+      white-space: pre;
+      font-size: 0.875rem;
+      font-weight: 400;
+      line-height: 1.62;
+      scrollbar-width: none;
+    }
+
+    pre code::-webkit-scrollbar { width: 0; height: 0; }
+    pre .label { display: none; }
+    pre code .k, pre code .o { color: #ff946e; font-weight: 400; }
+    pre code .s { color: #8fb86a; }
+    pre code .n, pre code .p { color: #d8d4ca; }
+    pre code .c { color: #858177; font-style: italic; }
+    pre code .f, pre code .t { color: #cfc6a2; font-weight: 400; }
+
+    .copy-code {
+      position: absolute;
+      top: 9px;
+      right: 9px;
+      z-index: 1;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 30px;
+      height: 30px;
+      padding: 0;
+      color: rgba(250, 249, 245, 0.72);
+      background: rgba(250, 249, 245, 0.06);
+      border: 1px solid rgba(250, 249, 245, 0.14);
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+    }
+
+    .copy-code:hover, .copy-code:focus-visible {
+      color: var(--ivory);
+      background: rgba(250, 249, 245, 0.12);
+      border-color: rgba(250, 249, 245, 0.28);
+      outline: none;
+    }
+
+    .copy-code.copied {
+      color: #b8d99a;
+      background: rgba(143, 184, 106, 0.14);
+      border-color: rgba(143, 184, 106, 0.42);
+    }
+
+    .copy-code svg {
+      width: 13px;
+      height: 13px;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 1.8;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      pointer-events: none;
+    }
+
+    .code-scrollbar {
+      position: absolute;
+      right: 0;
+      bottom: 0;
+      left: 0;
+      height: 3px;
+      background: rgba(250, 249, 245, 0.1);
+      border-radius: 999px;
+      cursor: pointer;
+    }
+
+    .code-scrollbar.hidden { display: none; }
+
+    .code-scrollbar-thumb {
+      height: 100%;
+      background: rgba(255, 148, 110, 0.82);
+      border-radius: inherit;
+      transform: translateX(0);
+      cursor: grab;
+    }
+
+    .code-scrollbar-thumb:active { cursor: grabbing; }
+
+    .analogy, .type-card, .flow-figure {
+      background: var(--white);
+      border-color: var(--oat);
+      border-radius: var(--radius-md);
+      box-shadow: none;
+    }
+
+    .flow-figure { padding: var(--space-lg); }
+    .type-card { padding: var(--space-lg); }
+    .type-card code { color: var(--clay); }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: var(--white);
+      border: 1px solid var(--oat);
+      border-radius: 0;
+      font-size: 0.92rem;
+    }
+
+    th, td { padding: 10px 12px; border: 1px solid var(--oat); }
+    th { color: var(--gray-700); background: var(--gray-100); }
+    .checklist li { background: var(--white); border-color: var(--oat); }
+
+    .closing {
+      margin-top: var(--space-3xl);
+      padding-top: var(--space-xl);
+      border-top: 1px solid var(--oat);
+    }
+
+    .closing h2 { margin-top: 0; }
+
+    @media (max-width: 640px) {
+      body { font-size: 15px; }
+      main { padding: var(--space-xl); }
+      h1 { font-size: 1.65rem; }
+      pre code { font-size: 0.8125rem; line-height: 1.5; }
+      p code, li code, td code { font-size: 0.9em; }
+      table, .deck { font-size: 0.875rem; }
+      .summary, .callout, .toc { padding: var(--space-lg); }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <article>
+      <h1>Effect Scope 與 <code>Effect.scoped</code></h1>
+      <p class="deck">從「資源為什麼需要生命週期」開始，理解 Scope 如何保證釋放資源，以及 <code>Effect.scoped</code> 在型別與執行流程上實際做了什麼。</p>
+
+      <nav class="toc" aria-label="文章目錄">
+        <h2>閱讀路徑</h2>
+        <ol>
+          <li><a href="#problem">先看資源問題</a></li>
+          <li><a href="#model">Scope 的心智模型</a></li>
+          <li><a href="#example">完整執行範例</a></li>
+          <li><a href="#types">型別如何提醒你</a></li>
+          <li><a href="#ordering">套回 CLI 程式</a></li>
+          <li><a href="#rules">實用判斷規則</a></li>
+        </ol>
+      </nav>
+
+      <section id="problem">
+        <h2>1. 問題不是「建立資源」，而是「一定要釋放」</h2>
+        <p>有些值只是記憶體裡的資料，例如字串或物件；用完後交給垃圾回收即可。但檔案描述符、資料庫連線、socket、鎖、臨時檔案與背景 fiber，都有明確的使用期限。取得它們之後，程式必須在適當時機清理。</p>
+        <p>一般 TypeScript 會用 <code>try/finally</code> 表達這件事：</p>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">const</span> connection <span class="o">=</span> <span class="k">await</span> <span class="f">openConnection</span><span class="o">(</span><span class="o">)</span>
+
+<span class="k">try</span> <span class="o">{</span>
+  <span class="k">await</span> <span class="f">useConnection</span><span class="o">(</span>connection<span class="o">)</span>
+<span class="o">}</span> <span class="k">finally</span> <span class="o">{</span>
+  <span class="k">await</span> connection<span class="o">.</span><span class="p">close</span><span class="o">(</span><span class="o">)</span>
+<span class="o">}</span></code></pre>
+
+        <p>這個模式的重點不是語法，而是一個保證：無論主要工作成功、丟出錯誤，或提前離開，清理動作都不能被忘記。Effect 的 Scope，就是把這個保證提升成可組合、可追蹤的資源生命週期模型。</p>
+      </section>
+
+      <section id="model">
+        <h2>2. Scope 是「清理工作的登記簿」</h2>
+        <p>當一段 Effect 取得資源時，可以把對應的清理 Effect 註冊到目前的 <code>Scope</code>。註冊的清理工作通常稱為 <em>finalizer</em>。Scope 關閉時，Effect runtime 會執行這些 finalizer。</p>
+
+        <div class="analogy" aria-label="Scope 心智模型">
+          <div class="analogy-block">
+            <strong>取得資源</strong>
+            <span>開啟連線、檔案或 fiber</span>
+          </div>
+          <div class="analogy-arrow" aria-hidden="true">→</div>
+          <div class="analogy-block">
+            <strong>登記清理方式</strong>
+            <span>把 close、release 或 interrupt 放進 Scope</span>
+          </div>
+        </div>
+
+        <p><code>Effect.acquireRelease</code> 是最常見的 scoped API：第一個 Effect 取得資源，第二個函式產生釋放資源的 Effect。</p>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">import</span> <span class="o">{</span> <span class="t">Console</span><span class="o">,</span> <span class="t">Effect</span> <span class="o">}</span> <span class="k">from</span> <span class="s">"effect"</span>
+
+<span class="k">const</span> connection <span class="o">=</span> <span class="t">Effect</span><span class="o">.</span><span class="p">acquireRelease</span><span class="o">(</span>
+  <span class="t">Effect</span><span class="o">.</span><span class="p">sync</span><span class="o">(</span><span class="o">(</span><span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span> <span class="o">{</span>
+    console<span class="o">.</span><span class="p">log</span><span class="o">(</span><span class="s">"open connection"</span><span class="o">)</span>
+    <span class="k">return</span> <span class="o">{</span> id<span class="o">:</span> <span class="s">"db-1"</span> <span class="o">}</span>
+  <span class="o">}</span><span class="o">)</span><span class="o">,</span>
+  <span class="o">(</span>resource<span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span>
+    <span class="t">Console</span><span class="o">.</span><span class="p">log</span><span class="o">(</span><span class="s">`close ${resource.id}`</span><span class="o">)</span><span class="o">,</span>
+<span class="o">)</span></code></pre>
+
+        <p>取得成功後，release 就會被註冊到目前 Scope。這不是等到程式尾端才臨時猜測怎麼清理；資源與清理方式在取得當下就被綁在一起。</p>
+
+        <p>如果 acquire 本身失敗，資源並未成功建立，release 也不會被登記；只有成功取得的資源才需要由 Scope 釋放。</p>
+
+<figure class="flow-figure">
+  <svg class="flow-desktop flowchart" id="mermaid-mrmgluqt-my-svg" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 899.515625 94" aria-roledescription="flowchart-v2" role="img" aria-labelledby="mermaid-mrmgluqt-title mermaid-mrmgluqt-desc"><title id="mermaid-mrmgluqt-title">Scope 的完整生命週期</title><desc id="mermaid-mrmgluqt-desc">Effect.scoped 建立 Scope；資源取得後註冊 finalizer；主要工作無論成功、失敗或被中斷，都會先關閉 Scope 並執行清理。</desc><style>#mermaid-mrmgluqt-my-svg{font-family:ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;font-size:16px;fill:#141413;}@keyframes edge-animation-frame{from{stroke-dashoffset:0;}}@keyframes dash{to{stroke-dashoffset:0;}}#mermaid-mrmgluqt-my-svg .edge-animation-slow{stroke-dasharray:9,5!important;stroke-dashoffset:900;animation:dash 50s linear infinite;stroke-linecap:round;}#mermaid-mrmgluqt-my-svg .edge-animation-fast{stroke-dasharray:9,5!important;stroke-dashoffset:900;animation:dash 20s linear infinite;stroke-linecap:round;}#mermaid-mrmgluqt-my-svg .error-icon{fill:#FAF9F5;}#mermaid-mrmgluqt-my-svg .error-text{fill:#05060a;stroke:#05060a;}#mermaid-mrmgluqt-my-svg .edge-thickness-normal{stroke-width:1px;}#mermaid-mrmgluqt-my-svg .edge-thickness-thick{stroke-width:3.5px;}#mermaid-mrmgluqt-my-svg .edge-pattern-solid{stroke-dasharray:0;}#mermaid-mrmgluqt-my-svg .edge-thickness-invisible{stroke-width:0;fill:none;}#mermaid-mrmgluqt-my-svg .edge-pattern-dashed{stroke-dasharray:3;}#mermaid-mrmgluqt-my-svg .edge-pattern-dotted{stroke-dasharray:2;}#mermaid-mrmgluqt-my-svg .marker{fill:#D97757;stroke:#D97757;}#mermaid-mrmgluqt-my-svg .marker.cross{stroke:#D97757;}#mermaid-mrmgluqt-my-svg svg{font-family:ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;font-size:16px;}#mermaid-mrmgluqt-my-svg p{margin:0;}#mermaid-mrmgluqt-my-svg .label{font-family:ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;color:#141413;}#mermaid-mrmgluqt-my-svg .cluster-label text{fill:#05060a;}#mermaid-mrmgluqt-my-svg .cluster-label span{color:#05060a;}#mermaid-mrmgluqt-my-svg .cluster-label span p{background-color:transparent;}#mermaid-mrmgluqt-my-svg .label text,#mermaid-mrmgluqt-my-svg span{fill:#141413;color:#141413;}#mermaid-mrmgluqt-my-svg .node rect,#mermaid-mrmgluqt-my-svg .node circle,#mermaid-mrmgluqt-my-svg .node ellipse,#mermaid-mrmgluqt-my-svg .node polygon,#mermaid-mrmgluqt-my-svg .node path{fill:#FFFFFF;stroke:#E3DACC;stroke-width:1px;}#mermaid-mrmgluqt-my-svg .rough-node .label text,#mermaid-mrmgluqt-my-svg .node .label text,#mermaid-mrmgluqt-my-svg .image-shape .label,#mermaid-mrmgluqt-my-svg .icon-shape .label{text-anchor:middle;}#mermaid-mrmgluqt-my-svg .node .katex path{fill:#000;stroke:#000;stroke-width:1px;}#mermaid-mrmgluqt-my-svg .rough-node .label,#mermaid-mrmgluqt-my-svg .node .label,#mermaid-mrmgluqt-my-svg .image-shape .label,#mermaid-mrmgluqt-my-svg .icon-shape .label{text-align:center;}#mermaid-mrmgluqt-my-svg .node.clickable{cursor:pointer;}#mermaid-mrmgluqt-my-svg .root .anchor path{fill:#D97757!important;stroke-width:0;stroke:#D97757;}#mermaid-mrmgluqt-my-svg .arrowheadPath{fill:rgba(255, 255, 255, 0);}#mermaid-mrmgluqt-my-svg .edgePath .path{stroke:#D97757;stroke-width:1px;}#mermaid-mrmgluqt-my-svg .flowchart-link{stroke:#D97757;fill:none;}#mermaid-mrmgluqt-my-svg .edgeLabel{background-color:#F0EEE6;text-align:center;}#mermaid-mrmgluqt-my-svg .edgeLabel p{background-color:#F0EEE6;}#mermaid-mrmgluqt-my-svg .edgeLabel rect{opacity:0.5;background-color:#F0EEE6;fill:#F0EEE6;}#mermaid-mrmgluqt-my-svg .labelBkg{background-color:rgba(240, 238, 230, 0.5);}#mermaid-mrmgluqt-my-svg .cluster rect{fill:#FAF9F5;stroke:hsl(48, 0%, 87.0588235294%);stroke-width:1px;}#mermaid-mrmgluqt-my-svg .cluster text{fill:#05060a;}#mermaid-mrmgluqt-my-svg .cluster span{color:#05060a;}#mermaid-mrmgluqt-my-svg div.mermaidTooltip{position:absolute;text-align:center;max-width:200px;padding:2px;font-family:ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;font-size:12px;background:#FAF9F5;border:1px solid hsl(48, 0%, 87.0588235294%);border-radius:2px;pointer-events:none;z-index:100;}#mermaid-mrmgluqt-my-svg .flowchartTitleText{text-anchor:middle;font-size:18px;fill:#141413;}#mermaid-mrmgluqt-my-svg rect.text{fill:none;stroke-width:0;}#mermaid-mrmgluqt-my-svg .icon-shape,#mermaid-mrmgluqt-my-svg .image-shape{background-color:#F0EEE6;text-align:center;}#mermaid-mrmgluqt-my-svg .icon-shape p,#mermaid-mrmgluqt-my-svg .image-shape p{background-color:#F0EEE6;padding:2px;}#mermaid-mrmgluqt-my-svg .icon-shape .label rect,#mermaid-mrmgluqt-my-svg .image-shape .label rect{opacity:0.5;background-color:#F0EEE6;fill:#F0EEE6;}#mermaid-mrmgluqt-my-svg .label-icon{display:inline-block;height:1em;overflow:visible;vertical-align:-0.125em;}#mermaid-mrmgluqt-my-svg .node .label-icon path{fill:currentColor;stroke:revert;stroke-width:revert;}#mermaid-mrmgluqt-my-svg .node .neo-node{stroke:#E3DACC;}#mermaid-mrmgluqt-my-svg [data-look="neo"].node rect,#mermaid-mrmgluqt-my-svg [data-look="neo"].cluster rect,#mermaid-mrmgluqt-my-svg [data-look="neo"].node polygon{stroke:url(#mermaid-mrmgluqt-my-svg-gradient);filter:drop-shadow( 1px 2px 2px rgba(185,185,185,1));}#mermaid-mrmgluqt-my-svg [data-look="neo"].swimlane.cluster rect{filter:none;}#mermaid-mrmgluqt-my-svg [data-look="neo"].node path{stroke:url(#mermaid-mrmgluqt-my-svg-gradient);stroke-width:1px;}#mermaid-mrmgluqt-my-svg [data-look="neo"].node .outer-path{filter:drop-shadow( 1px 2px 2px rgba(185,185,185,1));}#mermaid-mrmgluqt-my-svg [data-look="neo"].node .neo-line path{stroke:#E3DACC;filter:none;}#mermaid-mrmgluqt-my-svg [data-look="neo"].node circle{stroke:url(#mermaid-mrmgluqt-my-svg-gradient);filter:drop-shadow( 1px 2px 2px rgba(185,185,185,1));}#mermaid-mrmgluqt-my-svg [data-look="neo"].node circle .state-start{fill:#000000;}#mermaid-mrmgluqt-my-svg [data-look="neo"].icon-shape .icon{fill:url(#mermaid-mrmgluqt-my-svg-gradient);filter:drop-shadow( 1px 2px 2px rgba(185,185,185,1));}#mermaid-mrmgluqt-my-svg [data-look="neo"].icon-shape .icon-neo path{stroke:url(#mermaid-mrmgluqt-my-svg-gradient);filter:drop-shadow( 1px 2px 2px rgba(185,185,185,1));}#mermaid-mrmgluqt-my-svg :root{--mermaid-font-family:"trebuchet ms",verdana,arial,sans-serif;}</style><g><marker id="mermaid-mrmgluqt-my-svg_flowchart-v2-pointEnd" class="marker flowchart-v2" viewBox="0 0 10 10" refX="5" refY="5" markerUnits="userSpaceOnUse" markerWidth="8" markerHeight="8" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" class="arrowMarkerPath" style="stroke-width: 1; stroke-dasharray: 1, 0;"/></marker><marker id="mermaid-mrmgluqt-my-svg_flowchart-v2-pointStart" class="marker flowchart-v2" viewBox="0 0 10 10" refX="4.5" refY="5" markerUnits="userSpaceOnUse" markerWidth="8" markerHeight="8" orient="auto"><path d="M 0 5 L 10 10 L 10 0 z" class="arrowMarkerPath" style="stroke-width: 1; stroke-dasharray: 1, 0;"/></marker><marker id="mermaid-mrmgluqt-my-svg_flowchart-v2-pointEnd-margin" class="marker flowchart-v2" viewBox="0 0 11.5 14" refX="11.5" refY="7" markerUnits="userSpaceOnUse" markerWidth="10.5" markerHeight="14" orient="auto"><path d="M 0 0 L 11.5 7 L 0 14 z" class="arrowMarkerPath" style="stroke-width: 0; stroke-dasharray: 1, 0;"/></marker><marker id="mermaid-mrmgluqt-my-svg_flowchart-v2-pointStart-margin" class="marker flowchart-v2" viewBox="0 0 11.5 14" refX="1" refY="7" markerUnits="userSpaceOnUse" markerWidth="11.5" markerHeight="14" orient="auto"><polygon points="0,7 11.5,14 11.5,0" class="arrowMarkerPath" style="stroke-width: 0; stroke-dasharray: 1, 0;"/></marker><marker id="mermaid-mrmgluqt-my-svg_flowchart-v2-circleEnd" class="marker flowchart-v2" viewBox="0 0 10 10" refX="11" refY="5" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" orient="auto"><circle cx="5" cy="5" r="5" class="arrowMarkerPath" style="stroke-width: 1; stroke-dasharray: 1, 0;"/></marker><marker id="mermaid-mrmgluqt-my-svg_flowchart-v2-circleStart" class="marker flowchart-v2" viewBox="0 0 10 10" refX="-1" refY="5" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" orient="auto"><circle cx="5" cy="5" r="5" class="arrowMarkerPath" style="stroke-width: 1; stroke-dasharray: 1, 0;"/></marker><marker id="mermaid-mrmgluqt-my-svg_flowchart-v2-circleEnd-margin" class="marker flowchart-v2" viewBox="0 0 10 10" refY="5" refX="12.25" markerUnits="userSpaceOnUse" markerWidth="14" markerHeight="14" orient="auto"><circle cx="5" cy="5" r="5" class="arrowMarkerPath" style="stroke-width: 0; stroke-dasharray: 1, 0;"/></marker><marker id="mermaid-mrmgluqt-my-svg_flowchart-v2-circleStart-margin" class="marker flowchart-v2" viewBox="0 0 10 10" refX="-2" refY="5" markerUnits="userSpaceOnUse" markerWidth="14" markerHeight="14" orient="auto"><circle cx="5" cy="5" r="5" class="arrowMarkerPath" style="stroke-width: 0; stroke-dasharray: 1, 0;"/></marker><marker id="mermaid-mrmgluqt-my-svg_flowchart-v2-crossEnd" class="marker cross flowchart-v2" viewBox="0 0 11 11" refX="12" refY="5.2" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" orient="auto"><path d="M 1,1 l 9,9 M 10,1 l -9,9" class="arrowMarkerPath" style="stroke-width: 2; stroke-dasharray: 1, 0;"/></marker><marker id="mermaid-mrmgluqt-my-svg_flowchart-v2-crossStart" class="marker cross flowchart-v2" viewBox="0 0 11 11" refX="-1" refY="5.2" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" orient="auto"><path d="M 1,1 l 9,9 M 10,1 l -9,9" class="arrowMarkerPath" style="stroke-width: 2; stroke-dasharray: 1, 0;"/></marker><marker id="mermaid-mrmgluqt-my-svg_flowchart-v2-crossEnd-margin" class="marker cross flowchart-v2" viewBox="0 0 15 15" refX="17.7" refY="7.5" markerUnits="userSpaceOnUse" markerWidth="12" markerHeight="12" orient="auto"><path d="M 1,1 L 14,14 M 1,14 L 14,1" class="arrowMarkerPath" style="stroke-width: 2.5;"/></marker><marker id="mermaid-mrmgluqt-my-svg_flowchart-v2-crossStart-margin" class="marker cross flowchart-v2" viewBox="0 0 15 15" refX="-3.5" refY="7.5" markerUnits="userSpaceOnUse" markerWidth="12" markerHeight="12" orient="auto"><path d="M 1,1 L 14,14 M 1,14 L 14,1" class="arrowMarkerPath" style="stroke-width: 2.5; stroke-dasharray: 1, 0;"/></marker><g class="root"><g class="clusters"/><g class="edgePaths"><path d="M149.891,47L154.057,47C158.224,47,166.557,47,174.224,47C181.891,47,188.891,47,192.391,47L195.891,47" id="mermaid-mrmgluqt-my-svg-L_Open_Acquire_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" data-edge="true" data-et="edge" data-id="mermaid-mrmgluqt-L_Open_Acquire_0" data-points="W3sieCI6MTQ5Ljg5MDYyNSwieSI6NDd9LHsieCI6MTc0Ljg5MDYyNSwieSI6NDd9LHsieCI6MTk5Ljg5MDYyNSwieSI6NDd9XQ==" data-look="classic" marker-end="url(#mermaid-mrmgluqt-my-svg_flowchart-v2-pointEnd)"/><path d="M352.563,47L356.729,47C360.896,47,369.229,47,376.896,47C384.563,47,391.563,47,395.063,47L398.563,47" id="mermaid-mrmgluqt-my-svg-L_Acquire_Work_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" data-edge="true" data-et="edge" data-id="mermaid-mrmgluqt-L_Acquire_Work_0" data-points="W3sieCI6MzUyLjU2MjUsInkiOjQ3fSx7IngiOjM3Ny41NjI1LCJ5Ijo0N30seyJ4Ijo0MDIuNTYyNSwieSI6NDd9XQ==" data-look="classic" marker-end="url(#mermaid-mrmgluqt-my-svg_flowchart-v2-pointEnd)"/><path d="M557.828,47L572.913,47C587.997,47,618.167,47,647.669,47C677.172,47,706.008,47,720.426,47L734.844,47" id="mermaid-mrmgluqt-my-svg-L_Work_Close_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" data-edge="true" data-et="edge" data-id="mermaid-mrmgluqt-L_Work_Close_0" data-points="W3sieCI6NTU3LjgyODEyNSwieSI6NDd9LHsieCI6NjQ4LjMzNTkzNzUsInkiOjQ3fSx7IngiOjczOC44NDM3NSwieSI6NDd9XQ==" data-look="classic" marker-end="url(#mermaid-mrmgluqt-my-svg_flowchart-v2-pointEnd)"/></g><g class="edgeLabels"><g class="edgeLabel"><g class="label" data-id="mermaid-mrmgluqt-L_Open_Acquire_0" transform="translate(0, 0)"><text y="-10.1" text-anchor="middle"><tspan class="text-outer-tspan row" x="0" y="-0.1em" dy="1.1em" text-anchor="middle"/></text></g></g><g><rect class="background" style="stroke: none"/></g><g class="edgeLabel"><g class="label" data-id="mermaid-mrmgluqt-L_Acquire_Work_0" transform="translate(0, 0)"><text y="-10.1" text-anchor="middle"><tspan class="text-outer-tspan row" x="0" y="-0.1em" dy="1.1em" text-anchor="middle"/></text></g></g><g><rect class="background" style="stroke: none"/></g><g class="edgeLabel" transform="translate(648.3359375, 47)"><g class="label" data-id="mermaid-mrmgluqt-L_Work_Close_0" transform="translate(0, -10)"><g><rect class="background" x="-65.5078125" y="-1" width="131.015625" height="22"/><text y="-10.1" text-anchor="middle"><tspan class="text-outer-tspan row" x="0" y="-0.1em" dy="1.1em" text-anchor="middle"><tspan font-style="normal" class="text-inner-tspan" font-weight="normal">成功、失敗或中斷</tspan></tspan></text></g></g></g></g><g class="nodes"><g class="node default" id="mermaid-mrmgluqt-my-svg-flowchart-Open-0" data-look="classic" transform="translate(78.9453125, 47)"><rect class="basic label-container" x="-70.9453125" y="-27" width="141.890625" height="54"/><g class="label" transform="translate(-40.9453125, -12)"><rect/><foreignObject width="81.890625" height="24"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="nodeLabel"><p>建立 Scope</p></span></div></foreignObject></g></g><g class="node default" id="mermaid-mrmgluqt-my-svg-flowchart-Acquire-1" data-look="classic" transform="translate(276.2265625, 47)"><rect class="basic label-container" x="-76.3359375" y="-39" width="152.671875" height="78"/><g class="label" transform="translate(-46.3359375, -24)"><rect/><foreignObject width="92.671875" height="48"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="nodeLabel"><p>取得資源<br />登記 finalizer</p></span></div></foreignObject></g></g><g class="node default" id="mermaid-mrmgluqt-my-svg-flowchart-Work-3" data-look="classic" transform="translate(480.1953125, 47)"><rect class="basic label-container" x="-77.6328125" y="-27" width="155.265625" height="54"/><g class="label" transform="translate(-47.6328125, -12)"><rect/><foreignObject width="95.265625" height="24"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="nodeLabel"><p>執行主要工作</p></span></div></foreignObject></g></g><g class="node default" id="mermaid-mrmgluqt-my-svg-flowchart-Close-5" data-look="classic" transform="translate(815.1796875, 47)"><rect class="basic label-container" x="-76.3359375" y="-39" width="152.671875" height="78"/><g class="label" transform="translate(-46.3359375, -24)"><rect/><foreignObject width="92.671875" height="48"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="nodeLabel"><p>關閉 Scope<br />執行 finalizer</p></span></div></foreignObject></g></g></g></g></g><defs><filter id="mermaid-mrmgluqt-my-svg-drop-shadow" height="130%" width="130%"><feDropShadow dx="4" dy="4" stdDeviation="0" flood-opacity="0.06" flood-color="#000000"/></filter></defs><defs><filter id="mermaid-mrmgluqt-my-svg-drop-shadow-small" height="150%" width="150%"><feDropShadow dx="2" dy="2" stdDeviation="0" flood-opacity="0.06" flood-color="#000000"/></filter></defs><linearGradient id="mermaid-mrmgluqt-my-svg-gradient" gradientUnits="objectBoundingBox" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" stop-color="#E3DACC" stop-opacity="1"/><stop offset="100%" stop-color="hsl(48, 0%, 82.1568627451%)" stop-opacity="1"/></linearGradient></svg>
+  <svg class="flow-mobile flowchart" id="mermaid-mrmgluqs-my-svg" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 171.265625 452" aria-roledescription="flowchart-v2" role="img" aria-labelledby="mermaid-mrmgluqs-title mermaid-mrmgluqs-desc"><title id="mermaid-mrmgluqs-title">Scope 的完整生命週期</title><desc id="mermaid-mrmgluqs-desc">Effect.scoped 建立 Scope；資源取得後註冊 finalizer；主要工作無論成功、失敗或被中斷，都會先關閉 Scope 並執行清理。</desc><style>#mermaid-mrmgluqs-my-svg{font-family:ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;font-size:16px;fill:#141413;}@keyframes edge-animation-frame{from{stroke-dashoffset:0;}}@keyframes dash{to{stroke-dashoffset:0;}}#mermaid-mrmgluqs-my-svg .edge-animation-slow{stroke-dasharray:9,5!important;stroke-dashoffset:900;animation:dash 50s linear infinite;stroke-linecap:round;}#mermaid-mrmgluqs-my-svg .edge-animation-fast{stroke-dasharray:9,5!important;stroke-dashoffset:900;animation:dash 20s linear infinite;stroke-linecap:round;}#mermaid-mrmgluqs-my-svg .error-icon{fill:#FAF9F5;}#mermaid-mrmgluqs-my-svg .error-text{fill:#05060a;stroke:#05060a;}#mermaid-mrmgluqs-my-svg .edge-thickness-normal{stroke-width:1px;}#mermaid-mrmgluqs-my-svg .edge-thickness-thick{stroke-width:3.5px;}#mermaid-mrmgluqs-my-svg .edge-pattern-solid{stroke-dasharray:0;}#mermaid-mrmgluqs-my-svg .edge-thickness-invisible{stroke-width:0;fill:none;}#mermaid-mrmgluqs-my-svg .edge-pattern-dashed{stroke-dasharray:3;}#mermaid-mrmgluqs-my-svg .edge-pattern-dotted{stroke-dasharray:2;}#mermaid-mrmgluqs-my-svg .marker{fill:#D97757;stroke:#D97757;}#mermaid-mrmgluqs-my-svg .marker.cross{stroke:#D97757;}#mermaid-mrmgluqs-my-svg svg{font-family:ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;font-size:16px;}#mermaid-mrmgluqs-my-svg p{margin:0;}#mermaid-mrmgluqs-my-svg .label{font-family:ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;color:#141413;}#mermaid-mrmgluqs-my-svg .cluster-label text{fill:#05060a;}#mermaid-mrmgluqs-my-svg .cluster-label span{color:#05060a;}#mermaid-mrmgluqs-my-svg .cluster-label span p{background-color:transparent;}#mermaid-mrmgluqs-my-svg .label text,#mermaid-mrmgluqs-my-svg span{fill:#141413;color:#141413;}#mermaid-mrmgluqs-my-svg .node rect,#mermaid-mrmgluqs-my-svg .node circle,#mermaid-mrmgluqs-my-svg .node ellipse,#mermaid-mrmgluqs-my-svg .node polygon,#mermaid-mrmgluqs-my-svg .node path{fill:#FFFFFF;stroke:#E3DACC;stroke-width:1px;}#mermaid-mrmgluqs-my-svg .rough-node .label text,#mermaid-mrmgluqs-my-svg .node .label text,#mermaid-mrmgluqs-my-svg .image-shape .label,#mermaid-mrmgluqs-my-svg .icon-shape .label{text-anchor:middle;}#mermaid-mrmgluqs-my-svg .node .katex path{fill:#000;stroke:#000;stroke-width:1px;}#mermaid-mrmgluqs-my-svg .rough-node .label,#mermaid-mrmgluqs-my-svg .node .label,#mermaid-mrmgluqs-my-svg .image-shape .label,#mermaid-mrmgluqs-my-svg .icon-shape .label{text-align:center;}#mermaid-mrmgluqs-my-svg .node.clickable{cursor:pointer;}#mermaid-mrmgluqs-my-svg .root .anchor path{fill:#D97757!important;stroke-width:0;stroke:#D97757;}#mermaid-mrmgluqs-my-svg .arrowheadPath{fill:rgba(255, 255, 255, 0);}#mermaid-mrmgluqs-my-svg .edgePath .path{stroke:#D97757;stroke-width:1px;}#mermaid-mrmgluqs-my-svg .flowchart-link{stroke:#D97757;fill:none;}#mermaid-mrmgluqs-my-svg .edgeLabel{background-color:#F0EEE6;text-align:center;}#mermaid-mrmgluqs-my-svg .edgeLabel p{background-color:#F0EEE6;}#mermaid-mrmgluqs-my-svg .edgeLabel rect{opacity:0.5;background-color:#F0EEE6;fill:#F0EEE6;}#mermaid-mrmgluqs-my-svg .labelBkg{background-color:rgba(240, 238, 230, 0.5);}#mermaid-mrmgluqs-my-svg .cluster rect{fill:#FAF9F5;stroke:hsl(48, 0%, 87.0588235294%);stroke-width:1px;}#mermaid-mrmgluqs-my-svg .cluster text{fill:#05060a;}#mermaid-mrmgluqs-my-svg .cluster span{color:#05060a;}#mermaid-mrmgluqs-my-svg div.mermaidTooltip{position:absolute;text-align:center;max-width:200px;padding:2px;font-family:ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;font-size:12px;background:#FAF9F5;border:1px solid hsl(48, 0%, 87.0588235294%);border-radius:2px;pointer-events:none;z-index:100;}#mermaid-mrmgluqs-my-svg .flowchartTitleText{text-anchor:middle;font-size:18px;fill:#141413;}#mermaid-mrmgluqs-my-svg rect.text{fill:none;stroke-width:0;}#mermaid-mrmgluqs-my-svg .icon-shape,#mermaid-mrmgluqs-my-svg .image-shape{background-color:#F0EEE6;text-align:center;}#mermaid-mrmgluqs-my-svg .icon-shape p,#mermaid-mrmgluqs-my-svg .image-shape p{background-color:#F0EEE6;padding:2px;}#mermaid-mrmgluqs-my-svg .icon-shape .label rect,#mermaid-mrmgluqs-my-svg .image-shape .label rect{opacity:0.5;background-color:#F0EEE6;fill:#F0EEE6;}#mermaid-mrmgluqs-my-svg .label-icon{display:inline-block;height:1em;overflow:visible;vertical-align:-0.125em;}#mermaid-mrmgluqs-my-svg .node .label-icon path{fill:currentColor;stroke:revert;stroke-width:revert;}#mermaid-mrmgluqs-my-svg .node .neo-node{stroke:#E3DACC;}#mermaid-mrmgluqs-my-svg [data-look="neo"].node rect,#mermaid-mrmgluqs-my-svg [data-look="neo"].cluster rect,#mermaid-mrmgluqs-my-svg [data-look="neo"].node polygon{stroke:url(#mermaid-mrmgluqs-my-svg-gradient);filter:drop-shadow( 1px 2px 2px rgba(185,185,185,1));}#mermaid-mrmgluqs-my-svg [data-look="neo"].swimlane.cluster rect{filter:none;}#mermaid-mrmgluqs-my-svg [data-look="neo"].node path{stroke:url(#mermaid-mrmgluqs-my-svg-gradient);stroke-width:1px;}#mermaid-mrmgluqs-my-svg [data-look="neo"].node .outer-path{filter:drop-shadow( 1px 2px 2px rgba(185,185,185,1));}#mermaid-mrmgluqs-my-svg [data-look="neo"].node .neo-line path{stroke:#E3DACC;filter:none;}#mermaid-mrmgluqs-my-svg [data-look="neo"].node circle{stroke:url(#mermaid-mrmgluqs-my-svg-gradient);filter:drop-shadow( 1px 2px 2px rgba(185,185,185,1));}#mermaid-mrmgluqs-my-svg [data-look="neo"].node circle .state-start{fill:#000000;}#mermaid-mrmgluqs-my-svg [data-look="neo"].icon-shape .icon{fill:url(#mermaid-mrmgluqs-my-svg-gradient);filter:drop-shadow( 1px 2px 2px rgba(185,185,185,1));}#mermaid-mrmgluqs-my-svg [data-look="neo"].icon-shape .icon-neo path{stroke:url(#mermaid-mrmgluqs-my-svg-gradient);filter:drop-shadow( 1px 2px 2px rgba(185,185,185,1));}#mermaid-mrmgluqs-my-svg :root{--mermaid-font-family:"trebuchet ms",verdana,arial,sans-serif;}</style><g><marker id="mermaid-mrmgluqs-my-svg_flowchart-v2-pointEnd" class="marker flowchart-v2" viewBox="0 0 10 10" refX="5" refY="5" markerUnits="userSpaceOnUse" markerWidth="8" markerHeight="8" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" class="arrowMarkerPath" style="stroke-width: 1; stroke-dasharray: 1, 0;"/></marker><marker id="mermaid-mrmgluqs-my-svg_flowchart-v2-pointStart" class="marker flowchart-v2" viewBox="0 0 10 10" refX="4.5" refY="5" markerUnits="userSpaceOnUse" markerWidth="8" markerHeight="8" orient="auto"><path d="M 0 5 L 10 10 L 10 0 z" class="arrowMarkerPath" style="stroke-width: 1; stroke-dasharray: 1, 0;"/></marker><marker id="mermaid-mrmgluqs-my-svg_flowchart-v2-pointEnd-margin" class="marker flowchart-v2" viewBox="0 0 11.5 14" refX="11.5" refY="7" markerUnits="userSpaceOnUse" markerWidth="10.5" markerHeight="14" orient="auto"><path d="M 0 0 L 11.5 7 L 0 14 z" class="arrowMarkerPath" style="stroke-width: 0; stroke-dasharray: 1, 0;"/></marker><marker id="mermaid-mrmgluqs-my-svg_flowchart-v2-pointStart-margin" class="marker flowchart-v2" viewBox="0 0 11.5 14" refX="1" refY="7" markerUnits="userSpaceOnUse" markerWidth="11.5" markerHeight="14" orient="auto"><polygon points="0,7 11.5,14 11.5,0" class="arrowMarkerPath" style="stroke-width: 0; stroke-dasharray: 1, 0;"/></marker><marker id="mermaid-mrmgluqs-my-svg_flowchart-v2-circleEnd" class="marker flowchart-v2" viewBox="0 0 10 10" refX="11" refY="5" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" orient="auto"><circle cx="5" cy="5" r="5" class="arrowMarkerPath" style="stroke-width: 1; stroke-dasharray: 1, 0;"/></marker><marker id="mermaid-mrmgluqs-my-svg_flowchart-v2-circleStart" class="marker flowchart-v2" viewBox="0 0 10 10" refX="-1" refY="5" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" orient="auto"><circle cx="5" cy="5" r="5" class="arrowMarkerPath" style="stroke-width: 1; stroke-dasharray: 1, 0;"/></marker><marker id="mermaid-mrmgluqs-my-svg_flowchart-v2-circleEnd-margin" class="marker flowchart-v2" viewBox="0 0 10 10" refY="5" refX="12.25" markerUnits="userSpaceOnUse" markerWidth="14" markerHeight="14" orient="auto"><circle cx="5" cy="5" r="5" class="arrowMarkerPath" style="stroke-width: 0; stroke-dasharray: 1, 0;"/></marker><marker id="mermaid-mrmgluqs-my-svg_flowchart-v2-circleStart-margin" class="marker flowchart-v2" viewBox="0 0 10 10" refX="-2" refY="5" markerUnits="userSpaceOnUse" markerWidth="14" markerHeight="14" orient="auto"><circle cx="5" cy="5" r="5" class="arrowMarkerPath" style="stroke-width: 0; stroke-dasharray: 1, 0;"/></marker><marker id="mermaid-mrmgluqs-my-svg_flowchart-v2-crossEnd" class="marker cross flowchart-v2" viewBox="0 0 11 11" refX="12" refY="5.2" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" orient="auto"><path d="M 1,1 l 9,9 M 10,1 l -9,9" class="arrowMarkerPath" style="stroke-width: 2; stroke-dasharray: 1, 0;"/></marker><marker id="mermaid-mrmgluqs-my-svg_flowchart-v2-crossStart" class="marker cross flowchart-v2" viewBox="0 0 11 11" refX="-1" refY="5.2" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" orient="auto"><path d="M 1,1 l 9,9 M 10,1 l -9,9" class="arrowMarkerPath" style="stroke-width: 2; stroke-dasharray: 1, 0;"/></marker><marker id="mermaid-mrmgluqs-my-svg_flowchart-v2-crossEnd-margin" class="marker cross flowchart-v2" viewBox="0 0 15 15" refX="17.7" refY="7.5" markerUnits="userSpaceOnUse" markerWidth="12" markerHeight="12" orient="auto"><path d="M 1,1 L 14,14 M 1,14 L 14,1" class="arrowMarkerPath" style="stroke-width: 2.5;"/></marker><marker id="mermaid-mrmgluqs-my-svg_flowchart-v2-crossStart-margin" class="marker cross flowchart-v2" viewBox="0 0 15 15" refX="-3.5" refY="7.5" markerUnits="userSpaceOnUse" markerWidth="12" markerHeight="12" orient="auto"><path d="M 1,1 L 14,14 M 1,14 L 14,1" class="arrowMarkerPath" style="stroke-width: 2.5; stroke-dasharray: 1, 0;"/></marker><g class="root"><g class="clusters"/><g class="edgePaths"><path d="M85.633,62L85.633,66.167C85.633,70.333,85.633,78.667,85.633,86.333C85.633,94,85.633,101,85.633,104.5L85.633,108" id="mermaid-mrmgluqs-my-svg-L_Open_Acquire_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" data-edge="true" data-et="edge" data-id="mermaid-mrmgluqs-L_Open_Acquire_0" data-points="W3sieCI6ODUuNjMyODEyNSwieSI6NjJ9LHsieCI6ODUuNjMyODEyNSwieSI6ODd9LHsieCI6ODUuNjMyODEyNSwieSI6MTEyfV0=" data-look="classic" marker-end="url(#mermaid-mrmgluqs-my-svg_flowchart-v2-pointEnd)"/><path d="M85.633,190L85.633,194.167C85.633,198.333,85.633,206.667,85.633,214.333C85.633,222,85.633,229,85.633,232.5L85.633,236" id="mermaid-mrmgluqs-my-svg-L_Acquire_Work_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" data-edge="true" data-et="edge" data-id="mermaid-mrmgluqs-L_Acquire_Work_0" data-points="W3sieCI6ODUuNjMyODEyNSwieSI6MTkwfSx7IngiOjg1LjYzMjgxMjUsInkiOjIxNX0seyJ4Ijo4NS42MzI4MTI1LCJ5IjoyNDB9XQ==" data-look="classic" marker-end="url(#mermaid-mrmgluqs-my-svg_flowchart-v2-pointEnd)"/><path d="M85.633,294L85.633,300C85.633,306,85.633,318,85.633,329.333C85.633,340.667,85.633,351.333,85.633,356.667L85.633,362" id="mermaid-mrmgluqs-my-svg-L_Work_Close_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" data-edge="true" data-et="edge" data-id="mermaid-mrmgluqs-L_Work_Close_0" data-points="W3sieCI6ODUuNjMyODEyNSwieSI6Mjk0fSx7IngiOjg1LjYzMjgxMjUsInkiOjMzMH0seyJ4Ijo4NS42MzI4MTI1LCJ5IjozNjZ9XQ==" data-look="classic" marker-end="url(#mermaid-mrmgluqs-my-svg_flowchart-v2-pointEnd)"/></g><g class="edgeLabels"><g class="edgeLabel"><g class="label" data-id="mermaid-mrmgluqs-L_Open_Acquire_0" transform="translate(0, 0)"><text y="-10.1" text-anchor="middle"><tspan class="text-outer-tspan row" x="0" y="-0.1em" dy="1.1em" text-anchor="middle"/></text></g></g><g><rect class="background" style="stroke: none"/></g><g class="edgeLabel"><g class="label" data-id="mermaid-mrmgluqs-L_Acquire_Work_0" transform="translate(0, 0)"><text y="-10.1" text-anchor="middle"><tspan class="text-outer-tspan row" x="0" y="-0.1em" dy="1.1em" text-anchor="middle"/></text></g></g><g><rect class="background" style="stroke: none"/></g><g class="edgeLabel" transform="translate(85.6328125, 330)"><g class="label" data-id="mermaid-mrmgluqs-L_Work_Close_0" transform="translate(0, -10)"><g><rect class="background" x="-65.5078125" y="-1" width="131.015625" height="22"/><text y="-10.1" text-anchor="middle"><tspan class="text-outer-tspan row" x="0" y="-0.1em" dy="1.1em" text-anchor="middle"><tspan font-style="normal" class="text-inner-tspan" font-weight="normal">成功、失敗或中斷</tspan></tspan></text></g></g></g></g><g class="nodes"><g class="node default" id="mermaid-mrmgluqs-my-svg-flowchart-Open-0" data-look="classic" transform="translate(85.6328125, 35)"><rect class="basic label-container" x="-70.9453125" y="-27" width="141.890625" height="54"/><g class="label" transform="translate(-40.9453125, -12)"><rect/><foreignObject width="81.890625" height="24"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="nodeLabel"><p>建立 Scope</p></span></div></foreignObject></g></g><g class="node default" id="mermaid-mrmgluqs-my-svg-flowchart-Acquire-1" data-look="classic" transform="translate(85.6328125, 151)"><rect class="basic label-container" x="-76.3359375" y="-39" width="152.671875" height="78"/><g class="label" transform="translate(-46.3359375, -24)"><rect/><foreignObject width="92.671875" height="48"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="nodeLabel"><p>取得資源<br />登記 finalizer</p></span></div></foreignObject></g></g><g class="node default" id="mermaid-mrmgluqs-my-svg-flowchart-Work-3" data-look="classic" transform="translate(85.6328125, 267)"><rect class="basic label-container" x="-77.6328125" y="-27" width="155.265625" height="54"/><g class="label" transform="translate(-47.6328125, -12)"><rect/><foreignObject width="95.265625" height="24"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="nodeLabel"><p>執行主要工作</p></span></div></foreignObject></g></g><g class="node default" id="mermaid-mrmgluqs-my-svg-flowchart-Close-5" data-look="classic" transform="translate(85.6328125, 405)"><rect class="basic label-container" x="-76.3359375" y="-39" width="152.671875" height="78"/><g class="label" transform="translate(-46.3359375, -24)"><rect/><foreignObject width="92.671875" height="48"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="nodeLabel"><p>關閉 Scope<br />執行 finalizer</p></span></div></foreignObject></g></g></g></g></g><defs><filter id="mermaid-mrmgluqs-my-svg-drop-shadow" height="130%" width="130%"><feDropShadow dx="4" dy="4" stdDeviation="0" flood-opacity="0.06" flood-color="#000000"/></filter></defs><defs><filter id="mermaid-mrmgluqs-my-svg-drop-shadow-small" height="150%" width="150%"><feDropShadow dx="2" dy="2" stdDeviation="0" flood-opacity="0.06" flood-color="#000000"/></filter></defs><linearGradient id="mermaid-mrmgluqs-my-svg-gradient" gradientUnits="objectBoundingBox" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" stop-color="#E3DACC" stop-opacity="1"/><stop offset="100%" stop-color="hsl(48, 0%, 82.1568627451%)" stop-opacity="1"/></linearGradient></svg>
+  <figcaption>結束方式可以不同，但都會匯入同一條可靠的清理路徑。</figcaption>
+</figure>
+
+        <div class="callout">
+          <strong>Scope 的保證涵蓋三種結束方式</strong>
+          正常成功、Effect 失敗，以及 fiber 被 interruption 中斷，都會觸發 Scope 關閉與 finalizer。這正是它比「記得在最後呼叫 close」可靠的地方。
+        </div>
+      </section>
+
+      <section id="example">
+        <h2>3. 一個從取得到清理的完整範例</h2>
+        <p>以下程式先取得連線、使用它，最後故意失敗。最外層的 <code>Effect.scoped</code> 提供 Scope，並負責在離開邊界時關閉 Scope。</p>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">import</span> <span class="o">{</span> <span class="t">Console</span><span class="o">,</span> <span class="t">Effect</span> <span class="o">}</span> <span class="k">from</span> <span class="s">"effect"</span>
+
+<span class="k">const</span> connection <span class="o">=</span> <span class="t">Effect</span><span class="o">.</span><span class="p">acquireRelease</span><span class="o">(</span>
+  <span class="t">Effect</span><span class="o">.</span><span class="p">sync</span><span class="o">(</span><span class="o">(</span><span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span> <span class="o">{</span>
+    console<span class="o">.</span><span class="p">log</span><span class="o">(</span><span class="s">"1. open connection"</span><span class="o">)</span>
+    <span class="k">return</span> <span class="o">{</span> id<span class="o">:</span> <span class="s">"db-1"</span> <span class="o">}</span>
+  <span class="o">}</span><span class="o">)</span><span class="o">,</span>
+  <span class="o">(</span>resource<span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span>
+    <span class="t">Console</span><span class="o">.</span><span class="p">log</span><span class="o">(</span><span class="s">`3. close ${resource.id}`</span><span class="o">)</span><span class="o">,</span>
+<span class="o">)</span>
+
+<span class="k">const</span> program <span class="o">=</span> <span class="t">Effect</span><span class="o">.</span><span class="p">gen</span><span class="o">(</span><span class="k">function</span><span class="o">*</span> <span class="o">(</span><span class="o">)</span> <span class="o">{</span>
+  <span class="k">const</span> db <span class="o">=</span> <span class="k">yield</span><span class="o">*</span> connection
+
+  <span class="k">yield</span><span class="o">*</span> <span class="t">Console</span><span class="o">.</span><span class="p">log</span><span class="o">(</span><span class="s">`2. use ${db.id}`</span><span class="o">)</span>
+  <span class="k">return</span> <span class="k">yield</span><span class="o">*</span> <span class="t">Effect</span><span class="o">.</span><span class="p">fail</span><span class="o">(</span><span class="k">new</span> <span class="f">Error</span><span class="o">(</span><span class="s">"query failed"</span><span class="o">)</span><span class="o">)</span>
+<span class="o">}</span><span class="o">)</span>
+
+<span class="k">const</span> scopedProgram <span class="o">=</span> program<span class="o">.</span><span class="p">pipe</span><span class="o">(</span><span class="t">Effect</span><span class="o">.</span><span class="p">scoped</span><span class="o">)</span></code></pre>
+
+        <p>這一行可以先只看成函式傳遞。<code>pipe</code> 會把左邊的 <code>program</code> 傳給右邊的 <code>Effect.scoped</code>，所以下面兩個寫法完全等價：</p>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="c">// pipe 寫法</span>
+program<span class="o">.</span><span class="p">pipe</span><span class="o">(</span><span class="t">Effect</span><span class="o">.</span><span class="p">scoped</span><span class="o">)</span>
+
+<span class="c">// 一般函式呼叫寫法</span>
+<span class="t">Effect</span><span class="o">.</span><span class="p">scoped</span><span class="o">(</span>program<span class="o">)</span></code></pre>
+
+        <p><code>Effect.scoped</code> 接收原本的 <code>program</code>，回傳另一個已經包好 Scope 管理邊界的 Effect。變數名稱 <code>scopedProgram</code> 沒有特殊能力，只是提醒讀者這仍然是一個 Effect 描述。</p>
+
+        <p>這一行不會立刻執行 <code>program</code>，也不會立刻開啟連線。等到後面把 <code>scopedProgram</code> 交給 runtime 執行時，它才會建立 Scope、執行 <code>program</code>，最後關閉 Scope。</p>
+
+        <p>執行時的觀察順序是：</p>
+
+        <ol>
+          <li>runtime 開始執行 <code>scopedProgram</code>，並建立新的 Scope。</li>
+          <li>取得連線，並把 release 註冊進 Scope。</li>
+          <li>使用連線。</li>
+          <li>主要工作失敗，開始離開 scoped 邊界。</li>
+          <li>Scope 關閉，執行 release。</li>
+          <li>清理完成後，原本的失敗繼續向外傳遞。</li>
+        </ol>
+
+        <p>因此你會先看到 <code>close db-1</code>，外層錯誤處理器才收到 <code>query failed</code>。清理不是 catch handler 的責任；它由 Scope 邊界負責。</p>
+      </section>
+
+      <section id="types">
+        <h2>4. 型別中的 <code>Scope</code> 是一個需求</h2>
+        <p>Effect 的型別可以粗略讀作 <code>Effect&lt;成功值, 錯誤, 需求&gt;</code>。使用 <code>Effect.acquireRelease</code> 取得的資源，需要一個 Scope 來承接 finalizer，因此需求欄位會包含 <code>Scope</code>。</p>
+
+        <div class="type-shift" aria-label="Effect.scoped 前後的概念型別">
+          <div class="type-card">
+            <small>套用前</small>
+            <code>Effect&lt;Result, Error, Scope | R&gt;</code>
+          </div>
+          <div class="type-arrow" aria-hidden="true">→</div>
+          <div class="type-card">
+            <small>套用 Effect.scoped 後</small>
+            <code>Effect&lt;Result, Error, R&gt;</code>
+          </div>
+        </div>
+
+        <p><code>Effect.scoped</code> 消除的不是資源本身，而是「呼叫端必須提供 Scope」這項需求。它回傳一個新的 Effect；當這個新 Effect 被執行時，runtime 會建立 Scope、把它提供給內部 Effect，並在內部 Effect 結束時關閉它。</p>
+
+        <h3>為什麼不能在 Scope 外繼續用資源？</h3>
+        <p>當 <code>Effect.scoped</code> 所包裝的 Effect 執行完成並把成功值交給外層時，它建立的 Scope 也已經關閉。若成功值就是連線本身，外層接到的可能是已釋放的資源。安全的設計通常是在 scoped 區域內完成所有使用，只把純資料結果傳出去。</p>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="c">// 好：在 Scope 內使用資源，只回傳查詢結果</span>
+<span class="k">const</span> rows <span class="o">=</span> <span class="t">Effect</span><span class="o">.</span><span class="p">scoped</span><span class="o">(</span>
+  <span class="t">Effect</span><span class="o">.</span><span class="p">gen</span><span class="o">(</span><span class="k">function</span><span class="o">*</span> <span class="o">(</span><span class="o">)</span> <span class="o">{</span>
+    <span class="k">const</span> db <span class="o">=</span> <span class="k">yield</span><span class="o">*</span> connection
+    <span class="k">return</span> <span class="k">yield</span><span class="o">*</span> <span class="f">queryRows</span><span class="o">(</span>db<span class="o">)</span>
+  <span class="o">}</span><span class="o">)</span><span class="o">,</span>
+<span class="o">)</span>
+
+<span class="c">// 危險心智模型：回傳後 connection 可能已經被釋放</span>
+<span class="k">const</span> db <span class="o">=</span> <span class="k">yield</span><span class="o">*</span> <span class="t">Effect</span><span class="o">.</span><span class="p">scoped</span><span class="o">(</span>connection<span class="o">)</span></code></pre>
+      </section>
+
+      <section id="ordering">
+        <h2>5. 套回 CLI 執行程式：清理早於 catch</h2>
+        <p>考慮以下 Bun CLI 程式。<code>pipe</code> 由上往下組合，所以 <code>Effect.catch</code> 包在已經 scoped 的 Effect 外面。</p>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code>program<span class="o">.</span><span class="p">pipe</span><span class="o">(</span>
+  <span class="t">Effect</span><span class="o">.</span><span class="p">scoped</span><span class="o">,</span>
+  <span class="t">Effect</span><span class="o">.</span><span class="k">catch</span><span class="o">(</span><span class="o">(</span>error<span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span>
+    <span class="t">Console</span><span class="o">.</span><span class="p">error</span><span class="o">(</span>error<span class="o">.</span><span class="p">message</span><span class="o">)</span><span class="o">.</span><span class="p">pipe</span><span class="o">(</span>
+      <span class="t">Effect</span><span class="o">.</span><span class="p">andThen</span><span class="o">(</span>
+        <span class="t">Effect</span><span class="o">.</span><span class="p">sync</span><span class="o">(</span><span class="o">(</span><span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span> <span class="o">{</span>
+          process<span class="o">.</span><span class="p">exitCode</span> <span class="o">=</span> <span class="n">1</span>
+        <span class="o">}</span><span class="o">)</span><span class="o">,</span>
+      <span class="o">)</span><span class="o">,</span>
+    <span class="o">)</span><span class="o">,</span>
+  <span class="o">)</span><span class="o">,</span>
+  <span class="t">Effect</span><span class="o">.</span><span class="p">provide</span><span class="o">(</span><span class="t">BunServices</span><span class="o">.</span><span class="p">layer</span><span class="o">)</span><span class="o">,</span>
+  <span class="t">BunRuntime</span><span class="o">.</span><span class="p">runMain</span><span class="o">,</span>
+<span class="o">)</span></code></pre>
+
+        <p>如果 <code>program</code> 失敗，順序是：</p>
+
+        <table>
+          <thead>
+            <tr>
+              <th scope="col">階段</th>
+              <th scope="col">發生的事</th>
+              <th scope="col">負責者</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>1</td>
+              <td><code>program</code> 失敗，離開 scoped 區域</td>
+              <td>Effect runtime</td>
+            </tr>
+            <tr>
+              <td>2</td>
+              <td>關閉 Scope，執行已註冊的 finalizer</td>
+              <td><code>Effect.scoped</code></td>
+            </tr>
+            <tr>
+              <td>3</td>
+              <td>失敗繼續往外傳給錯誤處理器</td>
+              <td><code>Effect.catch</code></td>
+            </tr>
+            <tr>
+              <td>4</td>
+              <td>輸出訊息，設定 <code>process.exitCode = 1</code></td>
+              <td>catch handler</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <p>這個順序很重要：當錯誤處理器開始記錄或呈現錯誤時，內層資源已經進入清理流程。錯誤處理器不需要知道程式開過哪些檔案、連線或 fiber。</p>
+      </section>
+
+      <section id="boundaries">
+        <h2>6. <code>Effect.scoped</code> 不會自動清理所有東西</h2>
+        <p>Scope 只會執行「註冊到它裡面」的 finalizer。建立普通 JavaScript 物件，不會自動產生任何清理行為。常見會使用 Scope 的 API 包括：</p>
+
+        <ul>
+          <li><code>Effect.acquireRelease</code>：把取得與釋放資源綁在一起。</li>
+          <li><code>Effect.addFinalizer</code>：直接向目前 Scope 登記清理工作。</li>
+          <li><code>Layer.scoped</code>：建立生命週期跟著 Layer 的服務。</li>
+        </ul>
+
+        <p>另一個邊界是：<code>Effect.scoped</code> 管理的是它建立的那個 Scope。內部可以再建立較小的 nested Scope；較內層的 Scope 會先關閉，形成像函式呼叫堆疊一樣的資源生命週期。</p>
+      </section>
+
+      <section id="rules">
+        <h2>7. 實作時的判斷規則</h2>
+
+        <ul class="checklist">
+          <li>資源如果有 <code>close</code>、<code>release</code>、<code>dispose</code> 或 <code>interrupt</code>，優先考慮 scoped 管理。</li>
+          <li>用 <code>Effect.acquireRelease</code> 讓取得與清理方式在同一處定義。</li>
+          <li>把 <code>Effect.scoped</code> 放在「資源應該活多久」的邊界，而不只是為了消除型別錯誤。</li>
+          <li>在 Scope 內完成資源使用，向外回傳不依賴該資源的資料。</li>
+          <li>不要在每個錯誤分支手動重複 close；讓 finalizer 統一處理成功、失敗與 interruption。</li>
+        </ul>
+
+      </section>
+
+      <footer class="closing">
+        <h2>最後的心智模型</h2>
+        <p><code>Effect.scoped</code> 可以理解成可組合、可型別檢查的 <code>try/finally</code> 邊界：進入時建立 Scope，執行期間累積 finalizer，離開時可靠地完成清理。它處理的不是「錯誤訊息要怎麼顯示」，而是更底層的問題——資源無論如何結束，都必須被正確釋放。</p>
+      </footer>
+    </article>
+  </main>
+  <script>
+    (() => {
+      const copyIcon = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="11" height="11" rx="2"></rect><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"></path></svg>'
+      const checkIcon = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"></path></svg>'
+
+      const copyText = async (text) => {
+        if (navigator.clipboard && window.isSecureContext) {
+          await navigator.clipboard.writeText(text)
+          return
+        }
+
+        const textarea = document.createElement('textarea')
+        textarea.value = text
+        textarea.style.position = 'fixed'
+        textarea.style.opacity = '0'
+        document.body.append(textarea)
+        textarea.select()
+        document.execCommand('copy')
+        textarea.remove()
+      }
+
+      document.querySelectorAll('pre').forEach((pre) => {
+        const code = pre.querySelector('code')
+        if (!code) return
+
+        const button = document.createElement('button')
+        button.className = 'copy-code'
+        button.type = 'button'
+        button.setAttribute('aria-label', '複製程式碼')
+        button.innerHTML = copyIcon
+        button.addEventListener('click', async () => {
+          await copyText(code.textContent || '')
+          button.classList.add('copied')
+          button.innerHTML = checkIcon
+          button.setAttribute('aria-label', '已複製')
+          window.setTimeout(() => {
+            button.classList.remove('copied')
+            button.innerHTML = copyIcon
+            button.setAttribute('aria-label', '複製程式碼')
+          }, 1400)
+        })
+        pre.append(button)
+
+        const track = document.createElement('div')
+        const thumb = document.createElement('div')
+        track.className = 'code-scrollbar hidden'
+        thumb.className = 'code-scrollbar-thumb'
+        track.append(thumb)
+        pre.append(track)
+
+        const sync = () => {
+          const ratio = Math.min(1, code.clientWidth / code.scrollWidth)
+          track.classList.toggle('hidden', ratio >= 1)
+          thumb.style.width = `${ratio * 100}%`
+          const maxLeft = track.clientWidth - thumb.clientWidth
+          const scrollRatio = code.scrollWidth === code.clientWidth
+            ? 0
+            : code.scrollLeft / (code.scrollWidth - code.clientWidth)
+          thumb.style.transform = `translateX(${maxLeft * scrollRatio}px)`
+        }
+
+        let dragStartX = 0
+        let dragStartScroll = 0
+        thumb.addEventListener('pointerdown', (event) => {
+          dragStartX = event.clientX
+          dragStartScroll = code.scrollLeft
+          thumb.setPointerCapture(event.pointerId)
+        })
+        thumb.addEventListener('pointermove', (event) => {
+          if (!thumb.hasPointerCapture(event.pointerId)) return
+          const usableTrack = track.clientWidth - thumb.clientWidth
+          if (usableTrack <= 0) return
+          const maxScroll = code.scrollWidth - code.clientWidth
+          code.scrollLeft = dragStartScroll + (event.clientX - dragStartX) * maxScroll / usableTrack
+        })
+
+        code.addEventListener('scroll', sync, { passive: true })
+        window.addEventListener('resize', sync, { passive: true })
+        sync()
+      })
+    })()
+  </script>
+</body>
+</html>
