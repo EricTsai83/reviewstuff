@@ -157,13 +157,13 @@ Effect 的採用節奏要保守：先建立 runtime entrypoint 和必要 service
 - 016-018：language-neutral core、external analyzer adapter、bounded readonly agent。
 - 019-024：release artifact model、install channels、review scope UX、file filtering、safe apply workflow。
 - 025-029：multi-language tool signal、deep-review tools、provider reliability、privacy/security governance。
-- 030-036：CI/release automation、signing, update, documentation, production readiness.
+- 030-037：CI/release automation、signing、update、documentation、large patch budgeting、production readiness。
 
 如果某個 plan 做完後只學到「把很多東西接起來」，通常代表 scope 太大，應拆成下一個連續編號。
 
 ## Product Completeness
 
-完成 001-021 後，目標狀態是可以本機使用的 AI code review MVP，不是完整商用品質 release。完成 001-036 後，目標狀態才是 production-ready CLI。
+完成 001-021 後，目標狀態是可以本機使用的 AI code review MVP，不是完整商用品質 release。完成 001-037 後，目標狀態才是 production-ready CLI。
 
 001-021 已具備：
 
@@ -177,7 +177,7 @@ Effect 的採用節奏要保守：先建立 runtime entrypoint 和必要 service
 - 有第一個 TypeScript analyzer adapter。
 - 有最小 readonly deep review loop。
 
-022-036 補齊 production-ready 所需能力：
+022-037 補齊 production-ready 所需能力：
 
 - `--dir`、`--type`、`--base-commit`、`--since <ref>`、current branch vs base 的完整 scope。
 - `fix --apply`。
@@ -188,10 +188,11 @@ Effect 的採用節奏要保守：先建立 runtime entrypoint 和必要 service
 - update command/self-update。
 - CI release automation、telemetry/privacy policy、完整產品文件。
 - provider reliability/cost controls。
+- 大型 patch 的 budgeted hunk selection 與可觀察 review coverage。
 - privacy/security data policy。
 - final production readiness gate。
 
-因此 021 之後可以真的拿本機 codebase 做 local changes AI review，並作為 dogfood/internal beta 使用；036 之後才應標記 production-ready release。
+因此 021 之後可以真的拿本機 codebase 做 local changes AI review，並作為 dogfood/internal beta 使用；037 之後才應標記 production-ready release。
 
 ## 順序
 
@@ -234,7 +235,8 @@ Effect 的採用節奏要保守：先建立 runtime entrypoint 和必要 service
 | [ ] TODO | 033 | [Multi Platform Packages And Update Check](./033-multi-platform-packages-and-update-check.md) | 多平台 npm 與 update check 可用 |
 | [ ] TODO | 034 | [Direct Tarball Self Update](./034-direct-tarball-self-update.md) | direct tarball self-update 可安全執行 |
 | [ ] TODO | 035 | [Documentation And Onboarding](./035-documentation-and-onboarding.md) | 使用者可完成安裝、設定、first review |
-| [ ] TODO | 036 | [Production Readiness Gate](./036-production-readiness-gate.md) | 可標記 production-ready release |
+| [ ] TODO | 036 | [Large Patch Review Budget And Coverage](./036-large-patch-review-budget-and-coverage.md) | 大型 patch 可按完整 hunk 納入預算並回報 coverage |
+| [ ] TODO | 037 | [Production Readiness Gate](./037-production-readiness-gate.md) | 可標記 production-ready release |
 
 ## 每個 plan 完成前檢查
 

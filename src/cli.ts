@@ -1,10 +1,18 @@
 import { Command } from "@effect/cli";
 import * as ValidationError from "@effect/cli/ValidationError";
 import { BunContext, BunRuntime } from "@effect/platform-bun";
-import { Effect } from "effect";
+import { Effect, Layer } from "effect";
 import packageJson from "../package.json";
 import { doctorCommand } from "./commands/doctor";
 import { reviewCommand } from "./commands/review";
+import * as GitService from "./git/git-service";
+import * as CommandRunner from "./platform/command-runner";
+import * as FileInspector from "./platform/file-inspector";
+
+const AppLive = GitService.layer.pipe(
+  Layer.provide(Layer.merge(CommandRunner.layer, FileInspector.layer)),
+  Layer.provideMerge(BunContext.layer),
+);
 
 const command = Command.make("reviewstuff").pipe(
   Command.withDescription("A code review CLI scaffold."),
@@ -27,6 +35,6 @@ cli(Bun.argv).pipe(
 
     return Effect.fail(error);
   }),
-  Effect.provide(BunContext.layer),
+  Effect.provide(AppLive),
   BunRuntime.runMain,
 );
