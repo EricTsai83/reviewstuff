@@ -10,7 +10,7 @@ The source tree separates CLI concerns, application flow, domain rules, semantic
 | `git/` | `GitService` contract and its canonical Git-backed implementation | `domain/`, `platform/`, `shared/`; the public service contract must not expose platform types |
 | `engines/` | `ReviewEngine` contract plus provider-specific implementations such as `OpenAiReviewEngine` or `CodexCliReviewEngine` | `domain/`, `platform/`, `config/`, `shared/`; providers receive normalized requests and never read the repository |
 | `review/` | Review-specific pure policy, prompt construction, and request normalization introduced when first needed | `domain/`, `shared/`; no application flow or IO |
-| `platform/` | Low-level Effect services and controlled wrappers for process, filesystem, and time side effects when application-level policy is required | `shared/` and runtime-agnostic Effect platform packages |
+| `platform/` | Low-level Effect services and controlled wrappers for process, filesystem, and time side effects when application-level policy is required | `shared/` and runtime-agnostic Effect 4 platform modules |
 | `output/` | Output models, formatting, and renderers shared by CLI entry points | `domain/`, `shared/` |
 | `config/` | Configuration schemas, loading, and validation | `domain/`, `platform/`, `shared/` |
 | `shared/` | Small, ownerless types and pure helpers used by multiple unrelated source areas | no feature directory |
@@ -36,7 +36,7 @@ A single canonical module may import `platform/` internally, but its exported se
 
 `cli.ts` is the only runtime entry point and composition root. It assembles commands, supplies the composed production graph (`AppLive`) and runtime layers, runs the CLI, and maps top-level failures to exit behavior. Layer construction may be factored into a dedicated root-level composition module as the graph grows, but that module must not start another runtime. The entry point should not contain command-specific application flow.
 
-Under the current Bun-first design, `@effect/platform-bun` and Bun runtime globals belong only in the composition root. Platform and concrete adapter modules use runtime-agnostic `@effect/platform` interfaces, with `cli.ts` providing `BunContext.layer`. If a future implementation genuinely requires a runtime-specific escape hatch, document the reason and deliberately update the architecture rule rather than bypassing it.
+Under the current Bun-first design, `@effect/platform-bun` and Bun runtime globals belong only in the composition root. Platform and concrete adapter modules use runtime-agnostic Effect 4 services such as `effect/FileSystem`, `effect/Path`, and `effect/unstable/process`, with `cli.ts` providing `BunServices.layer`. If a future implementation genuinely requires a runtime-specific escape hatch, document the reason and deliberately update the architecture rule rather than bypassing it.
 
 Commands translate parsed CLI input into a use-case invocation and render its typed result. A use-case never returns pre-rendered terminal text. Use-cases decide the sequence of application operations through semantic services. Domain and `review/` logic remain deterministic and independently testable. Adapter directories translate between external systems and domain-facing values, with all side effects delegated to `platform/` services.
 
@@ -44,12 +44,12 @@ Cross-feature imports should use the owning boundary's small public service or m
 
 ## Platform abstraction rule
 
-Prefer existing `@effect/platform` services for filesystem, path, clock, and similar primitives. Add an application-owned wrapper only when it contributes a real policy or stable error vocabulary, rather than forwarding the underlying API unchanged. Examples include an atomic file writer, a size-limited reader, or `CommandRunner` with mandatory timeout, output limits, and cleanup behavior. Semantic adapters remain responsible for translating those low-level results into Git, provider, storage, or analyzer errors.
+Prefer existing Effect 4 services for filesystem, path, clock, and similar primitives. Add an application-owned wrapper only when it contributes a real policy or stable error vocabulary, rather than forwarding the underlying API unchanged. Examples include an atomic file writer, a size-limited reader, or `CommandRunner` with mandatory timeout, output limits, and cleanup behavior. Semantic adapters remain responsible for translating those low-level results into Git, provider, storage, or analyzer errors.
 
 ## Command execution boundary
 
 `platform/command-runner.ts` owns the low-level platform service contract and stable request/result/error types. Every request must specify a timeout and maximum combined output size. A successful low-level execution returns stdout, stderr, and the numeric exit code; semantic adapters decide how an exit code maps to a Git, analyzer, or provider error.
 
-The canonical implementation is added to `platform/command-runner.ts` with the first real subprocess use case. It must use `@effect/platform/Command.start`, consume stdout and stderr concurrently, enforce the output cap while streaming, interrupt and clean up the process on timeout or cancellation, and map platform failures into the `CommandRunner` error union. Feature adapters must never use `Command.string`, `child_process`, `Bun.spawn`, or shell command strings directly.
+The canonical implementation is added to `platform/command-runner.ts` with the first real subprocess use case. It must use `effect/unstable/process/ChildProcess`, consume stdout and stderr concurrently, enforce the output cap while streaming, interrupt and clean up the process on timeout or cancellation, and map platform failures into the `CommandRunner` error union. Feature adapters must never use `ChildProcess` directly, `child_process`, `Bun.spawn`, or shell command strings.
 
 Only create a directory when its first real owner is implemented. The table records the boundaries defined so far; future areas join it when their first real implementation establishes an owner and dependency rule.
