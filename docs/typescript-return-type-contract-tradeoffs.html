@@ -1,0 +1,1365 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="從最小 TypeScript 範例開始，淺白解釋為什麼刪除 return type 後 schemaVersion 會從 literal 1 推論成 number。"
+    />
+    <title>為什麼刪掉 TypeScript Return Type，程式反而報錯？</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --clay: #d97757;
+        --slate: #141413;
+        --ivory: #faf9f5;
+        --oat: #e3dacc;
+        --white: #ffffff;
+        --gray-100: #f0eee6;
+        --gray-300: #d1cfc5;
+        --gray-500: #87867f;
+        --gray-700: #3d3d3a;
+        --good: #426b50;
+        --good-soft: #edf3eb;
+        --space-sm: 8px;
+        --space-md: 12px;
+        --space-lg: 16px;
+        --space-xl: 24px;
+        --space-2xl: 32px;
+        --space-3xl: 48px;
+        --radius-sm: 4px;
+        --radius-md: 8px;
+        --content-width: 68ch;
+      }
+
+      body {
+        margin: 0;
+        background: var(--ivory);
+        color: var(--slate);
+        font-family:
+          ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+          sans-serif;
+        font-size: 16px;
+        font-weight: 430;
+        line-height: 1.55;
+        letter-spacing: 0;
+      }
+
+      main {
+        width: auto;
+        max-width: var(--content-width);
+        margin: 0 auto;
+        padding: var(--space-3xl) var(--space-xl);
+      }
+
+      article {
+        padding: 0;
+        border: 0;
+        border-radius: 0;
+        background: transparent;
+        box-shadow: none;
+      }
+
+      article > h1 {
+        max-width: none;
+        margin: 0;
+        font-family: inherit;
+        font-size: 1.8rem;
+        font-weight: 720;
+        letter-spacing: -0.025em;
+        line-height: 1.18;
+        overflow-wrap: normal;
+        text-wrap: balance;
+      }
+
+      .deck {
+        max-width: var(--content-width);
+        margin: var(--space-lg) 0 var(--space-2xl);
+        color: var(--gray-700);
+        font-size: 1.05rem;
+        line-height: 1.6;
+      }
+
+      h2 {
+        margin: var(--space-3xl) 0 var(--space-lg);
+        font-family: inherit;
+        font-size: 1.22rem;
+        letter-spacing: -0.01em;
+        line-height: 1.25;
+      }
+
+      h3 {
+        margin: var(--space-2xl) 0 var(--space-md);
+        font-size: 1rem;
+        line-height: 1.35;
+      }
+
+      p,
+      ul,
+      ol,
+      .deck,
+      .takeaway,
+      table,
+      pre {
+        max-width: var(--content-width);
+      }
+
+      a {
+        color: var(--clay);
+        text-decoration: underline;
+        text-decoration-thickness: 1px;
+        text-underline-offset: 3px;
+      }
+
+      p code,
+      li code,
+      td code,
+      h2 code {
+        padding: 0.08em 0.3em;
+        border: 1px solid var(--oat);
+        border-radius: var(--radius-sm);
+        background: var(--gray-100);
+        color: var(--slate);
+        overflow-wrap: anywhere;
+      }
+
+      .takeaway {
+        margin: var(--space-2xl) 0 var(--space-3xl);
+        padding: var(--space-lg) var(--space-xl);
+        border: 1px solid var(--oat);
+        border-left: 4px solid var(--clay);
+        border-radius: var(--radius-md);
+        background: var(--gray-100);
+      }
+
+      .takeaway strong {
+        display: block;
+        margin-bottom: var(--space-sm);
+        color: var(--clay);
+        font-size: 0.76rem;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .scenario {
+        margin: var(--space-xl) 0 var(--space-2xl);
+        padding: var(--space-xl);
+        border: 1px solid var(--oat);
+        border-radius: var(--radius-md);
+        background: var(--white);
+        box-shadow: none;
+      }
+
+      .scenario h3 {
+        margin-top: 0;
+      }
+
+      pre {
+        position: relative;
+        width: 100%;
+        margin: var(--space-lg) 0 var(--space-xl);
+        padding: 0;
+        overflow: hidden;
+        border: 1px solid #26241f;
+        border-radius: var(--radius-md);
+        background: #11110f;
+        color: #d8d4ca;
+        box-shadow: none;
+      }
+
+      pre code {
+        display: block;
+        padding: 18px 64px 18px 22px;
+        overflow-x: auto;
+        border: 0;
+        background: transparent;
+        color: inherit;
+        font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+        font-size: 0.875rem;
+        font-weight: 400;
+        line-height: 1.62;
+        scrollbar-width: none;
+        white-space: pre;
+      }
+
+      pre code::-webkit-scrollbar {
+        width: 0;
+        height: 0;
+      }
+
+      pre .label {
+        display: none;
+      }
+
+      .copy-code {
+        position: absolute;
+        z-index: 2;
+        top: 9px;
+        right: 9px;
+        display: inline-flex;
+        width: 30px;
+        height: 30px;
+        align-items: center;
+        justify-content: center;
+        padding: 0;
+        border: 1px solid rgb(250 249 245 / 14%);
+        border-radius: var(--radius-sm);
+        background: rgb(250 249 245 / 6%);
+        color: rgb(250 249 245 / 72%);
+        cursor: pointer;
+      }
+
+      .copy-code:hover,
+      .copy-code:focus-visible {
+        border-color: rgb(250 249 245 / 28%);
+        outline: none;
+        background: rgb(250 249 245 / 12%);
+        color: var(--ivory);
+      }
+
+      .copy-code.copied {
+        border-color: rgb(143 184 106 / 42%);
+        background: rgb(143 184 106 / 14%);
+        color: #b8d99a;
+      }
+
+      .copy-code svg {
+        width: 13px;
+        height: 13px;
+        fill: none;
+        stroke: currentcolor;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+        stroke-width: 1.8;
+        pointer-events: none;
+      }
+
+      .code-scrollbar {
+        position: absolute;
+        right: 0;
+        bottom: 0;
+        left: 0;
+        z-index: 1;
+        height: 3px;
+        border-radius: 999px;
+        background: rgb(250 249 245 / 10%);
+        cursor: pointer;
+      }
+
+      .code-scrollbar.hidden {
+        display: none;
+      }
+
+      .code-scrollbar-thumb {
+        height: 100%;
+        border-radius: inherit;
+        background: rgb(255 148 110 / 82%);
+        cursor: grab;
+        transform: translateX(0);
+      }
+
+      .code-scrollbar-thumb:active {
+        cursor: grabbing;
+      }
+
+      pre code .k {
+        color: #ff946e;
+        font-weight: 400;
+      }
+
+      pre code .s {
+        color: #8fb86a;
+      }
+
+      pre code .n,
+      pre code .p {
+        color: #d8d4ca;
+      }
+
+      pre code .c {
+        color: #858177;
+        font-style: italic;
+      }
+
+      pre code .f,
+      pre code .t {
+        color: #cfc6a2;
+        font-weight: 400;
+      }
+
+      pre code .o {
+        color: #ff946e;
+      }
+
+      .comparison {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: var(--space-lg);
+        margin: var(--space-xl) 0;
+      }
+
+      .option {
+        padding: var(--space-xl);
+        border: 1px solid var(--oat);
+        border-radius: var(--radius-md);
+        background: var(--white);
+      }
+
+      .option.recommended {
+        border-color: #b8cbb9;
+        background: var(--good-soft);
+      }
+
+      .option h3 {
+        margin-top: 0;
+      }
+
+      .option ul {
+        margin-bottom: 0;
+        padding-left: 1.2rem;
+      }
+
+      .contract-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: var(--space-md);
+        margin: var(--space-xl) 0;
+      }
+
+      .contract-item {
+        min-height: 0;
+        padding: var(--space-lg);
+        border: 1px solid var(--oat);
+        border-top: 3px solid var(--clay);
+        border-radius: var(--radius-md);
+        background: var(--white);
+        box-shadow: none;
+      }
+
+      .contract-item .symbol {
+        display: block;
+        margin-bottom: var(--space-sm);
+        color: var(--clay);
+        font-family: ui-monospace, monospace;
+        font-size: 1.15rem;
+        font-weight: 700;
+      }
+
+      .contract-item strong {
+        display: block;
+        margin-bottom: var(--space-sm);
+      }
+
+      .contract-item p {
+        margin: 0;
+        color: var(--gray-700);
+        font-size: 0.875rem;
+        line-height: 1.5;
+      }
+
+      table {
+        width: 100%;
+        margin: var(--space-xl) 0;
+        overflow: visible;
+        border: 1px solid var(--oat);
+        border-collapse: collapse;
+        border-radius: 0;
+        background: var(--white);
+        font-size: 0.9rem;
+      }
+
+      th,
+      td {
+        padding: 10px 12px;
+        border: 1px solid var(--oat);
+        text-align: left;
+        vertical-align: top;
+      }
+
+      th {
+        background: var(--gray-100);
+        font-size: 0.8rem;
+        letter-spacing: 0;
+      }
+
+      .decision-list {
+        max-width: var(--content-width);
+        padding: 0;
+        list-style: none;
+        counter-reset: decision;
+      }
+
+      .decision-list li {
+        position: relative;
+        margin: var(--space-md) 0;
+        padding: var(--space-lg) var(--space-lg) var(--space-lg) 54px;
+        border: 1px solid var(--oat);
+        border-radius: var(--radius-md);
+        background: var(--white);
+      }
+
+      .decision-list li::before {
+        position: absolute;
+        top: 15px;
+        left: 15px;
+        width: 26px;
+        height: 26px;
+        border-radius: 50%;
+        background: var(--slate);
+        color: var(--ivory);
+        content: counter(decision);
+        counter-increment: decision;
+        font-size: 0.78rem;
+        font-weight: 700;
+        line-height: 26px;
+        text-align: center;
+      }
+
+      .type-state {
+        margin: var(--space-2xl) 0;
+        padding: var(--space-xl);
+        border: 1px solid var(--oat);
+        border-radius: var(--radius-md);
+        background: var(--white);
+      }
+
+      .type-state > h3 {
+        display: flex;
+        gap: var(--space-md);
+        align-items: baseline;
+        margin-top: 0;
+        font-size: 1.05rem;
+      }
+
+      .state-number {
+        flex: 0 0 auto;
+        color: var(--clay);
+        font-family: ui-monospace, monospace;
+        font-size: 0.78rem;
+        font-weight: 700;
+        letter-spacing: 0.06em;
+      }
+
+      .type-result {
+        margin: var(--space-lg) 0;
+        padding: var(--space-lg);
+        border-left: 3px solid var(--clay);
+        border-radius: 0 var(--radius-md) var(--radius-md) 0;
+        background: var(--gray-100);
+      }
+
+      .type-result.good {
+        border-left-color: var(--good);
+        background: var(--good-soft);
+      }
+
+      .type-result.error {
+        border-left-color: #b44b3e;
+        background: #f8ebe7;
+      }
+
+      .type-result > strong {
+        display: block;
+        margin-bottom: var(--space-sm);
+        font-size: 0.78rem;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+      }
+
+      .type-result p:last-child {
+        margin-bottom: 0;
+      }
+
+      .type-result pre {
+        margin-bottom: 0;
+      }
+
+      .type-flow {
+        margin: var(--space-xl) 0;
+        padding: 0;
+        list-style: none;
+        counter-reset: flow;
+      }
+
+      .type-flow li {
+        position: relative;
+        margin-left: 16px;
+        padding: 0 0 var(--space-xl) 30px;
+        border-left: 1px solid var(--oat);
+      }
+
+      .type-flow li:last-child {
+        padding-bottom: 0;
+        border-left-color: transparent;
+      }
+
+      .type-flow li::before {
+        position: absolute;
+        top: 0;
+        left: -11px;
+        width: 20px;
+        height: 20px;
+        border: 1px solid var(--clay);
+        border-radius: 50%;
+        background: var(--ivory);
+        color: var(--clay);
+        content: counter(flow);
+        counter-increment: flow;
+        font-size: 0.7rem;
+        font-weight: 700;
+        line-height: 18px;
+        text-align: center;
+      }
+
+      .type-flow strong {
+        display: block;
+        margin-bottom: 4px;
+      }
+
+      .type-flow p {
+        margin: 0;
+        color: var(--gray-700);
+      }
+
+      .type-equation {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: var(--space-md);
+        margin: var(--space-xl) 0;
+      }
+
+      .type-equation > div {
+        padding: var(--space-lg);
+        border: 1px solid var(--oat);
+        border-radius: var(--radius-md);
+        background: var(--white);
+      }
+
+      .type-equation code {
+        display: block;
+        margin-bottom: var(--space-sm);
+        color: var(--clay);
+        font-size: 1rem;
+        font-weight: 700;
+      }
+
+      .type-equation strong {
+        display: block;
+        margin-bottom: 4px;
+      }
+
+      .type-equation p {
+        margin: 0;
+        color: var(--gray-700);
+        font-size: 0.875rem;
+      }
+
+      .value-sets {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: var(--space-md);
+        margin: var(--space-xl) 0 var(--space-2xl);
+      }
+
+      .value-set {
+        padding: var(--space-lg);
+        border: 1px solid var(--oat);
+        border-radius: var(--radius-md);
+        background: var(--white);
+      }
+
+      .value-set strong {
+        display: block;
+        margin-bottom: var(--space-sm);
+        font-size: 0.85rem;
+      }
+
+      .value-set .values {
+        display: flex;
+        min-height: 38px;
+        gap: 6px;
+        align-items: center;
+        margin-bottom: var(--space-sm);
+      }
+
+      .value-set .value {
+        display: inline-flex;
+        min-width: 30px;
+        height: 30px;
+        align-items: center;
+        justify-content: center;
+        border: 1px solid var(--oat);
+        border-radius: 50%;
+        background: var(--gray-100);
+        font-family: ui-monospace, monospace;
+        font-size: 0.8rem;
+      }
+
+      .value-set .ellipsis {
+        color: var(--gray-500);
+      }
+
+      .value-set p {
+        margin: 0;
+        color: var(--gray-700);
+        font-size: 0.82rem;
+      }
+
+      .checkpoint {
+        margin: var(--space-xl) 0;
+        padding: var(--space-lg) var(--space-xl);
+        border: 1px solid var(--oat);
+        border-radius: var(--radius-md);
+        background: var(--white);
+      }
+
+      .checkpoint strong {
+        display: block;
+        margin-bottom: var(--space-sm);
+        color: var(--clay);
+      }
+
+      .checkpoint p:last-child {
+        margin-bottom: 0;
+      }
+
+      blockquote {
+        margin: var(--space-xl) 0;
+        padding: var(--space-lg) var(--space-xl);
+        border-left: 3px solid var(--clay);
+        background: var(--gray-100);
+        color: var(--gray-700);
+      }
+
+      .sources {
+        margin-top: var(--space-3xl);
+        padding-top: var(--space-xl);
+        border-top: 1px solid var(--oat);
+        color: var(--gray-700);
+        font-size: 0.875rem;
+      }
+
+      .sources h2 {
+        margin-top: 0;
+        color: var(--slate);
+        font-size: 1rem;
+      }
+
+      @media (max-width: 640px) {
+        body {
+          font-size: 15px;
+        }
+
+        main {
+          width: auto;
+          padding: var(--space-xl);
+        }
+
+        article > h1 {
+          font-size: 1.65rem;
+        }
+
+        .comparison,
+        .contract-grid,
+        .type-equation,
+        .value-sets {
+          grid-template-columns: 1fr;
+        }
+
+        .type-state {
+          padding: var(--space-lg);
+        }
+
+        pre {
+          margin-right: 0;
+          margin-left: 0;
+          border-radius: var(--radius-md);
+        }
+
+        pre code {
+          padding: 16px 54px 16px 16px;
+          font-size: 0.8125rem;
+          line-height: 1.5;
+        }
+
+        p code,
+        li code,
+        td code {
+          font-size: 0.9em;
+        }
+
+        table,
+        .deck,
+        .sources {
+          font-size: 0.875rem;
+        }
+
+        table,
+        thead,
+        tbody,
+        tr,
+        th,
+        td {
+          display: block;
+        }
+
+        thead {
+          position: absolute;
+          width: 1px;
+          height: 1px;
+          overflow: hidden;
+          clip: rect(0 0 0 0);
+        }
+
+        tr {
+          padding: var(--space-sm) 0;
+          border-bottom: 1px solid var(--oat);
+        }
+
+        tr:last-child {
+          border-bottom: 0;
+        }
+
+        td {
+          padding: 6px var(--space-md);
+          border: 0;
+        }
+
+        td::before {
+          display: block;
+          color: var(--gray-500);
+          content: attr(data-label);
+          font-size: 0.72rem;
+          font-weight: 700;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <article>
+        <h1>為什麼刪掉 TypeScript Return Type，程式反而報錯？</h1>
+        <p class="deck">
+          關鍵不是 Effect，也不是 TypeScript 推論失敗，而是數字 <code>1</code> 在不同位置可能被理解成兩種型別：精確的 literal type <code>1</code>，或比較寬的 <code>number</code>。我們從最小的例子開始，一步一步走回 <code>runReview</code>。
+        </p>
+
+        <aside class="takeaway">
+          <strong>先看最短答案</strong>
+          TypeScript 推論的是「這段 JavaScript 可以被安全地當成什麼」，不是「你心裡想把它當成哪個業務型別」。刪除 return type 後，<code>schemaVersion: 1</code> 被安全地推論成 <code>schemaVersion: number</code>；這個推論沒有錯，但它比 <code>ReviewReport</code> 要求的 literal <code>1</code> 更寬。
+        </aside>
+
+        <h2>第一步：值是 <code>1</code>，型別不一定都是 <code>1</code></h2>
+
+        <p>先忘記物件、函式和 Effect，只看兩個變數：</p>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">const</span> fixedVersion <span class="o">=</span> <span class="n">1</span><span class="o">;</span>
+<span class="k">let</span> changeableVersion <span class="o">=</span> <span class="n">1</span><span class="o">;</span></code></pre>
+
+        <p>它們目前存放的 runtime value 都是數字 <code>1</code>，但 TypeScript 給的型別不同：</p>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="c">// TypeScript 看到的型別</span>
+
+fixedVersion<span class="o">;</span>
+<span class="c">// ^? 1</span>
+
+changeableVersion<span class="o">;</span>
+<span class="c">// ^? number</span></code></pre>
+
+        <p>
+          為什麼？因為 <code>const</code> 變數不能重新指派。<code>fixedVersion</code>
+          這輩子只會是 <code>1</code>，所以 TypeScript 可以給它最精確的 literal type
+          <code>1</code>。
+        </p>
+
+        <p>
+          <code>let</code> 不一樣。它現在雖然是 <code>1</code>，之後卻可能變成
+          <code>2</code>、<code>99</code> 或任何其他數字：
+        </p>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code>changeableVersion <span class="o">=</span> <span class="n">2</span><span class="o">;</span>
+changeableVersion <span class="o">=</span> <span class="n">99</span><span class="o">;</span></code></pre>
+
+        <p>
+          所以 TypeScript 使用較寬的 <code>number</code>。這種從精確 literal
+          變成一般型別的行為，叫做 <em>literal widening</em>。名字可以先不用記，先記住：
+          <strong>可能被修改的東西，通常會得到比較寬的型別。</strong>
+        </p>
+
+        <div class="checkpoint">
+          <strong>到這裡只要理解一件事</strong>
+          <p>
+            Runtime value 是 <code>1</code>，不代表 TypeScript type 一定是 literal
+            <code>1</code>。它也可能是包含 <code>1</code> 的較大集合 <code>number</code>。
+          </p>
+        </div>
+
+        <h2>第二步：<code>const</code> 物件並沒有把裡面的屬性固定住</h2>
+
+        <p>現在把版本號放進物件：</p>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">const</span> report <span class="o">=</span> <span class="o">{</span>
+  schemaVersion<span class="o">:</span> <span class="n">1</span><span class="o">,</span>
+<span class="o">}</span><span class="o">;</span></code></pre>
+
+        <p>
+          很多人看到 <code>const report</code>，會直覺認為
+          <code>report.schemaVersion</code> 也是固定的。但 <code>const</code>
+          只限制變數 <code>report</code> 不能指向另一個物件：
+        </p>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code>report <span class="o">=</span> <span class="o">{</span> schemaVersion<span class="o">:</span> <span class="n">2</span> <span class="o">}</span><span class="o">;</span>
+<span class="c">// 錯誤：不能重新指派 const 變數</span></code></pre>
+
+        <p>它沒有禁止修改原本物件裡的屬性：</p>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code>report<span class="o">.</span><span class="p">schemaVersion</span> <span class="o">=</span> <span class="n">2</span><span class="o">;</span>
+<span class="c">// 合法：仍然是同一個物件，只是修改裡面的 property</span></code></pre>
+
+        <p>因此 TypeScript 不能把這個 property 限制成 literal <code>1</code>。它推論的是：</p>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">const</span> report<span class="o">:</span> <span class="o">{</span>
+  schemaVersion<span class="o">:</span> number<span class="o">;</span>
+<span class="o">}</span></code></pre>
+
+        <p>
+          原始碼確實寫了 <code>schemaVersion: 1</code>，但這個 property 可以被改成其他數字，
+          所以 <code>number</code> 是更符合 JavaScript 行為的安全型別。
+        </p>
+
+        <p>
+          即使目前整個專案從來沒有真的執行 <code>report.schemaVersion = 2</code>，結果仍然一樣。
+          TypeScript 在這裡是根據「這個物件的型別允許什麼」推論，不會因為目前剛好沒有人修改它，
+          就把一個原本可修改的 property 當成永久不變。
+        </p>
+
+        <div class="value-sets" aria-label="runtime value、推論型別與業務契約允許值比較">
+          <div class="value-set">
+            <strong>Runtime 目前的值</strong>
+            <div class="values"><span class="value">1</span></div>
+            <p>這一次建立物件時放入的值。</p>
+          </div>
+          <div class="value-set">
+            <strong>推論型別允許的值</strong>
+            <div class="values">
+              <span class="value">1</span>
+              <span class="value">2</span>
+              <span class="value">3</span>
+              <span class="ellipsis">…</span>
+            </div>
+            <p><code>number</code> 包含所有數字。</p>
+          </div>
+          <div class="value-set">
+            <strong>業務契約允許的值</strong>
+            <div class="values"><span class="value">1</span></div>
+            <p><code>schemaVersion: 1</code> 只能是 1。</p>
+          </div>
+        </div>
+
+        <p>
+          這張比較就是整個問題的核心：實際值與業務契約都只有 <code>1</code>，但沒有型別上下文時，
+          TypeScript 必須替可修改的 property 推論出較大的 <code>number</code>。
+        </p>
+
+        <h2>第三步：函式只是把同一個物件推論帶到 return type</h2>
+
+        <p>把剛才的物件放進函式：</p>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">const</span> makeReport <span class="o">=</span> <span class="o">(</span><span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span> <span class="o">{</span>
+  <span class="k">return</span> <span class="o">{</span>
+    schemaVersion<span class="o">:</span> <span class="n">1</span><span class="o">,</span>
+  <span class="o">}</span><span class="o">;</span>
+<span class="o">}</span><span class="o">;</span></code></pre>
+
+        <p>
+          函式沒有寫 return type，所以 TypeScript 必須從 <code>return</code> expression
+          反推函式型別。剛才已經知道物件 property 會被推論成 <code>number</code>，所以整個函式變成：
+        </p>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">const</span> makeReport<span class="o">:</span> <span class="o">(</span><span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span> <span class="o">{</span>
+  schemaVersion<span class="o">:</span> number<span class="o">;</span>
+<span class="o">}</span></code></pre>
+
+        <p>
+          這裡沒有發生新的特殊規則。TypeScript 只是把物件本身的 inferred type
+          當成函式的 inferred return type。
+        </p>
+
+        <div class="checkpoint">
+          <strong>TypeScript 不會主動尋找「最像的 interface」</strong>
+          <p>
+            即使專案裡剛好存在一個 <code>ReviewReport</code>，TypeScript 也不會猜測：
+            「這個函式大概是想回傳 ReviewReport。」它只根據當下 expression 與可見的型別上下文推論。
+          </p>
+        </div>
+
+        <h2>第四步：為什麼錯誤不是出現在函式裡，而是 renderer？</h2>
+
+        <p>假設真正的業務型別是：</p>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code>interface <span class="t">ReviewReport</span> <span class="o">{</span>
+  readonly schemaVersion<span class="o">:</span> <span class="n">1</span><span class="o">;</span>
+<span class="o">}</span></code></pre>
+
+        <p>
+          真正造成這次不相容的是 <code>schemaVersion: 1</code> 裡的 literal type
+          <code>1</code>；<code>readonly</code> 是額外保證，表示拿到 report 的程式碼不能重新指派這個 property。
+          即使拿掉 <code>readonly</code>，一般的 <code>number</code> 仍然不能指派給只接受 <code>1</code> 的位置。
+        </p>
+
+        <p>Renderer 明確要求這份契約：</p>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">const</span> renderReport <span class="o">=</span> <span class="o">(</span>report<span class="o">:</span> <span class="t">ReviewReport</span><span class="o">)</span><span class="o">:</span> string <span class="o">=</span><span class="o">&gt;</span> <span class="o">{</span>
+  <span class="k">return</span> <span class="t">JSON</span><span class="o">.</span><span class="p">stringify</span><span class="o">(</span>report<span class="o">)</span><span class="o">;</span>
+<span class="o">}</span><span class="o">;</span></code></pre>
+
+        <p>然後我們把推論出來的結果傳進去：</p>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">const</span> report <span class="o">=</span> <span class="f">makeReport</span><span class="o">(</span><span class="o">)</span><span class="o">;</span>
+<span class="c">//    ^? { schemaVersion: number }</span>
+
+<span class="f">renderReport</span><span class="o">(</span>report<span class="o">)</span><span class="o">;</span>
+<span class="c">//           ^^^^^^ 型別錯誤</span></code></pre>
+
+        <p>TypeScript 的思考方式是：</p>
+
+        <ol>
+          <li><code>renderReport</code> 只接受 <code>schemaVersion: 1</code>。</li>
+          <li>但 <code>report</code> 的型別是 <code>schemaVersion: number</code>。</li>
+          <li><code>number</code> 除了 <code>1</code>，也可能是 <code>2</code>、<code>3</code> 或其他數字。</li>
+          <li>所以不能把「任何 number」交給「只接受 1」的位置。</li>
+        </ol>
+
+        <pre class="language-typescript"><span class="label">Text</span><code><span class="t">Type</span> <span class="s">'{ schemaVersion: number }'</span>
+is not assignable to <span class="k">type</span> <span class="s">'ReviewReport'</span><span class="o">.</span>
+
+<span class="p">Type</span> <span class="s">'number'</span> is not assignable to <span class="k">type</span> <span class="s">'1'</span><span class="o">.</span></code></pre>
+
+        <p>
+          注意：TypeScript 並不是說 runtime 這一次真的會得到 <code>2</code>。它是在說：
+          <strong>你提供的型別保證不夠強。</strong>呼叫端只接受 <code>1</code>，但
+          <code>number</code> 這個型別沒有做出這項保證。
+        </p>
+
+        <h2>第五步：Return type 的作用，是先告訴 TypeScript 我們要守哪份契約</h2>
+
+        <p>現在替函式加上 return type：</p>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">const</span> makeReport <span class="o">=</span> <span class="o">(</span><span class="o">)</span><span class="o">:</span> <span class="t">ReviewReport</span> <span class="o">=</span><span class="o">&gt;</span> <span class="o">{</span>
+  <span class="k">return</span> <span class="o">{</span>
+    schemaVersion<span class="o">:</span> <span class="n">1</span><span class="o">,</span>
+  <span class="o">}</span><span class="o">;</span>
+<span class="o">}</span><span class="o">;</span></code></pre>
+
+        <p>
+          TypeScript 現在不再只從內往外推論。它已經先知道函式必須回傳
+          <code>ReviewReport</code>，所以會用這份型別檢查每一個 <code>return</code>。
+        </p>
+
+        <p>如果實作不小心改成版本 2，錯誤會立刻出現在函式內部：</p>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">const</span> makeReport <span class="o">=</span> <span class="o">(</span><span class="o">)</span><span class="o">:</span> <span class="t">ReviewReport</span> <span class="o">=</span><span class="o">&gt;</span> <span class="o">{</span>
+  <span class="k">return</span> <span class="o">{</span>
+    schemaVersion<span class="o">:</span> <span class="n">2</span><span class="o">,</span>
+    <span class="c">//             ^ 錯誤：2 不能指派給 1</span>
+  <span class="o">}</span><span class="o">;</span>
+<span class="o">}</span><span class="o">;</span></code></pre>
+
+        <p>如果實作正確，呼叫端拿到的型別就是完整契約：</p>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">const</span> report <span class="o">=</span> <span class="f">makeReport</span><span class="o">(</span><span class="o">)</span><span class="o">;</span>
+<span class="c">//    ^? ReviewReport</span>
+
+<span class="f">renderReport</span><span class="o">(</span>report<span class="o">)</span><span class="o">;</span>
+<span class="c">// OK</span></code></pre>
+
+        <p>
+          這種「外層型別反過來幫內層 expression 提供檢查方向」叫做
+          <em>contextual typing</em>。同樣地，名稱可以晚點再記。真正重要的是：
+          <strong>return type 讓 TypeScript 知道這不是任意 number，而是一份只允許版本 1 的 API 契約。</strong>
+        </p>
+
+        <h2>所以刪掉 return type 之後，程式到底算不算型別正確？</h2>
+
+        <p>答案是：要看你問的是哪一層。</p>
+
+        <table>
+          <thead>
+            <tr>
+              <th>問題</th>
+              <th>答案</th>
+              <th>原因</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td data-label="問題">TypeScript 對函式本體的推論安全嗎？</td>
+              <td data-label="答案">安全</td>
+              <td data-label="原因"><code>1</code> 本來就是一個 <code>number</code></td>
+            </tr>
+            <tr>
+              <td data-label="問題">推論結果夠精確嗎？</td>
+              <td data-label="答案">不夠精確</td>
+              <td data-label="原因">它失去了「只能是 1」的資訊</td>
+            </tr>
+            <tr>
+              <td data-label="問題">它符合 <code>ReviewReport</code> 契約嗎？</td>
+              <td data-label="答案">不符合</td>
+              <td data-label="原因"><code>number</code> 不能保證一定是 <code>1</code></td>
+            </tr>
+            <tr>
+              <td data-label="問題">如果完全沒有嚴格的下游使用者，專案可能通過嗎？</td>
+              <td data-label="答案">可能</td>
+              <td data-label="原因">沒有人要求它證明自己是 <code>ReviewReport</code></td>
+            </tr>
+          </tbody>
+        </table>
+
+        <p>
+          因此最精確的說法不是「TypeScript 推論錯了」，而是：
+          <strong>TypeScript 推論出一個安全但較寬的型別，而這個型別不足以履行我們想要的公開契約。</strong>
+        </p>
+
+        <h2>現在才把同一個道理放回 <code>Effect.gen</code></h2>
+
+        <p>你的原始函式大致是：</p>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">export</span> <span class="k">const</span> runReview <span class="o">=</span> <span class="o">(</span>scope<span class="o">:</span> <span class="t">ReviewScope</span><span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span>
+  <span class="t">Effect</span><span class="o">.</span><span class="p">gen</span><span class="o">(</span><span class="k">function</span><span class="o">*</span> <span class="o">(</span><span class="o">)</span> <span class="o">{</span>
+    <span class="k">const</span> git <span class="o">=</span> <span class="k">yield</span><span class="o">*</span> <span class="t">GitService</span><span class="o">;</span>
+    <span class="k">const</span> diff <span class="o">=</span> <span class="k">yield</span><span class="o">*</span> git<span class="o">.</span><span class="p">readDiff</span><span class="o">(</span>scope<span class="o">)</span><span class="o">;</span>
+    <span class="k">const</span> findings <span class="o">=</span> diff<span class="o">.</span><span class="p">files</span><span class="o">.</span><span class="p">flatMap</span><span class="o">(</span>findingsForPatch<span class="o">)</span><span class="o">;</span>
+
+    <span class="k">return</span> <span class="o">{</span>
+      schemaVersion<span class="o">:</span> <span class="n">1</span><span class="o">,</span>
+      scope<span class="o">,</span>
+      summary<span class="o">:</span> <span class="o">{</span>
+        changedFiles<span class="o">:</span> diff<span class="o">.</span><span class="p">files</span><span class="o">.</span><span class="p">length</span><span class="o">,</span>
+        findings<span class="o">:</span> findings<span class="o">.</span><span class="p">length</span><span class="o">,</span>
+      <span class="o">}</span><span class="o">,</span>
+      findings<span class="o">,</span>
+    <span class="o">}</span><span class="o">;</span>
+  <span class="o">}</span><span class="o">)</span><span class="o">;</span></code></pre>
+
+        <p>
+          先不用把 Effect 想得太複雜。<code>Effect.Effect&lt;A, E, R&gt;</code>
+          只是同時記錄三份資訊：
+        </p>
+
+        <table>
+          <thead>
+            <tr>
+              <th>字母</th>
+              <th>淺白意思</th>
+              <th>這段程式的推論</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td data-label="字母"><code>A</code></td>
+              <td data-label="淺白意思">成功時拿到什麼值</td>
+              <td data-label="這段程式的推論"><code>{ schemaVersion: number; ... }</code></td>
+            </tr>
+            <tr>
+              <td data-label="字母"><code>E</code></td>
+              <td data-label="淺白意思">可能發生什麼預期內錯誤</td>
+              <td data-label="這段程式的推論"><code>GitError</code></td>
+            </tr>
+            <tr>
+              <td data-label="字母"><code>R</code></td>
+              <td data-label="淺白意思">執行前需要提供什麼服務</td>
+              <td data-label="這段程式的推論"><code>GitService</code></td>
+            </tr>
+          </tbody>
+        </table>
+
+        <p>刪掉 annotation 後，完整 inferred type 大致變成：</p>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="o">(</span>
+  scope<span class="o">:</span> <span class="t">ReviewScope</span><span class="o">,</span>
+<span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span> <span class="t">Effect</span><span class="o">.</span><span class="p">Effect</span><span class="o">&lt;</span>
+  <span class="o">{</span>
+    schemaVersion<span class="o">:</span> number<span class="o">;</span>
+    scope<span class="o">:</span> <span class="t">ReviewScope</span><span class="o">;</span>
+    summary<span class="o">:</span> <span class="o">{</span>
+      changedFiles<span class="o">:</span> number<span class="o">;</span>
+      findings<span class="o">:</span> number<span class="o">;</span>
+    <span class="o">}</span><span class="o">;</span>
+    findings<span class="o">:</span> <span class="t">Finding</span><span class="o">[</span><span class="o">]</span><span class="o">;</span>
+  <span class="o">}</span><span class="o">,</span>
+  <span class="t">GitError</span><span class="o">,</span>
+  <span class="t">GitService</span>
+<span class="o">&gt;</span></code></pre>
+
+        <p>
+          這裡很重要：<strong>Effect 的推論沒有整個壞掉。</strong>
+          <code>GitError</code> 和 <code>GitService</code> 都正確。問題仍然只是剛才那個普通
+          TypeScript 物件問題：成功值 A 裡的 <code>schemaVersion: 1</code> 被推成了
+          <code>schemaVersion: number</code>。
+        </p>
+
+        <p>Renderer 接收到的 <code>report</code> 因此也是較寬的型別：</p>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="f">runReview</span><span class="o">(</span>scope<span class="o">)</span><span class="o">.</span><span class="p">pipe</span><span class="o">(</span>
+  <span class="t">Effect</span><span class="o">.</span><span class="p">map</span><span class="o">(</span><span class="o">(</span>report<span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span> <span class="o">{</span>
+    <span class="c">//          ^? { schemaVersion: number; ... }</span>
+
+    <span class="k">return</span> <span class="f">renderJsonReport</span><span class="o">(</span>report<span class="o">)</span><span class="o">;</span>
+    <span class="c">//                      ^^^^^^ 不是 ReviewReport</span>
+  <span class="o">}</span><span class="o">)</span><span class="o">,</span>
+<span class="o">)</span><span class="o">;</span></code></pre>
+
+        <h2>完整 Effect return type 多做了哪兩件事？</h2>
+
+        <p>原本的 annotation 是：</p>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">export</span> <span class="k">const</span> runReview <span class="o">=</span> <span class="o">(</span>
+  scope<span class="o">:</span> <span class="t">ReviewScope</span><span class="o">,</span>
+<span class="o">)</span><span class="o">:</span> <span class="t">Effect</span><span class="o">.</span><span class="p">Effect</span><span class="o">&lt;</span><span class="t">ReviewReport</span><span class="o">,</span> <span class="t">GitError</span><span class="o">,</span> <span class="t">GitService</span><span class="o">&gt;</span> <span class="o">=</span><span class="o">&gt;</span>
+  <span class="t">Effect</span><span class="o">.</span><span class="p">gen</span><span class="o">(</span><span class="k">function</span><span class="o">*</span> <span class="o">(</span><span class="o">)</span> <span class="o">{</span>
+    <span class="c">// ...</span>
+  <span class="o">}</span><span class="o">)</span><span class="o">;</span></code></pre>
+
+        <p>它有兩層價值。</p>
+
+        <h3>第一層：修正現在遇到的成功值問題</h3>
+
+        <p>
+          TypeScript 知道 A 必須是 <code>ReviewReport</code>，所以
+          <code>schemaVersion</code> 必須符合 literal <code>1</code>。呼叫端拿到的
+          <code>report</code> 也會是 <code>ReviewReport</code>。
+        </p>
+
+        <h3>第二層：固定公開的錯誤與依賴</h3>
+
+        <p>如果日後有人在實作中偷偷加入另一個 service：</p>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">const</span> config <span class="o">=</span> <span class="k">yield</span><span class="o">*</span> <span class="t">ConfigService</span><span class="o">;</span></code></pre>
+
+        <p>實作真正需要的 R 就會變成：</p>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="t">GitService</span> <span class="o">|</span> <span class="t">ConfigService</span></code></pre>
+
+        <p>
+          但公開 annotation 只承諾需要 <code>GitService</code>，所以 TypeScript 會報錯。
+          這迫使開發者停下來決定：我們真的要擴大公開 API，還是應該在其他地方提供
+          <code>ConfigService</code>？
+        </p>
+
+        <p>
+          新增 error 也是同樣道理。完整 annotation 不只是在解決 literal
+          <code>1</code>；它同時保護 Effect 的成功值、錯誤與依賴三個邊界。
+        </p>
+
+        <h2>如果我希望 Error 和 Service 繼續自動推論呢？</h2>
+
+        <p>可以只在回傳物件上使用 <code>satisfies ReviewReport</code>：</p>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">export</span> <span class="k">const</span> runReview <span class="o">=</span> <span class="o">(</span>scope<span class="o">:</span> <span class="t">ReviewScope</span><span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span>
+  <span class="t">Effect</span><span class="o">.</span><span class="p">gen</span><span class="o">(</span><span class="k">function</span><span class="o">*</span> <span class="o">(</span><span class="o">)</span> <span class="o">{</span>
+    <span class="k">const</span> git <span class="o">=</span> <span class="k">yield</span><span class="o">*</span> <span class="t">GitService</span><span class="o">;</span>
+    <span class="k">const</span> diff <span class="o">=</span> <span class="k">yield</span><span class="o">*</span> git<span class="o">.</span><span class="p">readDiff</span><span class="o">(</span>scope<span class="o">)</span><span class="o">;</span>
+    <span class="k">const</span> findings <span class="o">=</span> diff<span class="o">.</span><span class="p">files</span><span class="o">.</span><span class="p">flatMap</span><span class="o">(</span>findingsForPatch<span class="o">)</span><span class="o">;</span>
+
+    <span class="k">return</span> <span class="o">{</span>
+      schemaVersion<span class="o">:</span> <span class="n">1</span><span class="o">,</span>
+      scope<span class="o">,</span>
+      summary<span class="o">:</span> <span class="o">{</span>
+        changedFiles<span class="o">:</span> diff<span class="o">.</span><span class="p">files</span><span class="o">.</span><span class="p">length</span><span class="o">,</span>
+        findings<span class="o">:</span> findings<span class="o">.</span><span class="p">length</span><span class="o">,</span>
+      <span class="o">}</span><span class="o">,</span>
+      findings<span class="o">,</span>
+    <span class="o">}</span> <span class="k">satisfies</span> <span class="t">ReviewReport</span><span class="o">;</span>
+  <span class="o">}</span><span class="o">)</span><span class="o">;</span></code></pre>
+
+        <p>這句話的意思可以直接讀成：</p>
+
+        <blockquote>
+          請檢查這個物件符合 <code>ReviewReport</code>，但函式其他部分仍照實作推論。
+        </blockquote>
+
+        <p>結果是：</p>
+
+        <ul>
+          <li><code>schemaVersion</code> 會保留 literal <code>1</code>。</li>
+          <li>漏欄位或欄位型別錯誤，會在 return object 報錯。</li>
+          <li><code>GitError</code> 繼續從實作推論。</li>
+          <li><code>GitService</code> 也繼續從實作推論。</li>
+          <li>日後新增 error 或 service，公開 inferred type 會跟著改變。</li>
+        </ul>
+
+        <h2>三種選擇真正的差別</h2>
+
+        <table>
+          <thead>
+            <tr>
+              <th>寫法</th>
+              <th>它保護什麼</th>
+              <th>適合放在哪裡</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td data-label="寫法">完全推論</td>
+              <td data-label="它保護什麼">只保證目前實作本身型別安全</td>
+              <td data-label="適合放在哪裡">私有 helper、短小局部流程</td>
+            </tr>
+            <tr>
+              <td data-label="寫法"><code>satisfies ReviewReport</code></td>
+              <td data-label="它保護什麼">固定成功值形狀；error 與 service 繼續推論</td>
+              <td data-label="適合放在哪裡">只想約束輸出資料時</td>
+            </tr>
+            <tr>
+              <td data-label="寫法">完整 <code>Effect&lt;A, E, R&gt;</code></td>
+              <td data-label="它保護什麼">固定成功值、error 與 service 三個公開邊界</td>
+              <td data-label="適合放在哪裡">exported use case、模組 API</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h2>完整 annotation 也有代價</h2>
+
+        <p>
+          Annotation 需要維護，而且可能故意比實作更寬。例如函式現在其實不可能失敗，
+          TypeScript 推論的 E 是 <code>never</code>，但公開契約仍然寫
+          <code>GitError</code>。這在型別上是安全的，卻會讓呼叫端準備處理目前不可能發生的錯誤。
+        </p>
+
+        <p>
+          所以 annotation 並不是越多越好。它的價值在於穩定邊界；代價則是少了一部分「永遠跟著實作保持最精確」的能力。
+        </p>
+
+        <h2>套用到這段 <code>runReview</code>，我會怎麼選？</h2>
+
+        <p>我會保留原本的完整 return type：</p>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="o">)</span><span class="o">:</span> <span class="t">Effect</span><span class="o">.</span><span class="p">Effect</span><span class="o">&lt;</span><span class="t">ReviewReport</span><span class="o">,</span> <span class="t">GitError</span><span class="o">,</span> <span class="t">GitService</span><span class="o">&gt;</span> <span class="o">=</span><span class="o">&gt;</span></code></pre>
+
+        <p>原因不是「return type 一律都應該手寫」，而是這個函式具備三個特徵：</p>
+
+        <ol>
+          <li>它是 exported function，不只是檔案內部 helper。</li>
+          <li><code>ReviewReport</code> 是 versioned output，<code>schemaVersion: 1</code> 是對外協定。</li>
+          <li><code>GitError</code> 與 <code>GitService</code> 也是 use case 對外公開的一部分。</li>
+        </ol>
+
+        <p>
+          如果它只是很短的私有 helper，我會偏向推論；如果只想確保 report 形狀，我會選
+          <code>satisfies ReviewReport</code>。這不是哪一種語法永遠比較好，而是要先決定：
+          <strong>這裡是在描述目前實作，還是在宣告穩定契約？</strong>
+        </p>
+
+        <aside class="takeaway">
+          <strong>最後再濃縮一次</strong>
+          <code>schemaVersion: number</code> 對目前實作來說是安全推論，因為 <code>1</code>
+          確實是一個 number；但它對 <code>ReviewReport</code> 來說保證不足，因為 number
+          不保證一定是 1。Return type 的作用，就是把「目前剛好回傳 1」提升成「這個 API 承諾永遠回傳版本 1」。
+        </aside>
+
+        <section class="sources">
+          <h2>延伸閱讀與實例</h2>
+          <ul>
+            <li><a href="https://www.typescriptlang.org/docs/handbook/release-notes/typescript-2-1.html">TypeScript：literal type widening</a></li>
+            <li><a href="https://www.typescriptlang.org/docs/handbook/release-notes/typescript-4-9.html">TypeScript：<code>satisfies</code> operator</a></li>
+            <li><a href="https://github.com/pingdotgg/t3code/blob/ecb35f75839925dd1ac6f854efeef5c9e291d11b/apps/server/src/serverRuntimeState.ts">T3 Code：versioned state 使用明確 Effect return type</a></li>
+            <li><a href="https://github.com/pingdotgg/t3code/blob/ecb35f75839925dd1ac6f854efeef5c9e291d11b/apps/server/src/orchestration/Normalizer.ts">T3 Code：在回傳物件使用 <code>satisfies</code></a></li>
+          </ul>
+        </section>
+      </article>
+    </main>
+    <script>
+      (() => {
+        const copyIcon =
+          '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="11" height="11" rx="2"></rect><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"></path></svg>';
+        const checkIcon =
+          '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"></path></svg>';
+
+        const copyText = async (text) => {
+          if (navigator.clipboard && window.isSecureContext) {
+            await navigator.clipboard.writeText(text);
+            return;
+          }
+
+          const textarea = document.createElement("textarea");
+          textarea.value = text;
+          textarea.style.position = "fixed";
+          textarea.style.opacity = "0";
+          document.body.append(textarea);
+          textarea.select();
+          document.execCommand("copy");
+          textarea.remove();
+        };
+
+        document.querySelectorAll("pre").forEach((pre) => {
+          const code = pre.querySelector("code");
+          if (!code) return;
+
+          const button = document.createElement("button");
+          button.className = "copy-code";
+          button.type = "button";
+          button.setAttribute("aria-label", "複製程式碼");
+          button.innerHTML = copyIcon;
+          button.addEventListener("click", async () => {
+            try {
+              await copyText(code.textContent || "");
+              button.classList.add("copied");
+              button.innerHTML = checkIcon;
+              window.setTimeout(() => {
+                button.classList.remove("copied");
+                button.innerHTML = copyIcon;
+              }, 1400);
+            } catch {
+              button.setAttribute("aria-label", "複製失敗");
+            }
+          });
+          pre.append(button);
+
+          const track = document.createElement("div");
+          const thumb = document.createElement("div");
+          track.className = "code-scrollbar";
+          thumb.className = "code-scrollbar-thumb";
+          track.append(thumb);
+          pre.append(track);
+
+          const updateScrollbar = () => {
+            const overflow = code.scrollWidth - code.clientWidth;
+            track.classList.toggle("hidden", overflow <= 1);
+            if (overflow <= 1) return;
+
+            const width = Math.max(12, (code.clientWidth / code.scrollWidth) * 100);
+            const progress = code.scrollLeft / overflow;
+            thumb.style.width = `${width}%`;
+            const travel = track.clientWidth - thumb.offsetWidth;
+            thumb.style.transform = `translateX(${progress * travel}px)`;
+          };
+
+          track.addEventListener("pointerdown", (event) => {
+            const bounds = track.getBoundingClientRect();
+            const ratio = (event.clientX - bounds.left) / bounds.width;
+            code.scrollLeft = ratio * (code.scrollWidth - code.clientWidth);
+          });
+
+          let dragStartX = 0;
+          let dragStartScrollLeft = 0;
+          thumb.addEventListener("pointerdown", (event) => {
+            event.stopPropagation();
+            dragStartX = event.clientX;
+            dragStartScrollLeft = code.scrollLeft;
+            thumb.setPointerCapture(event.pointerId);
+          });
+          thumb.addEventListener("pointermove", (event) => {
+            if (!thumb.hasPointerCapture(event.pointerId)) return;
+            const travel = track.clientWidth - thumb.offsetWidth;
+            const overflow = code.scrollWidth - code.clientWidth;
+            if (travel <= 0) return;
+            code.scrollLeft =
+              dragStartScrollLeft + ((event.clientX - dragStartX) / travel) * overflow;
+          });
+          code.addEventListener("scroll", updateScrollbar, { passive: true });
+          window.addEventListener("resize", updateScrollbar, { passive: true });
+          updateScrollbar();
+        });
+      })();
+    </script>
+  </body>
+</html>
