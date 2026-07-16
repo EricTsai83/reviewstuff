@@ -1,7 +1,10 @@
-import * as Command from "@effect/platform/Command";
-import { FileSystem } from "@effect/platform/FileSystem";
-import { BunContext, BunRuntime } from "@effect/platform-bun";
-import { Console, Data, Effect } from "effect";
+import * as BunRuntime from "@effect/platform-bun/BunRuntime";
+import * as BunServices from "@effect/platform-bun/BunServices";
+import * as Console from "effect/Console";
+import * as Data from "effect/Data";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as ChildProcess from "effect/unstable/process/ChildProcess";
 
 const executablePath = "dist/reviewstuff";
 
@@ -10,18 +13,19 @@ class CommandFailedError extends Data.TaggedError("CommandFailedError")<{
 }> {}
 
 const makeBuildCommand = (command: string, args: ReadonlyArray<string>) =>
-  Command.make(command, ...args).pipe(
-    Command.env(process.env),
-    Command.stdout("inherit"),
-    Command.stderr("inherit"),
-  );
+  ChildProcess.make(command, args, {
+    env: process.env,
+    stdout: "inherit",
+    stderr: "inherit",
+  });
 
 const formatCommand = (command: string, args: ReadonlyArray<string>) =>
   [command, ...args].map((part) => JSON.stringify(part)).join(" ");
 
 const run = (command: string, args: ReadonlyArray<string>) =>
   Effect.gen(function* () {
-    const exitCode = yield* Command.exitCode(makeBuildCommand(command, args));
+    const process = yield* makeBuildCommand(command, args);
+    const exitCode = yield* process.exitCode;
 
     if (exitCode !== 0) {
       return yield* new CommandFailedError({
@@ -31,7 +35,7 @@ const run = (command: string, args: ReadonlyArray<string>) =>
   });
 
 const program = Effect.gen(function* () {
-  const fs = yield* FileSystem;
+  const fs = yield* FileSystem.FileSystem;
 
   yield* fs.makeDirectory("dist", { recursive: true });
 
@@ -48,15 +52,16 @@ const program = Effect.gen(function* () {
 });
 
 program.pipe(
-  Effect.catchAll((error) =>
+  Effect.scoped,
+  Effect.catch((error) =>
     Console.error(error.message).pipe(
-      Effect.zipRight(
+      Effect.andThen(
         Effect.sync(() => {
           process.exitCode = 1;
         }),
       ),
     ),
   ),
-  Effect.provide(BunContext.layer),
+  Effect.provide(BunServices.layer),
   BunRuntime.runMain,
 );
