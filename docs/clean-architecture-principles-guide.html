@@ -1,0 +1,859 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="從依賴方向、邊界與 TypeScript 範例理解 Clean Architecture 原則，並學會判斷 domain、use case、adapter 與 framework 的責任。">
+  <title>Clean Architecture 原則：從依賴方向到 TypeScript 實作</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --clay: #D97757;
+      --slate: #141413;
+      --ivory: #FAF9F5;
+      --oat: #E3DACC;
+      --white: #FFFFFF;
+      --gray-100: #F0EEE6;
+      --gray-300: #D1CFC5;
+      --gray-500: #87867F;
+      --gray-700: #3D3D3A;
+      --warning: #C78E3F;
+      --green: #66864d;
+      --space-sm: 8px;
+      --space-md: 12px;
+      --space-lg: 16px;
+      --space-xl: 24px;
+      --space-2xl: 32px;
+      --space-3xl: 48px;
+      --radius-sm: 4px;
+      --radius-md: 8px;
+      --content-width: 68ch;
+    }
+
+    * { box-sizing: border-box; }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      margin: 0;
+      background: var(--ivory);
+      color: var(--slate);
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 16px;
+      font-weight: 430;
+      line-height: 1.62;
+      letter-spacing: 0;
+    }
+
+    main {
+      max-width: var(--content-width);
+      margin: 0 auto;
+      padding: var(--space-3xl) var(--space-xl) 72px;
+    }
+
+    article {
+      background: transparent;
+      border: 0;
+      border-radius: 0;
+      box-shadow: none;
+      padding: 0;
+    }
+
+    h1, h2, h3 {
+      color: var(--slate);
+      font-weight: 720;
+      letter-spacing: -0.02em;
+      scroll-margin-top: var(--space-xl);
+    }
+
+    h1 {
+      max-width: none;
+      margin: 0 0 var(--space-lg);
+      font-size: 1.8rem;
+      line-height: 1.18;
+      text-wrap: balance;
+      overflow-wrap: normal;
+    }
+
+    h2 {
+      margin: var(--space-3xl) 0 var(--space-lg);
+      padding-top: var(--space-sm);
+      border-top: 1px solid var(--oat);
+      font-size: 1.22rem;
+      line-height: 1.25;
+    }
+
+    h3 {
+      margin: var(--space-2xl) 0 var(--space-md);
+      font-size: 1rem;
+      line-height: 1.35;
+    }
+
+    p, ul, ol, .deck, .callout, table, pre { max-width: var(--content-width); }
+
+    p { margin: 0 0 var(--space-lg); }
+
+    ul, ol {
+      margin: 0 0 var(--space-xl);
+      padding-left: 1.35rem;
+    }
+
+    li + li { margin-top: var(--space-sm); }
+
+    a {
+      color: var(--clay);
+      text-decoration-thickness: 1px;
+      text-underline-offset: 3px;
+    }
+
+    a:hover { text-decoration-thickness: 2px; }
+
+    .deck {
+      margin: 0 0 var(--space-2xl);
+      color: var(--gray-700);
+      font-size: 1.08rem;
+      line-height: 1.58;
+    }
+
+    .reading-path {
+      margin: 0 0 var(--space-3xl);
+      padding: var(--space-lg) var(--space-xl);
+      border-left: 3px solid var(--oat);
+      background: rgba(240, 238, 230, 0.55);
+    }
+
+    .reading-path strong { display: block; margin-bottom: var(--space-sm); }
+
+    .reading-path ol { margin: 0; columns: 2; column-gap: var(--space-2xl); }
+
+    .reading-path li { break-inside: avoid; margin-top: 0; margin-bottom: 5px; }
+
+    code {
+      border: 1px solid var(--oat);
+      border-radius: var(--radius-sm);
+      background: var(--gray-100);
+      padding: 0.08em 0.3em;
+      overflow-wrap: anywhere;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 0.92em;
+    }
+
+    pre {
+      position: relative;
+      width: 100%;
+      margin: var(--space-lg) 0 var(--space-xl);
+      border: 1px solid #26241f;
+      border-radius: var(--radius-md);
+      background: #11110f;
+      color: #d8d4ca;
+      overflow: hidden;
+    }
+
+    pre code {
+      display: block;
+      border: 0;
+      background: transparent;
+      padding: 18px 64px 18px 22px;
+      color: inherit;
+      overflow-x: auto;
+      white-space: pre;
+      overflow-wrap: normal;
+      font-size: 0.875rem;
+      font-weight: 400;
+      line-height: 1.62;
+      scrollbar-width: none;
+    }
+
+    pre code::-webkit-scrollbar { width: 0; height: 0; }
+    pre .label { display: none; }
+
+    .copy-code {
+      position: absolute;
+      top: 9px;
+      right: 9px;
+      z-index: 1;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 30px;
+      height: 30px;
+      padding: 0;
+      border: 1px solid rgba(250, 249, 245, 0.14);
+      border-radius: var(--radius-sm);
+      background: rgba(250, 249, 245, 0.06);
+      color: rgba(250, 249, 245, 0.72);
+      cursor: pointer;
+    }
+
+    .copy-code:hover, .copy-code:focus-visible {
+      border-color: rgba(250, 249, 245, 0.28);
+      background: rgba(250, 249, 245, 0.12);
+      color: var(--ivory);
+      outline: none;
+    }
+
+    .copy-code.copied {
+      border-color: rgba(143, 184, 106, 0.42);
+      background: rgba(143, 184, 106, 0.14);
+      color: #b8d99a;
+    }
+
+    .copy-code svg {
+      width: 13px;
+      height: 13px;
+      stroke: currentColor;
+      stroke-width: 1.8;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      fill: none;
+      pointer-events: none;
+    }
+
+    .code-scrollbar {
+      position: absolute;
+      right: 0;
+      bottom: 0;
+      left: 0;
+      height: 3px;
+      border-radius: 999px;
+      background: rgba(250, 249, 245, 0.1);
+      cursor: pointer;
+    }
+
+    .code-scrollbar.hidden { display: none; }
+
+    .code-scrollbar-thumb {
+      height: 100%;
+      border-radius: inherit;
+      background: rgba(255, 148, 110, 0.82);
+      transform: translateX(0);
+      cursor: grab;
+    }
+
+    .code-scrollbar-thumb:active { cursor: grabbing; }
+
+    pre code .k { color: #ff946e; font-weight: 400; }
+    pre code .s { color: #8fb86a; }
+    pre code .n, pre code .p { color: #d8d4ca; }
+    pre code .c { color: #858177; font-style: italic; }
+    pre code .f { color: #cfc6a2; }
+    pre code .t { color: #cfc6a2; font-weight: 400; }
+    pre code .o { color: #ff946e; }
+
+    table {
+      width: 100%;
+      margin: var(--space-lg) 0 var(--space-xl);
+      border-collapse: collapse;
+      font-size: 0.94rem;
+    }
+
+    th, td {
+      padding: 10px 12px;
+      border: 1px solid var(--oat);
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th { background: var(--gray-100); font-weight: 680; }
+    tbody tr:nth-child(even) { background: rgba(255, 255, 255, 0.38); }
+
+    .table-wrap {
+      max-width: 100%;
+      overflow-x: auto;
+      margin-bottom: var(--space-xl);
+    }
+
+    .table-wrap table { margin-bottom: 0; min-width: 590px; }
+
+    .callout {
+      margin: var(--space-xl) 0;
+      padding: var(--space-lg) var(--space-xl);
+      border: 1px solid var(--oat);
+      border-left: 4px solid var(--clay);
+      border-radius: 0 var(--radius-md) var(--radius-md) 0;
+      background: var(--gray-100);
+    }
+
+    .callout p:last-child { margin-bottom: 0; }
+    .callout strong { display: inline-block; margin-bottom: 4px; }
+
+    .formula {
+      margin: var(--space-xl) 0;
+      padding: var(--space-lg) var(--space-xl);
+      border: 1px solid var(--oat);
+      border-radius: var(--radius-md);
+      background: var(--white);
+      text-align: center;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-weight: 650;
+    }
+
+    .flow-figure {
+      margin: var(--space-xl) 0 var(--space-2xl);
+      padding: var(--space-lg);
+      border: 1px solid var(--oat);
+      border-radius: var(--radius-md);
+      background: var(--white);
+    }
+
+    .flow-figure svg {
+      display: block;
+      width: 100%;
+      height: auto;
+      max-height: 580px;
+    }
+
+    .flow-figure figcaption {
+      margin-top: var(--space-md);
+      padding-top: var(--space-md);
+      border-top: 1px solid var(--oat);
+      color: var(--gray-700);
+      font-size: 0.875rem;
+    }
+
+    .ring-figure svg {
+      max-width: 420px;
+      margin-inline: auto;
+    }
+
+    .ring-circle {
+      stroke-width: 1.5;
+    }
+
+    .ring-label,
+    .ring-note {
+      fill: var(--slate);
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      text-anchor: middle;
+    }
+
+    .ring-label {
+      font-size: 15px;
+      font-weight: 680;
+    }
+
+    .ring-note {
+      fill: var(--gray-700);
+      font-size: 12px;
+      font-weight: 560;
+    }
+
+    .ring-arrow {
+      fill: none;
+      stroke: var(--clay);
+      stroke-width: 2;
+    }
+
+    .ring-figure .flow-edge-label rect {
+      fill: var(--ivory);
+      stroke: none;
+    }
+
+    .ring-figure .flow-edge-label text {
+      fill: var(--gray-700);
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 12px;
+      font-weight: 650;
+    }
+
+    .checklist { list-style: none; padding-left: 0; }
+
+    .checklist li {
+      position: relative;
+      padding-left: 1.7rem;
+    }
+
+    .checklist li::before {
+      content: "✓";
+      position: absolute;
+      left: 0;
+      color: var(--green);
+      font-weight: 750;
+    }
+
+    .muted { color: var(--gray-700); }
+
+    @media (max-width: 640px) {
+      body { font-size: 15px; }
+      h1 { font-size: 1.65rem; }
+      main { padding: var(--space-xl); }
+      .reading-path ol { columns: 1; }
+      pre code { font-size: 0.8125rem; line-height: 1.5; }
+      p code, li code, td code { font-size: 0.9em; }
+      table, .deck { font-size: 0.875rem; }
+      .flow-figure { padding: var(--space-sm); }
+      .flow-figure svg {
+        width: 260px;
+        max-width: 100%;
+        max-height: none;
+        margin-inline: auto;
+      }
+      .flow-figure.ring-figure svg { width: 340px; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <article>
+      <h1>Clean Architecture 原則：從依賴方向到 TypeScript 實作</h1>
+      <p class="deck">Clean Architecture 不是一套固定的資料夾模板，而是一種控制相依關係的方法：讓核心業務規則不被 CLI、資料庫、框架或第三方服務綁住。本文從心智模型開始，透過一個程式碼審查 CLI 範例，說明各層責任、介面放置、組裝方式與常見誤區。</p>
+
+      <nav class="reading-path" aria-label="閱讀路徑">
+        <strong>閱讀路徑</strong>
+        <ol>
+          <li><a href="#problem">它要解決什麼問題</a></li>
+          <li><a href="#dependency-rule">最重要的依賴規則</a></li>
+          <li><a href="#layers">四層責任</a></li>
+          <li><a href="#typescript">TypeScript 實作範例</a></li>
+          <li><a href="#domain-types">domain 與 type 的關係</a></li>
+          <li><a href="#tradeoffs">取捨與常見誤區</a></li>
+          <li><a href="#checklist">實務檢查表</a></li>
+        </ol>
+      </nav>
+
+      <section id="problem">
+        <h2>它要解決的不是「檔案怎麼分類」，而是「誰能影響誰」</h2>
+        <p>軟體剛開始通常很直接：CLI command 讀參數、呼叫 Git、分析結果、輸出 JSON。功能少時，全部寫在同一個檔案甚至很有效率；但隨著需求增加，外部技術細節容易滲進核心流程。</p>
+        <p>例如「執行一次程式碼審查」本來是一個業務流程，最後卻可能同時知道：</p>
+        <ul>
+          <li>Bun 或 Node.js 要如何啟動 subprocess；</li>
+          <li>Git command 的參數與 stdout 格式；</li>
+          <li>終端機要顯示什麼顏色；</li>
+          <li>報告儲存在 SQLite、檔案或遠端 API；</li>
+          <li>某個 Web framework 如何建立 request handler。</li>
+        </ul>
+        <p>這些細節一旦和業務規則混在一起，改變任一外部工具都可能牽動整個流程，測試也必須準備真正的 Git repository、檔案系統或資料庫。Clean Architecture 的目的，就是讓這些變動被邊界吸收。</p>
+      </section>
+
+      <section id="dependency-rule">
+        <h2>核心心智模型：依賴只能指向更核心的政策</h2>
+        <p>Clean Architecture 最重要的規則稱為 <strong>Dependency Rule</strong>。它關心的是 source code 的依賴方向：越接近核心的程式碼，越不應知道外部實作細節。</p>
+        <div class="formula">外部機制 → 轉接層 → 應用流程 → 領域規則</div>
+        <p>下面的箭頭表示「source code 可以依賴的方向」，不是程式執行時的呼叫順序。外層可以 import 內層；內層不能反過來 import 外層。</p>
+
+        <figure class="flow-figure">
+          <svg id="mermaid-mrnpw3ft-my-svg" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" class="flowchart" viewBox="0 0 259.734375 478" aria-roledescription="flowchart-v2" role="img" aria-labelledby="mermaid-mrnpw3ft-title mermaid-mrnpw3ft-desc"><title id="mermaid-mrnpw3ft-title">Clean Architecture 的依賴方向</title><desc id="mermaid-mrnpw3ft-desc">由 Frameworks and Drivers、Interface Adapters、Application Use Cases 到 Domain Entities 的四層依賴，所有原始碼依賴都朝核心 domain 指向。</desc><style>#mermaid-mrnpw3ft-my-svg{font-family:ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;font-size:16px;fill:#141413;}@keyframes edge-animation-frame{from{stroke-dashoffset:0;}}@keyframes dash{to{stroke-dashoffset:0;}}#mermaid-mrnpw3ft-my-svg .edge-animation-slow{stroke-dasharray:9,5!important;stroke-dashoffset:900;animation:dash 50s linear infinite;stroke-linecap:round;}#mermaid-mrnpw3ft-my-svg .edge-animation-fast{stroke-dasharray:9,5!important;stroke-dashoffset:900;animation:dash 20s linear infinite;stroke-linecap:round;}#mermaid-mrnpw3ft-my-svg .error-icon{fill:#FAF9F5;}#mermaid-mrnpw3ft-my-svg .error-text{fill:#05060a;stroke:#05060a;}#mermaid-mrnpw3ft-my-svg .edge-thickness-normal{stroke-width:1px;}#mermaid-mrnpw3ft-my-svg .edge-thickness-thick{stroke-width:3.5px;}#mermaid-mrnpw3ft-my-svg .edge-pattern-solid{stroke-dasharray:0;}#mermaid-mrnpw3ft-my-svg .edge-thickness-invisible{stroke-width:0;fill:none;}#mermaid-mrnpw3ft-my-svg .edge-pattern-dashed{stroke-dasharray:3;}#mermaid-mrnpw3ft-my-svg .edge-pattern-dotted{stroke-dasharray:2;}#mermaid-mrnpw3ft-my-svg .marker{fill:#D97757;stroke:#D97757;}#mermaid-mrnpw3ft-my-svg .marker.cross{stroke:#D97757;}#mermaid-mrnpw3ft-my-svg svg{font-family:ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;font-size:16px;}#mermaid-mrnpw3ft-my-svg p{margin:0;}#mermaid-mrnpw3ft-my-svg .label{font-family:ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;color:#141413;}#mermaid-mrnpw3ft-my-svg .cluster-label text{fill:#05060a;}#mermaid-mrnpw3ft-my-svg .cluster-label span{color:#05060a;}#mermaid-mrnpw3ft-my-svg .cluster-label span p{background-color:transparent;}#mermaid-mrnpw3ft-my-svg .label text,#mermaid-mrnpw3ft-my-svg span{fill:#141413;color:#141413;}#mermaid-mrnpw3ft-my-svg .node rect,#mermaid-mrnpw3ft-my-svg .node circle,#mermaid-mrnpw3ft-my-svg .node ellipse,#mermaid-mrnpw3ft-my-svg .node polygon,#mermaid-mrnpw3ft-my-svg .node path{fill:#FFFFFF;stroke:#E3DACC;stroke-width:1px;}#mermaid-mrnpw3ft-my-svg .rough-node .label text,#mermaid-mrnpw3ft-my-svg .node .label text,#mermaid-mrnpw3ft-my-svg .image-shape .label,#mermaid-mrnpw3ft-my-svg .icon-shape .label{text-anchor:middle;}#mermaid-mrnpw3ft-my-svg .node .katex path{fill:#000;stroke:#000;stroke-width:1px;}#mermaid-mrnpw3ft-my-svg .rough-node .label,#mermaid-mrnpw3ft-my-svg .node .label,#mermaid-mrnpw3ft-my-svg .image-shape .label,#mermaid-mrnpw3ft-my-svg .icon-shape .label{text-align:center;}#mermaid-mrnpw3ft-my-svg .node.clickable{cursor:pointer;}#mermaid-mrnpw3ft-my-svg .root .anchor path{fill:#D97757!important;stroke-width:0;stroke:#D97757;}#mermaid-mrnpw3ft-my-svg .arrowheadPath{fill:rgba(255, 255, 255, 0);}#mermaid-mrnpw3ft-my-svg .edgePath .path{stroke:#D97757;stroke-width:1px;}#mermaid-mrnpw3ft-my-svg .flowchart-link{stroke:#D97757;fill:none;}#mermaid-mrnpw3ft-my-svg .edgeLabel{background-color:#F0EEE6;text-align:center;}#mermaid-mrnpw3ft-my-svg .edgeLabel p{background-color:#F0EEE6;}#mermaid-mrnpw3ft-my-svg .edgeLabel rect{opacity:0.5;background-color:#F0EEE6;fill:#F0EEE6;}#mermaid-mrnpw3ft-my-svg .labelBkg{background-color:rgba(240, 238, 230, 0.5);}#mermaid-mrnpw3ft-my-svg .cluster rect{fill:#FAF9F5;stroke:hsl(48, 0%, 87.0588235294%);stroke-width:1px;}#mermaid-mrnpw3ft-my-svg .cluster text{fill:#05060a;}#mermaid-mrnpw3ft-my-svg .cluster span{color:#05060a;}#mermaid-mrnpw3ft-my-svg div.mermaidTooltip{position:absolute;text-align:center;max-width:200px;padding:2px;font-family:ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;font-size:12px;background:#FAF9F5;border:1px solid hsl(48, 0%, 87.0588235294%);border-radius:2px;pointer-events:none;z-index:100;}#mermaid-mrnpw3ft-my-svg .flowchartTitleText{text-anchor:middle;font-size:18px;fill:#141413;}#mermaid-mrnpw3ft-my-svg rect.text{fill:none;stroke-width:0;}#mermaid-mrnpw3ft-my-svg .icon-shape,#mermaid-mrnpw3ft-my-svg .image-shape{background-color:#F0EEE6;text-align:center;}#mermaid-mrnpw3ft-my-svg .icon-shape p,#mermaid-mrnpw3ft-my-svg .image-shape p{background-color:#F0EEE6;padding:2px;}#mermaid-mrnpw3ft-my-svg .icon-shape .label rect,#mermaid-mrnpw3ft-my-svg .image-shape .label rect{opacity:0.5;background-color:#F0EEE6;fill:#F0EEE6;}#mermaid-mrnpw3ft-my-svg .label-icon{display:inline-block;height:1em;overflow:visible;vertical-align:-0.125em;}#mermaid-mrnpw3ft-my-svg .node .label-icon path{fill:currentColor;stroke:revert;stroke-width:revert;}#mermaid-mrnpw3ft-my-svg .node .neo-node{stroke:#E3DACC;}#mermaid-mrnpw3ft-my-svg [data-look="neo"].node rect,#mermaid-mrnpw3ft-my-svg [data-look="neo"].cluster rect,#mermaid-mrnpw3ft-my-svg [data-look="neo"].node polygon{stroke:url(#mermaid-mrnpw3ft-my-svg-gradient);filter:drop-shadow( 1px 2px 2px rgba(185,185,185,1));}#mermaid-mrnpw3ft-my-svg [data-look="neo"].swimlane.cluster rect{filter:none;}#mermaid-mrnpw3ft-my-svg [data-look="neo"].node path{stroke:url(#mermaid-mrnpw3ft-my-svg-gradient);stroke-width:1px;}#mermaid-mrnpw3ft-my-svg [data-look="neo"].node .outer-path{filter:drop-shadow( 1px 2px 2px rgba(185,185,185,1));}#mermaid-mrnpw3ft-my-svg [data-look="neo"].node .neo-line path{stroke:#E3DACC;filter:none;}#mermaid-mrnpw3ft-my-svg [data-look="neo"].node circle{stroke:url(#mermaid-mrnpw3ft-my-svg-gradient);filter:drop-shadow( 1px 2px 2px rgba(185,185,185,1));}#mermaid-mrnpw3ft-my-svg [data-look="neo"].node circle .state-start{fill:#000000;}#mermaid-mrnpw3ft-my-svg [data-look="neo"].icon-shape .icon{fill:url(#mermaid-mrnpw3ft-my-svg-gradient);filter:drop-shadow( 1px 2px 2px rgba(185,185,185,1));}#mermaid-mrnpw3ft-my-svg [data-look="neo"].icon-shape .icon-neo path{stroke:url(#mermaid-mrnpw3ft-my-svg-gradient);filter:drop-shadow( 1px 2px 2px rgba(185,185,185,1));}#mermaid-mrnpw3ft-my-svg :root{--mermaid-font-family:"trebuchet ms",verdana,arial,sans-serif;}#mermaid-mrnpw3ft-my-svg .outer rect{fill:rgb(240, 238, 230)!important;stroke:rgb(135, 134, 127)!important;color:rgb(20, 20, 19)!important;stroke-width:1.5px!important;}#mermaid-mrnpw3ft-my-svg .outer polygon{fill:rgb(240, 238, 230)!important;stroke:rgb(135, 134, 127)!important;color:rgb(20, 20, 19)!important;stroke-width:1.5px!important;}#mermaid-mrnpw3ft-my-svg .outer ellipse{fill:rgb(240, 238, 230)!important;stroke:rgb(135, 134, 127)!important;color:rgb(20, 20, 19)!important;stroke-width:1.5px!important;}#mermaid-mrnpw3ft-my-svg .outer circle{fill:rgb(240, 238, 230)!important;stroke:rgb(135, 134, 127)!important;color:rgb(20, 20, 19)!important;stroke-width:1.5px!important;}#mermaid-mrnpw3ft-my-svg .outer path{fill:rgb(240, 238, 230)!important;stroke:rgb(135, 134, 127)!important;color:rgb(20, 20, 19)!important;stroke-width:1.5px!important;}#mermaid-mrnpw3ft-my-svg .outer tspan{fill:rgb(20, 20, 19)!important;}#mermaid-mrnpw3ft-my-svg .adapter rect{fill:rgb(250, 249, 245)!important;stroke:rgb(217, 119, 87)!important;color:rgb(20, 20, 19)!important;stroke-width:1.5px!important;}#mermaid-mrnpw3ft-my-svg .adapter polygon{fill:rgb(250, 249, 245)!important;stroke:rgb(217, 119, 87)!important;color:rgb(20, 20, 19)!important;stroke-width:1.5px!important;}#mermaid-mrnpw3ft-my-svg .adapter ellipse{fill:rgb(250, 249, 245)!important;stroke:rgb(217, 119, 87)!important;color:rgb(20, 20, 19)!important;stroke-width:1.5px!important;}#mermaid-mrnpw3ft-my-svg .adapter circle{fill:rgb(250, 249, 245)!important;stroke:rgb(217, 119, 87)!important;color:rgb(20, 20, 19)!important;stroke-width:1.5px!important;}#mermaid-mrnpw3ft-my-svg .adapter path{fill:rgb(250, 249, 245)!important;stroke:rgb(217, 119, 87)!important;color:rgb(20, 20, 19)!important;stroke-width:1.5px!important;}#mermaid-mrnpw3ft-my-svg .adapter tspan{fill:rgb(20, 20, 19)!important;}#mermaid-mrnpw3ft-my-svg .app rect{fill:rgb(255, 255, 255)!important;stroke:rgb(217, 119, 87)!important;color:rgb(20, 20, 19)!important;stroke-width:2px!important;}#mermaid-mrnpw3ft-my-svg .app polygon{fill:rgb(255, 255, 255)!important;stroke:rgb(217, 119, 87)!important;color:rgb(20, 20, 19)!important;stroke-width:2px!important;}#mermaid-mrnpw3ft-my-svg .app ellipse{fill:rgb(255, 255, 255)!important;stroke:rgb(217, 119, 87)!important;color:rgb(20, 20, 19)!important;stroke-width:2px!important;}#mermaid-mrnpw3ft-my-svg .app circle{fill:rgb(255, 255, 255)!important;stroke:rgb(217, 119, 87)!important;color:rgb(20, 20, 19)!important;stroke-width:2px!important;}#mermaid-mrnpw3ft-my-svg .app path{fill:rgb(255, 255, 255)!important;stroke:rgb(217, 119, 87)!important;color:rgb(20, 20, 19)!important;stroke-width:2px!important;}#mermaid-mrnpw3ft-my-svg .app tspan{fill:rgb(20, 20, 19)!important;}#mermaid-mrnpw3ft-my-svg .core rect{fill:rgb(244, 229, 222)!important;stroke:rgb(185, 95, 66)!important;color:rgb(20, 20, 19)!important;stroke-width:2px!important;}#mermaid-mrnpw3ft-my-svg .core polygon{fill:rgb(244, 229, 222)!important;stroke:rgb(185, 95, 66)!important;color:rgb(20, 20, 19)!important;stroke-width:2px!important;}#mermaid-mrnpw3ft-my-svg .core ellipse{fill:rgb(244, 229, 222)!important;stroke:rgb(185, 95, 66)!important;color:rgb(20, 20, 19)!important;stroke-width:2px!important;}#mermaid-mrnpw3ft-my-svg .core circle{fill:rgb(244, 229, 222)!important;stroke:rgb(185, 95, 66)!important;color:rgb(20, 20, 19)!important;stroke-width:2px!important;}#mermaid-mrnpw3ft-my-svg .core path{fill:rgb(244, 229, 222)!important;stroke:rgb(185, 95, 66)!important;color:rgb(20, 20, 19)!important;stroke-width:2px!important;}#mermaid-mrnpw3ft-my-svg .core tspan{fill:rgb(20, 20, 19)!important;}</style><g><marker id="mermaid-mrnpw3ft-my-svg_flowchart-v2-pointEnd" class="marker flowchart-v2" viewBox="0 0 10 10" refX="5" refY="5" markerUnits="userSpaceOnUse" markerWidth="8" markerHeight="8" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" class="arrowMarkerPath" style="stroke-width: 1; stroke-dasharray: 1, 0;"/></marker><marker id="mermaid-mrnpw3ft-my-svg_flowchart-v2-pointStart" class="marker flowchart-v2" viewBox="0 0 10 10" refX="4.5" refY="5" markerUnits="userSpaceOnUse" markerWidth="8" markerHeight="8" orient="auto"><path d="M 0 5 L 10 10 L 10 0 z" class="arrowMarkerPath" style="stroke-width: 1; stroke-dasharray: 1, 0;"/></marker><marker id="mermaid-mrnpw3ft-my-svg_flowchart-v2-pointEnd-margin" class="marker flowchart-v2" viewBox="0 0 11.5 14" refX="11.5" refY="7" markerUnits="userSpaceOnUse" markerWidth="10.5" markerHeight="14" orient="auto"><path d="M 0 0 L 11.5 7 L 0 14 z" class="arrowMarkerPath" style="stroke-width: 0; stroke-dasharray: 1, 0;"/></marker><marker id="mermaid-mrnpw3ft-my-svg_flowchart-v2-pointStart-margin" class="marker flowchart-v2" viewBox="0 0 11.5 14" refX="1" refY="7" markerUnits="userSpaceOnUse" markerWidth="11.5" markerHeight="14" orient="auto"><polygon points="0,7 11.5,14 11.5,0" class="arrowMarkerPath" style="stroke-width: 0; stroke-dasharray: 1, 0;"/></marker><marker id="mermaid-mrnpw3ft-my-svg_flowchart-v2-circleEnd" class="marker flowchart-v2" viewBox="0 0 10 10" refX="11" refY="5" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" orient="auto"><circle cx="5" cy="5" r="5" class="arrowMarkerPath" style="stroke-width: 1; stroke-dasharray: 1, 0;"/></marker><marker id="mermaid-mrnpw3ft-my-svg_flowchart-v2-circleStart" class="marker flowchart-v2" viewBox="0 0 10 10" refX="-1" refY="5" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" orient="auto"><circle cx="5" cy="5" r="5" class="arrowMarkerPath" style="stroke-width: 1; stroke-dasharray: 1, 0;"/></marker><marker id="mermaid-mrnpw3ft-my-svg_flowchart-v2-circleEnd-margin" class="marker flowchart-v2" viewBox="0 0 10 10" refY="5" refX="12.25" markerUnits="userSpaceOnUse" markerWidth="14" markerHeight="14" orient="auto"><circle cx="5" cy="5" r="5" class="arrowMarkerPath" style="stroke-width: 0; stroke-dasharray: 1, 0;"/></marker><marker id="mermaid-mrnpw3ft-my-svg_flowchart-v2-circleStart-margin" class="marker flowchart-v2" viewBox="0 0 10 10" refX="-2" refY="5" markerUnits="userSpaceOnUse" markerWidth="14" markerHeight="14" orient="auto"><circle cx="5" cy="5" r="5" class="arrowMarkerPath" style="stroke-width: 0; stroke-dasharray: 1, 0;"/></marker><marker id="mermaid-mrnpw3ft-my-svg_flowchart-v2-crossEnd" class="marker cross flowchart-v2" viewBox="0 0 11 11" refX="12" refY="5.2" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" orient="auto"><path d="M 1,1 l 9,9 M 10,1 l -9,9" class="arrowMarkerPath" style="stroke-width: 2; stroke-dasharray: 1, 0;"/></marker><marker id="mermaid-mrnpw3ft-my-svg_flowchart-v2-crossStart" class="marker cross flowchart-v2" viewBox="0 0 11 11" refX="-1" refY="5.2" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" orient="auto"><path d="M 1,1 l 9,9 M 10,1 l -9,9" class="arrowMarkerPath" style="stroke-width: 2; stroke-dasharray: 1, 0;"/></marker><marker id="mermaid-mrnpw3ft-my-svg_flowchart-v2-crossEnd-margin" class="marker cross flowchart-v2" viewBox="0 0 15 15" refX="17.7" refY="7.5" markerUnits="userSpaceOnUse" markerWidth="12" markerHeight="12" orient="auto"><path d="M 1,1 L 14,14 M 1,14 L 14,1" class="arrowMarkerPath" style="stroke-width: 2.5;"/></marker><marker id="mermaid-mrnpw3ft-my-svg_flowchart-v2-crossStart-margin" class="marker cross flowchart-v2" viewBox="0 0 15 15" refX="-3.5" refY="7.5" markerUnits="userSpaceOnUse" markerWidth="12" markerHeight="12" orient="auto"><path d="M 1,1 L 14,14 M 1,14 L 14,1" class="arrowMarkerPath" style="stroke-width: 2.5; stroke-dasharray: 1, 0;"/></marker><g class="root"><g class="clusters"/><g class="edgePaths"><path d="M129.867,86L129.867,90.167C129.867,94.333,129.867,102.667,129.867,110.333C129.867,118,129.867,125,129.867,128.5L129.867,132" id="mermaid-mrnpw3ft-my-svg-L_Frameworks_Adapters_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" data-edge="true" data-et="edge" data-id="mermaid-mrnpw3ft-L_Frameworks_Adapters_0" data-points="W3sieCI6MTI5Ljg2NzE4NzUsInkiOjg2fSx7IngiOjEyOS44NjcxODc1LCJ5IjoxMTF9LHsieCI6MTI5Ljg2NzE4NzUsInkiOjEzNn1d" data-look="classic" marker-end="url(#mermaid-mrnpw3ft-my-svg_flowchart-v2-pointEnd)"/><path d="M129.867,214L129.867,218.167C129.867,222.333,129.867,230.667,129.867,238.333C129.867,246,129.867,253,129.867,256.5L129.867,260" id="mermaid-mrnpw3ft-my-svg-L_Adapters_UseCases_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" data-edge="true" data-et="edge" data-id="mermaid-mrnpw3ft-L_Adapters_UseCases_0" data-points="W3sieCI6MTI5Ljg2NzE4NzUsInkiOjIxNH0seyJ4IjoxMjkuODY3MTg3NSwieSI6MjM5fSx7IngiOjEyOS44NjcxODc1LCJ5IjoyNjR9XQ==" data-look="classic" marker-end="url(#mermaid-mrnpw3ft-my-svg_flowchart-v2-pointEnd)"/><path d="M129.867,342L129.867,346.167C129.867,350.333,129.867,358.667,129.867,366.333C129.867,374,129.867,381,129.867,384.5L129.867,388" id="mermaid-mrnpw3ft-my-svg-L_UseCases_Domain_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" data-edge="true" data-et="edge" data-id="mermaid-mrnpw3ft-L_UseCases_Domain_0" data-points="W3sieCI6MTI5Ljg2NzE4NzUsInkiOjM0Mn0seyJ4IjoxMjkuODY3MTg3NSwieSI6MzY3fSx7IngiOjEyOS44NjcxODc1LCJ5IjozOTJ9XQ==" data-look="classic" marker-end="url(#mermaid-mrnpw3ft-my-svg_flowchart-v2-pointEnd)"/></g><g class="edgeLabels"><g class="edgeLabel"><g class="label" data-id="mermaid-mrnpw3ft-L_Frameworks_Adapters_0" transform="translate(0, 0)"><text y="-10.1" text-anchor="middle"><tspan class="text-outer-tspan row" x="0" y="-0.1em" dy="1.1em" text-anchor="middle"/></text></g></g><g><rect class="background" style="stroke: none"/></g><g class="edgeLabel"><g class="label" data-id="mermaid-mrnpw3ft-L_Adapters_UseCases_0" transform="translate(0, 0)"><text y="-10.1" text-anchor="middle"><tspan class="text-outer-tspan row" x="0" y="-0.1em" dy="1.1em" text-anchor="middle"/></text></g></g><g><rect class="background" style="stroke: none"/></g><g class="edgeLabel"><g class="label" data-id="mermaid-mrnpw3ft-L_UseCases_Domain_0" transform="translate(0, 0)"><text y="-10.1" text-anchor="middle"><tspan class="text-outer-tspan row" x="0" y="-0.1em" dy="1.1em" text-anchor="middle"/></text></g></g><g><rect class="background" style="stroke: none"/></g></g><g class="nodes"><g class="node default outer" id="mermaid-mrnpw3ft-my-svg-flowchart-Frameworks-0" data-look="classic" transform="translate(129.8671875, 47)"><rect class="basic label-container" style="fill:#F0EEE6 !important;stroke:#87867F !important;stroke-width:1.5px !important" x="-121.8671875" y="-39" width="243.734375" height="78"/><g class="label" style="color:#141413 !important" transform="translate(-91.8671875, -24)"><rect/><foreignObject width="183.734375" height="48"><div style="color: rgb(20, 20, 19) !important; display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;" xmlns="http://www.w3.org/1999/xhtml"><span style="color:#141413 !important" class="nodeLabel"><p>Frameworks &amp; Drivers<br />Runtime · DB · Filesystem</p></span></div></foreignObject></g></g><g class="node default adapter" id="mermaid-mrnpw3ft-my-svg-flowchart-Adapters-1" data-look="classic" transform="translate(129.8671875, 175)"><rect class="basic label-container" style="fill:#FAF9F5 !important;stroke:#D97757 !important;stroke-width:1.5px !important" x="-98.2734375" y="-39" width="196.546875" height="78"/><g class="label" style="color:#141413 !important" transform="translate(-68.2734375, -24)"><rect/><foreignObject width="136.546875" height="48"><div style="color: rgb(20, 20, 19) !important; display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;" xmlns="http://www.w3.org/1999/xhtml"><span style="color:#141413 !important" class="nodeLabel"><p>Interface Adapters<br />CLI · Git · Renderer</p></span></div></foreignObject></g></g><g class="node default app" id="mermaid-mrnpw3ft-my-svg-flowchart-UseCases-2" data-look="classic" transform="translate(129.8671875, 303)"><rect class="basic label-container" style="fill:#FFFFFF !important;stroke:#D97757 !important;stroke-width:2px !important" x="-111.2890625" y="-39" width="222.578125" height="78"/><g class="label" style="color:#141413 !important" transform="translate(-81.2890625, -24)"><rect/><foreignObject width="162.578125" height="48"><div style="color: rgb(20, 20, 19) !important; display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;" xmlns="http://www.w3.org/1999/xhtml"><span style="color:#141413 !important" class="nodeLabel"><p>Application Use Cases<br />應用流程與 ports</p></span></div></foreignObject></g></g><g class="node default core" id="mermaid-mrnpw3ft-my-svg-flowchart-Domain-3" data-look="classic" transform="translate(129.8671875, 431)"><rect class="basic label-container" style="fill:#F4E5DE !important;stroke:#B95F42 !important;stroke-width:2px !important" x="-90.796875" y="-39" width="181.59375" height="78"/><g class="label" style="color:#141413 !important" transform="translate(-60.796875, -24)"><rect/><foreignObject width="121.59375" height="48"><div style="color: rgb(20, 20, 19) !important; display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;" xmlns="http://www.w3.org/1999/xhtml"><span style="color:#141413 !important" class="nodeLabel"><p>Domain / Entities<br />業務概念與規則</p></span></div></foreignObject></g></g></g></g></g><defs><filter id="mermaid-mrnpw3ft-my-svg-drop-shadow" height="130%" width="130%"><feDropShadow dx="4" dy="4" stdDeviation="0" flood-opacity="0.06" flood-color="#000000"/></filter></defs><defs><filter id="mermaid-mrnpw3ft-my-svg-drop-shadow-small" height="150%" width="150%"><feDropShadow dx="2" dy="2" stdDeviation="0" flood-opacity="0.06" flood-color="#000000"/></filter></defs><linearGradient id="mermaid-mrnpw3ft-my-svg-gradient" gradientUnits="objectBoundingBox" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" stop-color="#E3DACC" stop-opacity="1"/><stop offset="100%" stop-color="hsl(48, 0%, 82.1568627451%)" stop-opacity="1"/></linearGradient></svg>
+          <figcaption>箭頭表示 source code 的依賴方向；執行時控制流可以跨邊界往返，但內層不認識外層的具體技術。</figcaption>
+        </figure>
+
+        <p>執行時的控制流可能先由 CLI 進入 use case，再由 use case 呼叫一個 Git 介面。看起來像是核心在呼叫外部，但 source dependency 仍然可以向內：介面由內層定義，外層 adapter 實作它，最後由 composition root 把兩者接起來。這就是 <strong>Dependency Inversion</strong>。</p>
+
+        <div class="callout">
+          <p><strong>判斷重點</strong></p>
+          <p>不要只看「A 執行時呼叫 B」，而要看「A 的原始碼是否必須知道 B 的具體技術」。核心流程可以要求「取得變更檔案」，但不必知道這件事是透過 Git CLI、libgit2 或遠端 API 完成。</p>
+        </div>
+      </section>
+
+      <section id="layers">
+        <h2>四層不是四個固定目錄，而是四種責任</h2>
+        <p>經典 Clean Architecture 常被畫成同心圓：越靠內側，越接近穩定的業務政策；越靠外側，越接近容易替換的技術機制。</p>
+
+        <figure class="flow-figure ring-figure">
+          <svg role="img" aria-labelledby="clean-rings-title clean-rings-desc" viewBox="0 0 420 420">
+            <title id="clean-rings-title">Clean Architecture 四層同心圓</title>
+            <desc id="clean-rings-desc">四個由外向內排列的同心圓，依序是 Frameworks and Drivers、Interface Adapters、Application Use Cases、Domain and Entities。箭頭表示原始碼依賴朝內指向較穩定的政策。</desc>
+            <defs>
+              <marker id="clean-rings-arrowhead" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+                <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--clay)"></path>
+              </marker>
+            </defs>
+
+            <circle class="ring-circle" cx="210" cy="190" r="170" fill="var(--gray-100)" stroke="var(--gray-500)"></circle>
+            <circle class="ring-circle" cx="210" cy="190" r="130" fill="var(--ivory)" stroke="var(--clay)"></circle>
+            <circle class="ring-circle" cx="210" cy="190" r="90" fill="var(--white)" stroke="var(--clay)"></circle>
+            <circle class="ring-circle" cx="210" cy="190" r="50" fill="#F4E5DE" stroke="#B95F42"></circle>
+
+            <text class="ring-label" x="210" y="44">Frameworks &amp; Drivers</text>
+            <text class="ring-label" x="210" y="84">Interface Adapters</text>
+            <text class="ring-label" x="210" y="124">Application Use Cases</text>
+            <text class="ring-label" x="210" y="186">Domain / Entities</text>
+            <text class="ring-note" x="210" y="207">業務概念與規則</text>
+
+            <path class="ring-arrow" d="M 322 302 L 251 231" marker-end="url(#clean-rings-arrowhead)"></path>
+            <g class="flow-edge-label">
+              <rect x="290" y="252" width="82" height="24" rx="4"></rect>
+              <text x="331" y="269" text-anchor="middle">依賴向內</text>
+            </g>
+
+            <text class="ring-note" x="210" y="394">外層機制包住內層政策；內層不認識外層技術</text>
+          </svg>
+          <figcaption>同心圓表達的是政策與機制的邊界：外層可以依賴內層，內層不反向認識外層。它不是要求專案一定要建立四個同名資料夾。</figcaption>
+        </figure>
+
+        <p>圓越靠內並不代表執行時一定越晚被呼叫，也不表示內層功能比較重要；它表示內層應更少受到框架、資料庫與傳輸方式改變的影響。實際專案不一定要建立四個一模一樣的資料夾，重要的是責任與 source dependency 的方向。</p>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>責任層</th>
+                <th>負責什麼</th>
+                <th>不應知道什麼</th>
+                <th>審查 CLI 範例</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Domain / Entities</td>
+                <td>長期穩定的業務概念、規則與不變條件</td>
+                <td>CLI、資料庫、HTTP、Git command</td>
+                <td><code>Finding</code>、severity 規則、報告一致性</td>
+              </tr>
+              <tr>
+                <td>Application / Use Cases</td>
+                <td>完成一個使用者目標所需的流程與決策</td>
+                <td>具體 UI 與基礎設施實作</td>
+                <td>取得變更、執行檢查、組成報告</td>
+              </tr>
+              <tr>
+                <td>Interface Adapters</td>
+                <td>在外部格式與內部模型之間轉換</td>
+                <td>不應自行決定核心業務政策</td>
+                <td>Git adapter、JSON renderer、CLI command</td>
+              </tr>
+              <tr>
+                <td>Frameworks &amp; Drivers</td>
+                <td>可替換的工具與技術細節</td>
+                <td>不應成為核心模型的語言</td>
+                <td>Bun、process API、filesystem、資料庫 driver</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>Domain：表達業務真相</h3>
+        <p>Domain 放的是產品在解決問題時使用的語彙，例如 Finding、Review Scope、Invoice 或 Reservation。它可以包含 TypeScript type，也可以包含 constructor、validation、純函式與狀態轉換。判斷標準是業務意義，不是語法種類。</p>
+
+        <h3>Use Case：表達使用者可以完成的事情</h3>
+        <p>Use case 負責編排步驟，例如「針對 staged changes 產生 review report」。它決定何時讀取變更、何時執行規則、如何處理可預期錯誤，但不應直接決定 ANSI 顏色或 shell command 字串。</p>
+
+        <h3>Adapter：翻譯邊界兩側的語言</h3>
+        <p>Git 可能回傳 NUL-delimited path，HTTP API 可能回傳 snake_case JSON，資料庫可能用 nullable column。Adapter 將這些外部格式轉成 use case 能理解的模型，也把輸出模型轉成終端或 API response。</p>
+
+        <h3>Framework / Driver：可以換掉的工具</h3>
+        <p>框架與 driver 並不是不重要；它們只是變動原因不同。將它們留在外層，可以讓核心規則在更換 runtime、資料庫或傳輸方式時維持穩定。</p>
+      </section>
+
+      <section id="typescript">
+        <h2>TypeScript 範例：讓依賴方向在程式碼中成立</h2>
+        <p>假設要建立一個程式碼審查 CLI。第一步先描述核心輸入與輸出，不帶入 Git 或終端機的型別。</p>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">export</span> <span class="k">type</span> <span class="t">ReviewScope</span> <span class="o">=</span> <span class="s">"working-tree"</span> <span class="o">|</span> <span class="s">"staged"</span><span class="o">;</span>
+
+<span class="k">export</span> interface <span class="t">Finding</span> <span class="o">{</span>
+  readonly ruleId<span class="o">:</span> string<span class="o">;</span>
+  readonly message<span class="o">:</span> string<span class="o">;</span>
+  readonly file<span class="o">:</span> string<span class="o">;</span>
+  readonly line<span class="o">:</span> number<span class="o">;</span>
+<span class="o">}</span>
+
+<span class="k">export</span> interface <span class="t">ReviewReport</span> <span class="o">{</span>
+  readonly scope<span class="o">:</span> <span class="t">ReviewScope</span><span class="o">;</span>
+  readonly reviewedFiles<span class="o">:</span> number<span class="o">;</span>
+  readonly findings<span class="o">:</span> <span class="t">ReadonlyArray</span><span class="o">&lt;</span><span class="t">Finding</span><span class="o">&gt;</span><span class="o">;</span>
+<span class="o">}</span></code></pre>
+
+        <p>接著由 application boundary 定義它需要的能力。這個介面不是為了「抽象而抽象」，而是讓 use case 能用領域語言表達需求。</p>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">export</span> interface <span class="t">ChangeSource</span> <span class="o">{</span>
+  <span class="f">getChangedFiles</span><span class="o">(</span>scope<span class="o">:</span> <span class="t">ReviewScope</span><span class="o">)</span><span class="o">:</span> <span class="t">Promise</span><span class="o">&lt;</span><span class="t">ReadonlyArray</span><span class="o">&lt;</span>string<span class="o">&gt;</span><span class="o">&gt;</span><span class="o">;</span>
+<span class="o">}</span>
+
+<span class="k">export</span> interface <span class="t">FileReviewer</span> <span class="o">{</span>
+  <span class="f">review</span><span class="o">(</span>path<span class="o">:</span> string<span class="o">)</span><span class="o">:</span> <span class="t">Promise</span><span class="o">&lt;</span><span class="t">ReadonlyArray</span><span class="o">&lt;</span><span class="t">Finding</span><span class="o">&gt;</span><span class="o">&gt;</span><span class="o">;</span>
+<span class="o">}</span></code></pre>
+
+        <p>Use case 只依賴這些能力，因此可以在不知道 Git CLI 或 AI provider 的情況下完成流程。</p>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">export</span> interface <span class="t">RunReviewDependencies</span> <span class="o">{</span>
+  readonly changeSource<span class="o">:</span> <span class="t">ChangeSource</span><span class="o">;</span>
+  readonly fileReviewer<span class="o">:</span> <span class="t">FileReviewer</span><span class="o">;</span>
+<span class="o">}</span>
+
+<span class="k">export</span> <span class="k">const</span> runReview <span class="o">=</span> <span class="k">async</span> <span class="o">(</span>
+  scope<span class="o">:</span> <span class="t">ReviewScope</span><span class="o">,</span>
+  dependencies<span class="o">:</span> <span class="t">RunReviewDependencies</span><span class="o">,</span>
+<span class="o">)</span><span class="o">:</span> <span class="t">Promise</span><span class="o">&lt;</span><span class="t">ReviewReport</span><span class="o">&gt;</span> <span class="o">=</span><span class="o">&gt;</span> <span class="o">{</span>
+  <span class="k">const</span> files <span class="o">=</span> <span class="k">await</span> dependencies<span class="o">.</span><span class="p">changeSource</span><span class="o">.</span><span class="p">getChangedFiles</span><span class="o">(</span>scope<span class="o">)</span><span class="o">;</span>
+  <span class="k">const</span> groups <span class="o">=</span> <span class="k">await</span> <span class="t">Promise</span><span class="o">.</span><span class="p">all</span><span class="o">(</span>
+    files<span class="o">.</span><span class="p">map</span><span class="o">(</span><span class="o">(</span>path<span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span> dependencies<span class="o">.</span><span class="p">fileReviewer</span><span class="o">.</span><span class="p">review</span><span class="o">(</span>path<span class="o">)</span><span class="o">)</span><span class="o">,</span>
+  <span class="o">)</span><span class="o">;</span>
+
+  <span class="k">return</span> <span class="o">{</span>
+    scope<span class="o">,</span>
+    reviewedFiles<span class="o">:</span> files<span class="o">.</span><span class="p">length</span><span class="o">,</span>
+    findings<span class="o">:</span> groups<span class="o">.</span><span class="p">flat</span><span class="o">(</span><span class="o">)</span><span class="o">,</span>
+  <span class="o">}</span><span class="o">;</span>
+<span class="o">}</span><span class="o">;</span></code></pre>
+
+        <p>外層 adapter 才處理 Git 的技術細節。下例中的 <code>CommandRunner</code> 是受控的 subprocess wrapper，<code>parseNulDelimitedPaths</code> 則把 Git 輸出翻譯成一般路徑陣列。範例刻意省略兩者的完整實作與 error handling，只呈現邊界位置。</p>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">export</span> <span class="k">class</span> <span class="t">GitChangeSource</span> implements <span class="t">ChangeSource</span> <span class="o">{</span>
+  <span class="f">constructor</span><span class="o">(</span>private readonly runner<span class="o">:</span> <span class="t">CommandRunner</span><span class="o">)</span> <span class="o">{</span><span class="o">}</span>
+
+  <span class="k">async</span> <span class="f">getChangedFiles</span><span class="o">(</span>
+    scope<span class="o">:</span> <span class="t">ReviewScope</span><span class="o">,</span>
+  <span class="o">)</span><span class="o">:</span> <span class="t">Promise</span><span class="o">&lt;</span><span class="t">ReadonlyArray</span><span class="o">&lt;</span>string<span class="o">&gt;</span><span class="o">&gt;</span> <span class="o">{</span>
+    <span class="k">const</span> args <span class="o">=</span> scope <span class="o">=</span><span class="o">=</span><span class="o">=</span> <span class="s">"staged"</span>
+      <span class="o">?</span> <span class="o">[</span><span class="s">"diff"</span><span class="o">,</span> <span class="s">"--cached"</span><span class="o">,</span> <span class="s">"--name-only"</span><span class="o">,</span> <span class="s">"-z"</span><span class="o">]</span>
+      <span class="o">:</span> <span class="o">[</span><span class="s">"diff"</span><span class="o">,</span> <span class="s">"--name-only"</span><span class="o">,</span> <span class="s">"-z"</span><span class="o">]</span><span class="o">;</span>
+
+    <span class="k">const</span> result <span class="o">=</span> <span class="k">await</span> this<span class="o">.</span><span class="p">runner</span><span class="o">.</span><span class="p">execute</span><span class="o">(</span><span class="s">"git"</span><span class="o">,</span> args<span class="o">)</span><span class="o">;</span>
+    <span class="k">return</span> <span class="f">parseNulDelimitedPaths</span><span class="o">(</span>result<span class="o">.</span><span class="p">stdout</span><span class="o">)</span><span class="o">;</span>
+  <span class="o">}</span>
+<span class="o">}</span></code></pre>
+
+        <p>最後由 composition root 選擇實作並組裝依賴。它通常位於應用程式進入點，因此可以同時知道內層介面與外層實作。下例假設底層的 <code>commandRunner</code>、<code>fileSystem</code> 已建立，而 <code>renderJson</code> 是輸出 adapter。</p>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">const</span> changeSource <span class="o">=</span> <span class="k">new</span> <span class="f">GitChangeSource</span><span class="o">(</span>commandRunner<span class="o">)</span><span class="o">;</span>
+<span class="k">const</span> fileReviewer <span class="o">=</span> <span class="k">new</span> <span class="f">StaticAnalysisReviewer</span><span class="o">(</span>fileSystem<span class="o">)</span><span class="o">;</span>
+
+<span class="k">const</span> report <span class="o">=</span> <span class="k">await</span> <span class="f">runReview</span><span class="o">(</span><span class="s">"staged"</span><span class="o">,</span> <span class="o">{</span>
+  changeSource<span class="o">,</span>
+  fileReviewer<span class="o">,</span>
+<span class="o">}</span><span class="o">)</span><span class="o">;</span>
+
+process<span class="o">.</span><span class="p">stdout</span><span class="o">.</span><span class="p">write</span><span class="o">(</span><span class="f">renderJson</span><span class="o">(</span>report<span class="o">)</span><span class="o">)</span><span class="o">;</span></code></pre>
+
+        <p>這個設計的直接效果是：測試 <code>runReview</code> 時只需要提供假的 <code>ChangeSource</code> 與 <code>FileReviewer</code>，不需要啟動 subprocess。更換 Git 實作或輸出格式時，domain 與 use case 不必跟著改。注意這不保證「永遠不用修改核心」；當產品規則本身改變時，核心當然應該改。架構要隔離的是不同原因造成的變動。</p>
+      </section>
+
+      <section id="domain-types">
+        <h2><code>domain/</code> 可以都是 type，但不是所有 type 都屬於 domain</h2>
+        <p>TypeScript 專案常見的誤會，是把資料夾視為語法分類：class 放 <code>classes/</code>、interface 放 <code>interfaces/</code>、type 放 <code>types/</code>。這種分類能回答「它用什麼語法寫」，卻無法回答「誰擁有這個概念」。</p>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>型別</th>
+                <th>較自然的 owner</th>
+                <th>理由</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>ReviewReport</code></td>
+                <td><code>domain/</code></td>
+                <td>表達產品核心的 review 結果</td>
+              </tr>
+              <tr>
+                <td><code>ReviewCommandOptions</code></td>
+                <td><code>commands/</code></td>
+                <td>由 CLI 輸入邊界擁有</td>
+              </tr>
+              <tr>
+                <td><code>GitProcessResult</code></td>
+                <td><code>git/</code> 或 <code>platform/</code></td>
+                <td>描述外部工具或底層執行結果</td>
+              </tr>
+              <tr>
+                <td><code>JsonReportV2</code></td>
+                <td><code>output/</code> 或獨立 contract boundary</td>
+                <td>若它是特定序列化格式，就由輸出協定擁有</td>
+              </tr>
+              <tr>
+                <td><code>DatabaseReviewRow</code></td>
+                <td><code>storage/</code></td>
+                <td>資料庫 row 是 persistence 細節，不是 domain model</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p>因此，<code>domain/</code> 裡目前只有 type 並不是問題。真正要問的是：這些 type 是否代表穩定的業務概念？是否被多個 application capability 共同使用？是否不帶特定框架、傳輸或儲存技術？如果答案是否定的，就應該留在真正擁有它的 feature。</p>
+        <p>當 domain 很簡單時，純資料結構加純函式完全可以成立，不必為了看起來「夠物件導向」而強迫每個模型變成 class。反過來，如果建立合法物件需要 validation，或狀態轉換必須維持 invariant，就應該把對應行為留在 domain boundary，而不是散落到 command 或 controller。</p>
+      </section>
+
+      <section id="boundaries">
+        <h2>邊界應該保護變動，而不是增加儀式</h2>
+        <p>好的邊界通常隔開不同的變動原因。例如業務規則因產品需求改變，Git adapter 因工具格式改變，renderer 因輸出介面改變。它們不需要一起發布變更，就值得分開。</p>
+
+        <h3>介面通常放在需要它的一側</h3>
+        <p>如果 use case 需要「讀取變更檔案」，<code>ChangeSource</code> 應以 use case 能理解的語言定義，並由 Git adapter 實作。這讓 abstraction 的形狀由內層需求決定，而不是把外部 SDK 的方法原封不動包一層。</p>
+
+        <h3>跨越邊界時要轉換資料</h3>
+        <p>不要讓 database row、HTTP response 或 subprocess result 一路穿透到 domain。邊界上的 mapping 看似多寫幾行程式，實際上是在阻止外部格式成為整個系統的隱性 schema。</p>
+
+        <h3>只有真實變動壓力才值得抽象</h3>
+        <p>一個只有三個檔案的小工具，不需要先建立十幾層 interface 與 factory。可以先保持簡單，等到核心流程和外部細節開始互相干擾，再抽出明確 port。Clean Architecture 是控制耦合的工具，不是目錄數量競賽。</p>
+      </section>
+
+      <section id="tradeoffs">
+        <h2>它不是唯一最佳實踐，也不是免費的</h2>
+        <p>Clean Architecture 特別適合核心規則複雜、外部整合多、需要長期維護或測試隔離的系統。對一次性 script、單純 CRUD 後台或仍在快速探索需求的原型，完整分層可能帶來不必要的間接性。</p>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>情況</th>
+                <th>可能帶來的價值</th>
+                <th>可能付出的成本</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>多個 UI 或 delivery mechanism</td>
+                <td>同一 use case 可供 CLI、HTTP、queue 共用</td>
+                <td>需要明確 input/output mapping</td>
+              </tr>
+              <tr>
+                <td>外部服務經常替換</td>
+                <td>adapter 吸收 SDK 與協定差異</td>
+                <td>介面與 composition 增加程式碼量</td>
+              </tr>
+              <tr>
+                <td>核心規則複雜</td>
+                <td>規則可獨立測試與推理</td>
+                <td>團隊必須持續維護邊界紀律</td>
+              </tr>
+              <tr>
+                <td>簡單、短命的工具</td>
+                <td>通常只有少量收益</td>
+                <td>過早抽象反而降低閱讀速度</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>常見誤區</h3>
+        <ul>
+          <li><strong>把資料夾名稱當成架構。</strong> 有 <code>domain/</code>、<code>use-cases/</code> 不代表依賴方向真的正確。</li>
+          <li><strong>每個 class 都配一個 interface。</strong> 沒有邊界或替換需求時，interface 只是額外跳轉。</li>
+          <li><strong>把所有 type 都丟進 <code>domain/</code>。</strong> CLI option、database row 與 provider response 都有自己的 owner。</li>
+          <li><strong>建立 pass-through wrapper。</strong> 若 abstraction 只是逐字轉發第三方 API，它沒有保護內層語言。</li>
+          <li><strong>讓 use case 回傳畫面文字。</strong> 這會把 application policy 綁到特定 delivery mechanism。</li>
+          <li><strong>追求「零 framework import」。</strong> 外層本來就負責 framework；真正目標是避免它穿透核心。</li>
+        </ul>
+
+        <div class="callout">
+          <p><strong>務實原則</strong></p>
+          <p>先找出最需要保護的業務規則，再圍繞真實的外部邊界建立 abstraction。不要從一張理想目錄樹開始，也不要為尚未出現的第二個 implementation 預先設計大型 hierarchy。</p>
+        </div>
+      </section>
+
+      <section id="comparison">
+        <h2>和其他架構名稱的關係</h2>
+        <p>Clean Architecture、Hexagonal Architecture 與 Onion Architecture 的圖形與術語不同，但核心精神高度相近：業務核心透過 ports 與外部世界互動，技術細節位於外圍，source dependency 指向內部。</p>
+        <p>DDD 則更重視如何建立正確的領域模型與共同語言；它可以和 Clean Architecture 一起使用，但兩者不是同義詞。採用 Clean Architecture 也不代表一定要有複雜的 entity 或 aggregate。傳統 layered architecture 若能嚴格控制依賴方向，同樣可以達到許多相同效果。</p>
+      </section>
+
+      <section id="checklist">
+        <h2>實務檢查表：用問題檢查架構，不用目錄名稱檢查</h2>
+        <ul class="checklist">
+          <li>Domain model 是否使用產品語言，而不是資料庫或 SDK 語言？</li>
+          <li>Use case 是否能在沒有真正 filesystem、network、Git 或資料庫時測試？</li>
+          <li>CLI、HTTP handler 或 controller 是否只負責輸入轉換、呼叫 use case 與輸出轉換？</li>
+          <li>外部格式是否在 adapter 邊界轉成內部模型？</li>
+          <li>核心程式是否避免 import runtime、framework 與具體 driver？</li>
+          <li>每個 interface 是否代表內層真正需要的能力，而不是照抄外部 API？</li>
+          <li>Composition root 是否是少數同時知道抽象與具體實作的位置？</li>
+          <li>每個資料夾是否有清楚 owner，而不是成為 <code>types/</code>、<code>utils/</code> 或 <code>services/</code> 垃圾桶？</li>
+          <li>新增一層是否隔離了真實變動，還是只增加跳轉？</li>
+        </ul>
+        <p>如果只能保留一個判斷方法，可以問：「當外部技術改變時，哪些核心檔案會被迫一起改？」被迫變動的範圍越小，邊界通常越健康。</p>
+      </section>
+
+      <section id="conclusion">
+        <h2>結語：架構的成果是可控的變動</h2>
+        <p>Clean Architecture 的價值不在於畫出漂亮同心圓，而在於讓業務政策比技術選擇更穩定。Domain 描述業務真相，use case 編排使用者目標，adapter 翻譯邊界語言，framework 與 driver 提供可替換機制；source dependency 則持續朝核心指向。</p>
+        <p>因此，看到 <code>domain/</code> 裡都是 TypeScript type 時，不必立即判定好或壞。先檢查那些 type 是否真的代表領域概念，以及 CLI、Git、儲存與輸出細節是否各自留在擁有它們的邊界。Clean Architecture 最終不是分類規則，而是一套讓改動停在正確位置的設計原則。</p>
+      </section>
+    </article>
+  </main>
+
+  <script>
+    (() => {
+      const copyIcon = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="11" height="11" rx="2"></rect><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"></path></svg>';
+      const checkIcon = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"></path></svg>';
+
+      const copyText = async (text) => {
+        if (navigator.clipboard && window.isSecureContext) {
+          await navigator.clipboard.writeText(text);
+          return;
+        }
+        const textarea = document.createElement("textarea");
+        textarea.value = text;
+        textarea.style.position = "fixed";
+        textarea.style.opacity = "0";
+        document.body.append(textarea);
+        textarea.select();
+        document.execCommand("copy");
+        textarea.remove();
+      };
+
+      document.querySelectorAll("pre").forEach((pre) => {
+        const code = pre.querySelector("code");
+        if (!code) return;
+
+        const button = document.createElement("button");
+        button.className = "copy-code";
+        button.type = "button";
+        button.setAttribute("aria-label", "複製程式碼");
+        button.innerHTML = copyIcon;
+        button.addEventListener("click", async () => {
+          await copyText(code.textContent || "");
+          button.classList.add("copied");
+          button.setAttribute("aria-label", "已複製");
+          button.innerHTML = checkIcon;
+          window.setTimeout(() => {
+            button.classList.remove("copied");
+            button.setAttribute("aria-label", "複製程式碼");
+            button.innerHTML = copyIcon;
+          }, 1400);
+        });
+        pre.append(button);
+
+        const track = document.createElement("div");
+        track.className = "code-scrollbar";
+        const thumb = document.createElement("div");
+        thumb.className = "code-scrollbar-thumb";
+        track.append(thumb);
+        pre.append(track);
+
+        const updateThumb = () => {
+          const visibleRatio = Math.min(1, code.clientWidth / code.scrollWidth);
+          const trackWidth = track.clientWidth;
+          const thumbWidth = Math.max(28, trackWidth * visibleRatio);
+          const maxThumbX = Math.max(0, trackWidth - thumbWidth);
+          const maxScroll = Math.max(1, code.scrollWidth - code.clientWidth);
+          thumb.style.width = `${thumbWidth}px`;
+          thumb.style.transform = `translateX(${maxThumbX * code.scrollLeft / maxScroll}px)`;
+          track.classList.toggle("hidden", visibleRatio >= 1);
+        };
+
+        code.addEventListener("scroll", updateThumb, { passive: true });
+        window.addEventListener("resize", updateThumb, { passive: true });
+
+        let dragStartX = 0;
+        let dragStartScroll = 0;
+        thumb.addEventListener("pointerdown", (event) => {
+          dragStartX = event.clientX;
+          dragStartScroll = code.scrollLeft;
+          thumb.setPointerCapture(event.pointerId);
+        });
+        thumb.addEventListener("pointermove", (event) => {
+          if (!thumb.hasPointerCapture(event.pointerId)) return;
+          const trackRange = track.clientWidth - thumb.clientWidth;
+          const scrollRange = code.scrollWidth - code.clientWidth;
+          if (trackRange > 0) {
+            code.scrollLeft = dragStartScroll + (event.clientX - dragStartX) * scrollRange / trackRange;
+          }
+        });
+        track.addEventListener("click", (event) => {
+          if (event.target === thumb) return;
+          const rect = track.getBoundingClientRect();
+          const ratio = (event.clientX - rect.left) / rect.width;
+          code.scrollLeft = ratio * (code.scrollWidth - code.clientWidth);
+        });
+        updateThumb();
+      });
+    })();
+  </script>
+</body>
+</html>
