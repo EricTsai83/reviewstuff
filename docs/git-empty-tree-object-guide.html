@@ -1,0 +1,701 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="從 Git diff、unborn HEAD 與 content-addressed object model，理解 Empty Tree Object ID 為何存在，以及初始 repository 為何需要它。">
+  <title>Git Empty Tree Object：為什麼「沒有 commit」仍需要一個 Object ID</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --clay: #d97757;
+      --slate: #141413;
+      --ivory: #faf9f5;
+      --oat: #e3dacc;
+      --white: #ffffff;
+      --gray-100: #f0eee6;
+      --gray-300: #d1cfc5;
+      --gray-500: #87867f;
+      --gray-700: #3d3d3a;
+      --warning: #c78e3f;
+      --space-sm: 8px;
+      --space-md: 12px;
+      --space-lg: 16px;
+      --space-xl: 24px;
+      --space-2xl: 32px;
+      --space-3xl: 48px;
+      --radius-sm: 4px;
+      --radius-md: 8px;
+      --content-width: 68ch;
+    }
+
+    * { box-sizing: border-box; }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      margin: 0;
+      background: var(--ivory);
+      color: var(--slate);
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 16px;
+      font-weight: 430;
+      line-height: 1.65;
+    }
+
+    main {
+      max-width: var(--content-width);
+      margin: 0 auto;
+      padding: var(--space-3xl) var(--space-xl) 72px;
+    }
+
+    article {
+      background: transparent;
+      border: 0;
+      border-radius: 0;
+      box-shadow: none;
+      padding: 0;
+    }
+
+    h1 {
+      margin: 0 0 var(--space-lg);
+      max-width: none;
+      font-size: 1.8rem;
+      line-height: 1.18;
+      letter-spacing: -0.02em;
+      text-wrap: balance;
+      overflow-wrap: normal;
+    }
+
+    h2 {
+      margin: var(--space-3xl) 0 var(--space-lg);
+      font-size: 1.22rem;
+      line-height: 1.25;
+      letter-spacing: -0.01em;
+    }
+
+    h3 {
+      margin: var(--space-2xl) 0 var(--space-md);
+      font-size: 1rem;
+      line-height: 1.35;
+    }
+
+    p, ul, ol, .deck, .callout, table, pre { max-width: var(--content-width); }
+    p { margin: 0 0 var(--space-lg); }
+    ul, ol { margin: 0 0 var(--space-xl); padding-left: 1.4rem; }
+    li + li { margin-top: var(--space-sm); }
+    strong { font-weight: 700; }
+
+    .deck {
+      margin: 0 0 var(--space-2xl);
+      color: var(--gray-700);
+      font-size: 1.05rem;
+    }
+
+    a {
+      color: var(--clay);
+      text-decoration: underline;
+      text-underline-offset: 3px;
+      text-decoration-thickness: 1px;
+    }
+
+    a:hover { text-decoration-thickness: 2px; }
+
+    nav {
+      margin: 0 0 var(--space-3xl);
+      padding: var(--space-lg) 0;
+      border-top: 1px solid var(--oat);
+      border-bottom: 1px solid var(--oat);
+    }
+
+    nav strong { display: block; margin-bottom: var(--space-sm); }
+    nav ol { margin: 0; columns: 2; column-gap: var(--space-2xl); }
+    nav li { break-inside: avoid; margin: 0 0 4px; }
+
+    code {
+      padding: 0.08em 0.3em;
+      border: 1px solid var(--oat);
+      border-radius: var(--radius-sm);
+      background: var(--gray-100);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.9em;
+      overflow-wrap: anywhere;
+    }
+
+    pre {
+      position: relative;
+      width: 100%;
+      margin: var(--space-lg) 0 var(--space-xl);
+      border: 1px solid #26241f;
+      border-radius: var(--radius-md);
+      background: #11110f;
+      color: #d8d4ca;
+      overflow: hidden;
+    }
+
+    pre code {
+      display: block;
+      border: 0;
+      background: transparent;
+      padding: 18px 64px 18px 22px;
+      color: inherit;
+      overflow-x: auto;
+      white-space: pre;
+      font-size: 0.875rem;
+      font-weight: 400;
+      line-height: 1.62;
+      scrollbar-width: none;
+    }
+
+    pre code::-webkit-scrollbar { width: 0; height: 0; }
+    pre .label { display: none; }
+
+    .copy-code {
+      position: absolute;
+      top: 9px;
+      right: 9px;
+      z-index: 1;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 30px;
+      height: 30px;
+      padding: 0;
+      border: 1px solid rgba(250, 249, 245, 0.14);
+      border-radius: var(--radius-sm);
+      background: rgba(250, 249, 245, 0.06);
+      color: rgba(250, 249, 245, 0.72);
+      cursor: pointer;
+    }
+
+    .copy-code:hover, .copy-code:focus-visible {
+      border-color: rgba(250, 249, 245, 0.28);
+      background: rgba(250, 249, 245, 0.12);
+      color: var(--ivory);
+      outline: none;
+    }
+
+    .copy-code.copied {
+      border-color: rgba(143, 184, 106, 0.42);
+      background: rgba(143, 184, 106, 0.14);
+      color: #b8d99a;
+    }
+
+    .copy-code svg {
+      width: 13px;
+      height: 13px;
+      stroke: currentColor;
+      stroke-width: 1.8;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      fill: none;
+      pointer-events: none;
+    }
+
+    .code-scrollbar {
+      position: absolute;
+      right: 0;
+      bottom: 0;
+      left: 0;
+      height: 3px;
+      border-radius: 999px;
+      background: rgba(250, 249, 245, 0.1);
+      cursor: pointer;
+    }
+
+    .code-scrollbar.hidden { display: none; }
+
+    .code-scrollbar-thumb {
+      height: 100%;
+      border-radius: inherit;
+      background: rgba(255, 148, 110, 0.82);
+      transform: translateX(0);
+      cursor: grab;
+    }
+
+    pre code .k { color: #ff946e; font-weight: 400; }
+    pre code .s { color: #8fb86a; }
+    pre code .n, pre code .p { color: #d8d4ca; }
+    pre code .c { color: #858177; font-style: italic; }
+    pre code .f, pre code .t { color: #cfc6a2; font-weight: 400; }
+    pre code .o { color: #ff946e; }
+    pre.language-shell { background: #11110f; }
+    pre code .sh-command { color: #ff946e; font-weight: 400; }
+    pre code .sh-flag { color: #cfc6a2; font-weight: 400; }
+    pre code .sh-string { color: #8fb86a; }
+    pre code .sh-var { color: #cfc6a2; }
+    pre code .sh-comment { color: #858177; font-style: italic; }
+    pre code .sh-prompt { color: #ff946e; font-weight: 400; }
+
+    table {
+      width: 100%;
+      margin: var(--space-lg) 0 var(--space-xl);
+      border-collapse: collapse;
+      font-size: 0.94rem;
+    }
+
+    th, td {
+      padding: 10px 12px;
+      border: 1px solid var(--oat);
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th { background: var(--gray-100); font-weight: 680; }
+
+    .table-wrap {
+      width: 100%;
+      margin-bottom: var(--space-xl);
+      overflow-x: auto;
+    }
+
+    .table-wrap table { margin-bottom: 0; min-width: 620px; }
+
+    .callout {
+      margin: var(--space-xl) 0;
+      padding: var(--space-lg);
+      border: 1px solid var(--oat);
+      border-left: 4px solid var(--clay);
+      border-radius: 0 var(--radius-md) var(--radius-md) 0;
+      background: var(--gray-100);
+    }
+
+    .callout p:last-child { margin-bottom: 0; }
+
+    .formula {
+      margin: var(--space-xl) 0;
+      padding: var(--space-xl);
+      border-top: 1px solid var(--oat);
+      border-bottom: 1px solid var(--oat);
+      text-align: center;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 1rem;
+      overflow-wrap: anywhere;
+    }
+
+    .object-model {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: var(--space-md);
+      margin: var(--space-xl) 0;
+    }
+
+    .object-model div {
+      padding: var(--space-lg) var(--space-md);
+      border-top: 3px solid var(--clay);
+      background: var(--white);
+    }
+
+    .object-model strong { display: block; margin-bottom: 4px; }
+    .object-model span { color: var(--gray-700); font-size: 0.88rem; }
+
+    .flow-figure { margin: var(--space-xl) 0; }
+    .flow-figure svg { display: block; width: 100%; height: auto; }
+    .flow-figure .flow-mobile { display: none; }
+    .flow-node rect, .flow-node polygon {
+      fill: var(--white);
+      stroke: var(--oat);
+      stroke-width: 1.5;
+    }
+    .flow-label {
+      fill: var(--slate);
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 14px;
+      font-weight: 650;
+    }
+    .flow-arrow {
+      fill: none;
+      stroke: var(--clay);
+      stroke-width: 2;
+    }
+    .flow-edge-label rect { fill: var(--ivory); }
+    .flow-edge-label text {
+      fill: var(--gray-700);
+      font-size: 12px;
+      font-weight: 650;
+    }
+    .flow-figure figcaption {
+      margin-top: var(--space-md);
+      color: var(--gray-700);
+      font-size: 0.9rem;
+    }
+
+    .sources {
+      margin-top: var(--space-3xl);
+      padding-top: var(--space-xl);
+      border-top: 1px solid var(--oat);
+      font-size: 0.92rem;
+    }
+
+    @media (max-width: 640px) {
+      body { font-size: 15px; }
+      h1 { font-size: 1.65rem; }
+      main { padding: var(--space-xl); }
+      nav ol { columns: 1; }
+      pre code { font-size: 0.8125rem; line-height: 1.5; }
+      p code, li code, td code { font-size: 0.9em; }
+      table, .deck, .sources { font-size: 0.875rem; }
+      .object-model { grid-template-columns: repeat(2, 1fr); }
+      .flow-figure svg:not(.flow-mobile) { display: none; }
+      .flow-figure .flow-mobile { display: block; }
+    }
+
+    @media (max-width: 390px) {
+      .object-model { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <article>
+      <h1>Git Empty Tree Object：為什麼「沒有 commit」仍需要一個 Object ID</h1>
+      <p class="deck">Empty Tree Object 不是神祕常數，也不是 Git 初始化失敗時的補丁。它是 Git 對「零個檔案的目錄快照」所賦予的正式身分，讓 diff 在第一個 commit 出現之前，仍然有一個明確、可比較的左側 snapshot。</p>
+
+      <nav aria-label="文章目錄">
+        <strong>閱讀路徑</strong>
+        <ol>
+          <li><a href="#problem">先從 diff 的問題開始</a></li>
+          <li><a href="#states">釐清 HEAD 與初始狀態</a></li>
+          <li><a href="#objects">理解 Git object model</a></li>
+          <li><a href="#identity">Empty tree 的 ID 如何產生</a></li>
+          <li><a href="#why-id">為什麼一定需要 ID</a></li>
+          <li><a href="#implementation">安全的實作方式</a></li>
+        </ol>
+      </nav>
+
+      <section id="problem">
+        <h2>先從 diff 的問題開始：比較需要兩個具體狀態</h2>
+        <p>Git diff 的核心問題不是「有哪些檔案？」而是「從狀態 A 變成狀態 B，發生了什麼？」可以把它想成一個減法：</p>
+        <div class="formula" role="math" aria-label="diff 結果等於右側快照減去左側快照">diff 結果 = 右側 snapshot − 左側 snapshot</div>
+        <p>一般情況下，左側可以是 <code>HEAD</code> 所指向 commit 的 tree，右側則是 index 或 working tree。但一個剛執行 <code>git init</code>、尚未建立第一個 commit 的 repository，還沒有任何 commit snapshot 可當左側。</p>
+        <p>這時不能只把左側省略。省略參數通常會改變 Git 指令的語意，而不是自動表達「零個檔案」。要讓 diff 得到「所有目前檔案都是新增」的正確結果，必須提供一個真正代表零檔案狀態的 tree。那就是 Empty Tree Object。</p>
+      </section>
+
+      <section id="states">
+        <h2>「沒有 HEAD」的精確意思</h2>
+        <p>口語上常說「沒有 HEAD」，但對程式而言更精確的問題是：<strong><code>HEAD</code> 能否解析成一個存在的 commit？</strong></p>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>狀態</th>
+                <th><code>.git/HEAD</code></th>
+                <th><code>HEAD^{commit}</code></th>
+                <th>適合的 diff base</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>尚未 <code>git init</code></td>
+                <td>不存在</td>
+                <td>無法解析</td>
+                <td>不是 Git repository，直接回報錯誤</td>
+              </tr>
+              <tr>
+                <td>已 <code>git init</code>，尚未 commit</td>
+                <td>存在</td>
+                <td>無法解析</td>
+                <td>Empty Tree Object ID</td>
+              </tr>
+              <tr>
+                <td>已有第一個 commit</td>
+                <td>存在</td>
+                <td>可解析</td>
+                <td><code>HEAD</code></td>
+              </tr>
+              <tr>
+                <td>Detached HEAD</td>
+                <td>存在</td>
+                <td>可解析</td>
+                <td><code>HEAD</code></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p><code>git init</code> 後，<code>.git/HEAD</code> 通常已包含類似以下內容：</p>
+        <pre><span class="label">Text</span><code>ref: refs/heads/main</code></pre>
+        <p>但在第一個 commit 之前，<code>refs/heads/main</code> 還沒有 commit 可以指向。這種 branch 狀態稱為 <em>unborn branch</em>。因此不是 HEAD 檔案不存在，而是 HEAD 尚未解析到 commit。</p>
+      </section>
+
+      <section id="objects">
+        <h2>Git object model：commit 並不直接保存檔案</h2>
+        <p>Git 是 content-addressed object database。它把內容和結構分成四類 object；每個 object 都以其內容計算出的 Object ID 被引用。</p>
+
+        <div class="object-model" aria-label="Git 四種主要 object">
+          <div><strong>blob</strong><span>保存單一檔案內容</span></div>
+          <div><strong>tree</strong><span>保存目錄 entries</span></div>
+          <div><strong>commit</strong><span>指向 root tree 與 parent</span></div>
+          <div><strong>tag</strong><span>命名並描述其他 object</span></div>
+        </div>
+
+        <p>一個 commit 會指向一個 root tree。tree 的每個 entry 記錄檔案模式、名稱與另一個 blob 或 tree 的 Object ID。巢狀 tree 共同描述某一刻完整的目錄快照。</p>
+        <pre><span class="label">Text</span><code>commit
+  └─ root tree
+       ├─ package.json → blob
+       └─ src          → tree
+            └─ cli.ts  → blob</code></pre>
+        <p>因此 Empty Tree Object 並不是空 commit。它沒有作者、時間、parent 或 commit message；它只是沒有任何 entry 的 tree，代表一個空目錄 snapshot。</p>
+      </section>
+
+      <section id="identity">
+        <h2>Empty tree 的 Object ID 如何產生</h2>
+        <p>Git 不只 hash object 的內容，也會把 object 類型與內容長度放進 header。Object ID 以未壓縮的 header 與 payload 計算；object 日後如何壓縮或打包儲存，不會改變它的身分。概念公式是：</p>
+        <pre class="language-typescript"><span class="label">Text</span><code><span class="o">&lt;</span><span class="k">type</span><span class="o">&gt;</span> <span class="o">&lt;</span>content<span class="o">-</span>length<span class="o">&gt;</span>\<span class="n">0</span><span class="o">&lt;</span>content<span class="o">&gt;</span></code></pre>
+        <p>Empty tree 的 type 是 <code>tree</code>，內容長度是 <code>0</code>，payload 是零 bytes。所以真正被 hash 的 byte sequence 是：</p>
+        <pre><span class="label">Text</span><code>tree 0\0</code></pre>
+        <p>其中 <code>\0</code> 是一個 NUL byte，不是反斜線與數字零兩個普通字元。因為 type、長度與內容全部固定，所有使用相同 hash algorithm 的 repository 都會得到相同結果。</p>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Object format</th><th>Empty Tree Object ID</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>SHA-1</td><td><code>4b825dc642cb6eb9a060e54bf8d69288fbee4904</code></td></tr>
+              <tr><td>SHA-256</td><td><code>6ef19b41225c5369f1c104d45d8d85efa9b057b53b14b4b9b939dd74decc5321</code></td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p>這些 ID 看似亂碼，實際上是 deterministic content address。同樣的 type 與 bytes 會得到同樣的 ID；換一個 hash algorithm，則會得到不同長度與值。</p>
+        <div class="callout">
+          <p><strong>Object 類型是 hash 的一部分。</strong>空 blob 與 empty tree 的 payload 都是零 bytes，但 header 分別是 <code>blob 0\0</code> 與 <code>tree 0\0</code>，因此 Object ID 不同。</p>
+        </div>
+      </section>
+
+      <section id="why-id">
+        <h2>為什麼要從 Object ID 出發，而不能只說「沒有東西」？</h2>
+        <p>關鍵在於 Git 的世界裡，「空」仍然是一個有類型的狀態。diff engine 需要比較兩個可識別的 snapshot；「缺少左側參數」只是少了一個比較對象，並不等於提供了一棵零 entries 的 tree。Empty Tree Object ID 正是把抽象的「什麼都沒有」轉成 Git 可操作的具體 tree。</p>
+
+        <ol>
+          <li><strong>Object ID 讓空狀態成為一等公民。</strong>Empty tree 可以像任何其他 tree 一樣，被傳給需要 tree-ish 的 Git 操作。</li>
+          <li><strong>它保留 tree-level 語意。</strong>Git 仍能以目錄、路徑、檔案模式與 rename detection 的規則處理差異，而不是逐檔模擬空檔案。</li>
+          <li><strong>它讓第一個 snapshot 與後續 snapshot 使用同一套模型。</strong>第一個 commit 可以理解為「從 empty tree 變成第一棵 root tree」。</li>
+          <li><strong>它消除特殊資料結構。</strong>呼叫端不需要發明 null tree；只要提供 Git 已理解的標準 Object ID。</li>
+        </ol>
+
+        <figure class="flow-figure">
+          <svg id="mermaid-mrnqc566-my-svg" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" class="flowchart" viewBox="0 0 652.54296875 848.8125" aria-roledescription="flowchart-v2" role="img" aria-labelledby="mermaid-mrnqc566-title mermaid-mrnqc566-desc"><title id="mermaid-mrnqc566-title">Git review base 的選擇流程</title><desc id="mermaid-mrnqc566-desc">程式先確認目前位於 Git repository，再檢查 HEAD 能否解析成 commit；有 commit 時以 HEAD 為 diff base，沒有第一個 commit 時則以 empty tree object ID 代表零檔案 snapshot。</desc><style>#mermaid-mrnqc566-my-svg{font-family:ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;font-size:16px;fill:#141413;}@keyframes edge-animation-frame{from{stroke-dashoffset:0;}}@keyframes dash{to{stroke-dashoffset:0;}}#mermaid-mrnqc566-my-svg .edge-animation-slow{stroke-dasharray:9,5!important;stroke-dashoffset:900;animation:dash 50s linear infinite;stroke-linecap:round;}#mermaid-mrnqc566-my-svg .edge-animation-fast{stroke-dasharray:9,5!important;stroke-dashoffset:900;animation:dash 20s linear infinite;stroke-linecap:round;}#mermaid-mrnqc566-my-svg .error-icon{fill:#FAF9F5;}#mermaid-mrnqc566-my-svg .error-text{fill:#05060a;stroke:#05060a;}#mermaid-mrnqc566-my-svg .edge-thickness-normal{stroke-width:1px;}#mermaid-mrnqc566-my-svg .edge-thickness-thick{stroke-width:3.5px;}#mermaid-mrnqc566-my-svg .edge-pattern-solid{stroke-dasharray:0;}#mermaid-mrnqc566-my-svg .edge-thickness-invisible{stroke-width:0;fill:none;}#mermaid-mrnqc566-my-svg .edge-pattern-dashed{stroke-dasharray:3;}#mermaid-mrnqc566-my-svg .edge-pattern-dotted{stroke-dasharray:2;}#mermaid-mrnqc566-my-svg .marker{fill:#D97757;stroke:#D97757;}#mermaid-mrnqc566-my-svg .marker.cross{stroke:#D97757;}#mermaid-mrnqc566-my-svg svg{font-family:ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;font-size:16px;}#mermaid-mrnqc566-my-svg p{margin:0;}#mermaid-mrnqc566-my-svg .label{font-family:ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;color:#141413;}#mermaid-mrnqc566-my-svg .cluster-label text{fill:#05060a;}#mermaid-mrnqc566-my-svg .cluster-label span{color:#05060a;}#mermaid-mrnqc566-my-svg .cluster-label span p{background-color:transparent;}#mermaid-mrnqc566-my-svg .label text,#mermaid-mrnqc566-my-svg span{fill:#141413;color:#141413;}#mermaid-mrnqc566-my-svg .node rect,#mermaid-mrnqc566-my-svg .node circle,#mermaid-mrnqc566-my-svg .node ellipse,#mermaid-mrnqc566-my-svg .node polygon,#mermaid-mrnqc566-my-svg .node path{fill:#FFFFFF;stroke:#E3DACC;stroke-width:1px;}#mermaid-mrnqc566-my-svg .rough-node .label text,#mermaid-mrnqc566-my-svg .node .label text,#mermaid-mrnqc566-my-svg .image-shape .label,#mermaid-mrnqc566-my-svg .icon-shape .label{text-anchor:middle;}#mermaid-mrnqc566-my-svg .node .katex path{fill:#000;stroke:#000;stroke-width:1px;}#mermaid-mrnqc566-my-svg .rough-node .label,#mermaid-mrnqc566-my-svg .node .label,#mermaid-mrnqc566-my-svg .image-shape .label,#mermaid-mrnqc566-my-svg .icon-shape .label{text-align:center;}#mermaid-mrnqc566-my-svg .node.clickable{cursor:pointer;}#mermaid-mrnqc566-my-svg .root .anchor path{fill:#D97757!important;stroke-width:0;stroke:#D97757;}#mermaid-mrnqc566-my-svg .arrowheadPath{fill:rgba(255, 255, 255, 0);}#mermaid-mrnqc566-my-svg .edgePath .path{stroke:#D97757;stroke-width:1px;}#mermaid-mrnqc566-my-svg .flowchart-link{stroke:#D97757;fill:none;}#mermaid-mrnqc566-my-svg .edgeLabel{background-color:#F0EEE6;text-align:center;}#mermaid-mrnqc566-my-svg .edgeLabel p{background-color:#F0EEE6;}#mermaid-mrnqc566-my-svg .edgeLabel rect{opacity:0.5;background-color:#F0EEE6;fill:#F0EEE6;}#mermaid-mrnqc566-my-svg .labelBkg{background-color:rgba(240, 238, 230, 0.5);}#mermaid-mrnqc566-my-svg .cluster rect{fill:#FAF9F5;stroke:hsl(48, 0%, 87.0588235294%);stroke-width:1px;}#mermaid-mrnqc566-my-svg .cluster text{fill:#05060a;}#mermaid-mrnqc566-my-svg .cluster span{color:#05060a;}#mermaid-mrnqc566-my-svg div.mermaidTooltip{position:absolute;text-align:center;max-width:200px;padding:2px;font-family:ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;font-size:12px;background:#FAF9F5;border:1px solid hsl(48, 0%, 87.0588235294%);border-radius:2px;pointer-events:none;z-index:100;}#mermaid-mrnqc566-my-svg .flowchartTitleText{text-anchor:middle;font-size:18px;fill:#141413;}#mermaid-mrnqc566-my-svg rect.text{fill:none;stroke-width:0;}#mermaid-mrnqc566-my-svg .icon-shape,#mermaid-mrnqc566-my-svg .image-shape{background-color:#F0EEE6;text-align:center;}#mermaid-mrnqc566-my-svg .icon-shape p,#mermaid-mrnqc566-my-svg .image-shape p{background-color:#F0EEE6;padding:2px;}#mermaid-mrnqc566-my-svg .icon-shape .label rect,#mermaid-mrnqc566-my-svg .image-shape .label rect{opacity:0.5;background-color:#F0EEE6;fill:#F0EEE6;}#mermaid-mrnqc566-my-svg .label-icon{display:inline-block;height:1em;overflow:visible;vertical-align:-0.125em;}#mermaid-mrnqc566-my-svg .node .label-icon path{fill:currentColor;stroke:revert;stroke-width:revert;}#mermaid-mrnqc566-my-svg .node .neo-node{stroke:#E3DACC;}#mermaid-mrnqc566-my-svg [data-look="neo"].node rect,#mermaid-mrnqc566-my-svg [data-look="neo"].cluster rect,#mermaid-mrnqc566-my-svg [data-look="neo"].node polygon{stroke:url(#mermaid-mrnqc566-my-svg-gradient);filter:drop-shadow( 1px 2px 2px rgba(185,185,185,1));}#mermaid-mrnqc566-my-svg [data-look="neo"].swimlane.cluster rect{filter:none;}#mermaid-mrnqc566-my-svg [data-look="neo"].node path{stroke:url(#mermaid-mrnqc566-my-svg-gradient);stroke-width:1px;}#mermaid-mrnqc566-my-svg [data-look="neo"].node .outer-path{filter:drop-shadow( 1px 2px 2px rgba(185,185,185,1));}#mermaid-mrnqc566-my-svg [data-look="neo"].node .neo-line path{stroke:#E3DACC;filter:none;}#mermaid-mrnqc566-my-svg [data-look="neo"].node circle{stroke:url(#mermaid-mrnqc566-my-svg-gradient);filter:drop-shadow( 1px 2px 2px rgba(185,185,185,1));}#mermaid-mrnqc566-my-svg [data-look="neo"].node circle .state-start{fill:#000000;}#mermaid-mrnqc566-my-svg [data-look="neo"].icon-shape .icon{fill:url(#mermaid-mrnqc566-my-svg-gradient);filter:drop-shadow( 1px 2px 2px rgba(185,185,185,1));}#mermaid-mrnqc566-my-svg [data-look="neo"].icon-shape .icon-neo path{stroke:url(#mermaid-mrnqc566-my-svg-gradient);filter:drop-shadow( 1px 2px 2px rgba(185,185,185,1));}#mermaid-mrnqc566-my-svg :root{--mermaid-font-family:"trebuchet ms",verdana,arial,sans-serif;}</style><g><marker id="mermaid-mrnqc566-my-svg_flowchart-v2-pointEnd" class="marker flowchart-v2" viewBox="0 0 10 10" refX="5" refY="5" markerUnits="userSpaceOnUse" markerWidth="8" markerHeight="8" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" class="arrowMarkerPath" style="stroke-width: 1; stroke-dasharray: 1, 0;"/></marker><marker id="mermaid-mrnqc566-my-svg_flowchart-v2-pointStart" class="marker flowchart-v2" viewBox="0 0 10 10" refX="4.5" refY="5" markerUnits="userSpaceOnUse" markerWidth="8" markerHeight="8" orient="auto"><path d="M 0 5 L 10 10 L 10 0 z" class="arrowMarkerPath" style="stroke-width: 1; stroke-dasharray: 1, 0;"/></marker><marker id="mermaid-mrnqc566-my-svg_flowchart-v2-pointEnd-margin" class="marker flowchart-v2" viewBox="0 0 11.5 14" refX="11.5" refY="7" markerUnits="userSpaceOnUse" markerWidth="10.5" markerHeight="14" orient="auto"><path d="M 0 0 L 11.5 7 L 0 14 z" class="arrowMarkerPath" style="stroke-width: 0; stroke-dasharray: 1, 0;"/></marker><marker id="mermaid-mrnqc566-my-svg_flowchart-v2-pointStart-margin" class="marker flowchart-v2" viewBox="0 0 11.5 14" refX="1" refY="7" markerUnits="userSpaceOnUse" markerWidth="11.5" markerHeight="14" orient="auto"><polygon points="0,7 11.5,14 11.5,0" class="arrowMarkerPath" style="stroke-width: 0; stroke-dasharray: 1, 0;"/></marker><marker id="mermaid-mrnqc566-my-svg_flowchart-v2-circleEnd" class="marker flowchart-v2" viewBox="0 0 10 10" refX="11" refY="5" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" orient="auto"><circle cx="5" cy="5" r="5" class="arrowMarkerPath" style="stroke-width: 1; stroke-dasharray: 1, 0;"/></marker><marker id="mermaid-mrnqc566-my-svg_flowchart-v2-circleStart" class="marker flowchart-v2" viewBox="0 0 10 10" refX="-1" refY="5" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" orient="auto"><circle cx="5" cy="5" r="5" class="arrowMarkerPath" style="stroke-width: 1; stroke-dasharray: 1, 0;"/></marker><marker id="mermaid-mrnqc566-my-svg_flowchart-v2-circleEnd-margin" class="marker flowchart-v2" viewBox="0 0 10 10" refY="5" refX="12.25" markerUnits="userSpaceOnUse" markerWidth="14" markerHeight="14" orient="auto"><circle cx="5" cy="5" r="5" class="arrowMarkerPath" style="stroke-width: 0; stroke-dasharray: 1, 0;"/></marker><marker id="mermaid-mrnqc566-my-svg_flowchart-v2-circleStart-margin" class="marker flowchart-v2" viewBox="0 0 10 10" refX="-2" refY="5" markerUnits="userSpaceOnUse" markerWidth="14" markerHeight="14" orient="auto"><circle cx="5" cy="5" r="5" class="arrowMarkerPath" style="stroke-width: 0; stroke-dasharray: 1, 0;"/></marker><marker id="mermaid-mrnqc566-my-svg_flowchart-v2-crossEnd" class="marker cross flowchart-v2" viewBox="0 0 11 11" refX="12" refY="5.2" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" orient="auto"><path d="M 1,1 l 9,9 M 10,1 l -9,9" class="arrowMarkerPath" style="stroke-width: 2; stroke-dasharray: 1, 0;"/></marker><marker id="mermaid-mrnqc566-my-svg_flowchart-v2-crossStart" class="marker cross flowchart-v2" viewBox="0 0 11 11" refX="-1" refY="5.2" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" orient="auto"><path d="M 1,1 l 9,9 M 10,1 l -9,9" class="arrowMarkerPath" style="stroke-width: 2; stroke-dasharray: 1, 0;"/></marker><marker id="mermaid-mrnqc566-my-svg_flowchart-v2-crossEnd-margin" class="marker cross flowchart-v2" viewBox="0 0 15 15" refX="17.7" refY="7.5" markerUnits="userSpaceOnUse" markerWidth="12" markerHeight="12" orient="auto"><path d="M 1,1 L 14,14 M 1,14 L 14,1" class="arrowMarkerPath" style="stroke-width: 2.5;"/></marker><marker id="mermaid-mrnqc566-my-svg_flowchart-v2-crossStart-margin" class="marker cross flowchart-v2" viewBox="0 0 15 15" refX="-3.5" refY="7.5" markerUnits="userSpaceOnUse" markerWidth="12" markerHeight="12" orient="auto"><path d="M 1,1 L 14,14 M 1,14 L 14,1" class="arrowMarkerPath" style="stroke-width: 2.5; stroke-dasharray: 1, 0;"/></marker><g class="root"><g class="clusters"/><g class="edgePaths"><path d="M245.711,62L245.711,66.167C245.711,70.333,245.711,78.667,245.711,86.333C245.711,94,245.711,101,245.711,104.5L245.711,108" id="mermaid-mrnqc566-my-svg-L_Start_Repo_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" data-edge="true" data-et="edge" data-id="mermaid-mrnqc566-L_Start_Repo_0" data-points="W3sieCI6MjQ1LjcxMDkzNzUsInkiOjYyfSx7IngiOjI0NS43MTA5Mzc1LCJ5Ijo4N30seyJ4IjoyNDUuNzEwOTM3NSwieSI6MTEyfV0=" data-look="classic" marker-end="url(#mermaid-mrnqc566-my-svg_flowchart-v2-pointEnd)"/><path d="M197.655,252.288L183.056,266.297C168.457,280.306,139.26,308.325,124.661,343.04C110.063,377.755,110.063,419.167,110.063,439.872L110.063,460.578" id="mermaid-mrnqc566-my-svg-L_Repo_NotRepo_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" data-edge="true" data-et="edge" data-id="mermaid-mrnqc566-L_Repo_NotRepo_0" data-points="W3sieCI6MTk3LjY1NDkxMjA1OTE0NzY4LCJ5IjoyNTIuMjg3NzI0NTU5MTQ3Njh9LHsieCI6MTEwLjA2MjUsInkiOjMzNi4zNDM3NX0seyJ4IjoxMTAuMDYyNSwieSI6NDY0LjU3ODEyNX1d" data-look="classic" marker-end="url(#mermaid-mrnqc566-my-svg_flowchart-v2-pointEnd)"/><path d="M293.767,252.288L308.366,266.297C322.964,280.306,352.162,308.325,366.761,327.668C381.359,347.01,381.359,357.677,381.359,363.01L381.359,368.344" id="mermaid-mrnqc566-my-svg-L_Repo_Head_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" data-edge="true" data-et="edge" data-id="mermaid-mrnqc566-L_Repo_Head_0" data-points="W3sieCI6MjkzLjc2Njk2Mjk0MDg1MjMsInkiOjI1Mi4yODc3MjQ1NTkxNDc2OH0seyJ4IjozODEuMzU5Mzc1LCJ5IjozMzYuMzQzNzV9LHsieCI6MzgxLjM1OTM3NSwieSI6MzcyLjM0Mzc1fV0=" data-look="classic" marker-end="url(#mermaid-mrnqc566-my-svg_flowchart-v2-pointEnd)"/><path d="M326.253,555.706L313.205,570.891C300.157,586.075,274.061,616.444,261.013,636.961C247.965,657.479,247.965,668.146,247.965,673.479L247.965,678.813" id="mermaid-mrnqc566-my-svg-L_Head_UseHead_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" data-edge="true" data-et="edge" data-id="mermaid-mrnqc566-L_Head_UseHead_0" data-points="W3sieCI6MzI2LjI1MzI3NDMzNzE4MTQ0LCJ5Ijo1NTUuNzA2Mzk5MzM3MTgxNH0seyJ4IjoyNDcuOTY0ODQzNzUsInkiOjY0Ni44MTI1fSx7IngiOjI0Ny45NjQ4NDM3NSwieSI6NjgyLjgxMjV9XQ==" data-look="classic" marker-end="url(#mermaid-mrnqc566-my-svg_flowchart-v2-pointEnd)"/><path d="M436.465,555.706L449.514,570.891C462.562,586.075,488.658,616.444,501.706,636.961C514.754,657.479,514.754,668.146,514.754,673.479L514.754,678.813" id="mermaid-mrnqc566-my-svg-L_Head_Empty_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" data-edge="true" data-et="edge" data-id="mermaid-mrnqc566-L_Head_Empty_0" data-points="W3sieCI6NDM2LjQ2NTQ3NTY2MjgxODU2LCJ5Ijo1NTUuNzA2Mzk5MzM3MTgxNH0seyJ4Ijo1MTQuNzUzOTA2MjUsInkiOjY0Ni44MTI1fSx7IngiOjUxNC43NTM5MDYyNSwieSI6NjgyLjgxMjV9XQ==" data-look="classic" marker-end="url(#mermaid-mrnqc566-my-svg_flowchart-v2-pointEnd)"/><path d="M514.754,736.813L514.754,740.979C514.754,745.146,514.754,753.479,514.754,761.146C514.754,768.813,514.754,775.813,514.754,779.313L514.754,782.813" id="mermaid-mrnqc566-my-svg-L_Empty_UseEmpty_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" data-edge="true" data-et="edge" data-id="mermaid-mrnqc566-L_Empty_UseEmpty_0" data-points="W3sieCI6NTE0Ljc1MzkwNjI1LCJ5Ijo3MzYuODEyNX0seyJ4Ijo1MTQuNzUzOTA2MjUsInkiOjc2MS44MTI1fSx7IngiOjUxNC43NTM5MDYyNSwieSI6Nzg2LjgxMjV9XQ==" data-look="classic" marker-end="url(#mermaid-mrnqc566-my-svg_flowchart-v2-pointEnd)"/></g><g class="edgeLabels"><g class="edgeLabel"><g class="label" data-id="mermaid-mrnqc566-L_Start_Repo_0" transform="translate(0, 0)"><text y="-10.1" text-anchor="middle"><tspan class="text-outer-tspan row" x="0" y="-0.1em" dy="1.1em" text-anchor="middle"/></text></g></g><g><rect class="background" style="stroke: none"/></g><g class="edgeLabel" transform="translate(110.0625, 336.34375)"><g class="label" data-id="mermaid-mrnqc566-L_Repo_NotRepo_0" transform="translate(0, -10)"><g><rect class="background" x="-9.9453125" y="-1" width="19.890625" height="22"/><text y="-10.1" text-anchor="middle"><tspan class="text-outer-tspan row" x="0" y="-0.1em" dy="1.1em" text-anchor="middle"><tspan font-style="normal" class="text-inner-tspan" font-weight="normal">否</tspan></tspan></text></g></g></g><g class="edgeLabel" transform="translate(381.359375, 336.34375)"><g class="label" data-id="mermaid-mrnqc566-L_Repo_Head_0" transform="translate(0, -10)"><g><rect class="background" x="-9.9453125" y="-1" width="19.890625" height="22"/><text y="-10.1" text-anchor="middle"><tspan class="text-outer-tspan row" x="0" y="-0.1em" dy="1.1em" text-anchor="middle"><tspan font-style="normal" class="text-inner-tspan" font-weight="normal">是</tspan></tspan></text></g></g></g><g class="edgeLabel" transform="translate(247.96484375, 646.8125)"><g class="label" data-id="mermaid-mrnqc566-L_Head_UseHead_0" transform="translate(0, -10)"><g><rect class="background" x="-9.9453125" y="-1" width="19.890625" height="22"/><text y="-10.1" text-anchor="middle"><tspan class="text-outer-tspan row" x="0" y="-0.1em" dy="1.1em" text-anchor="middle"><tspan font-style="normal" class="text-inner-tspan" font-weight="normal">是</tspan></tspan></text></g></g></g><g class="edgeLabel" transform="translate(514.75390625, 646.8125)"><g class="label" data-id="mermaid-mrnqc566-L_Head_Empty_0" transform="translate(0, -10)"><g><rect class="background" x="-9.9453125" y="-1" width="19.890625" height="22"/><text y="-10.1" text-anchor="middle"><tspan class="text-outer-tspan row" x="0" y="-0.1em" dy="1.1em" text-anchor="middle"><tspan font-style="normal" class="text-inner-tspan" font-weight="normal">否</tspan></tspan></text></g></g></g><g class="edgeLabel"><g class="label" data-id="mermaid-mrnqc566-L_Empty_UseEmpty_0" transform="translate(0, 0)"><text y="-10.1" text-anchor="middle"><tspan class="text-outer-tspan row" x="0" y="-0.1em" dy="1.1em" text-anchor="middle"/></text></g></g><g><rect class="background" style="stroke: none"/></g></g><g class="nodes"><g class="node default" id="mermaid-mrnqc566-my-svg-flowchart-Start-0" data-look="classic" transform="translate(245.7109375, 35)"><rect class="basic label-container" x="-61.7578125" y="-27" width="123.515625" height="54"/><g class="label" transform="translate(-31.7578125, -12)"><rect/><foreignObject width="63.515625" height="24"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="nodeLabel"><p>目前目錄</p></span></div></foreignObject></g></g><g class="node default" id="mermaid-mrnqc566-my-svg-flowchart-Repo-1" data-look="classic" transform="translate(245.7109375, 206.171875)"><polygon points="94.171875,0 188.34375,-94.171875 94.171875,-188.34375 0,-94.171875" class="label-container" transform="translate(-93.671875, 94.171875)"/><g class="label" transform="translate(-67.171875, -12)"><rect/><foreignObject width="134.34375" height="24"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="nodeLabel"><p>是 Git repository？</p></span></div></foreignObject></g></g><g class="node default" id="mermaid-mrnqc566-my-svg-flowchart-NotRepo-3" data-look="classic" transform="translate(110.0625, 491.578125)"><rect class="basic label-container" x="-102.0625" y="-27" width="204.125" height="54"/><g class="label" transform="translate(-72.0625, -12)"><rect/><foreignObject width="144.125" height="24"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="nodeLabel"><p>回報 Not Repository</p></span></div></foreignObject></g></g><g class="node default" id="mermaid-mrnqc566-my-svg-flowchart-Head-5" data-look="classic" transform="translate(381.359375, 491.578125)"><polygon points="119.234375,0 238.46875,-119.234375 119.234375,-238.46875 0,-119.234375" class="label-container" transform="translate(-118.734375, 119.234375)"/><g class="label" transform="translate(-92.234375, -12)"><rect/><foreignObject width="184.46875" height="24"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="nodeLabel"><p>HEAD 可解析成 commit？</p></span></div></foreignObject></g></g><g class="node default" id="mermaid-mrnqc566-my-svg-flowchart-UseHead-7" data-look="classic" transform="translate(247.96484375, 709.8125)"><rect class="basic label-container" x="-91.734375" y="-27" width="183.46875" height="54"/><g class="label" transform="translate(-61.734375, -12)"><rect/><foreignObject width="123.46875" height="24"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="nodeLabel"><p>Diff base：HEAD</p></span></div></foreignObject></g></g><g class="node default" id="mermaid-mrnqc566-my-svg-flowchart-Empty-9" data-look="classic" transform="translate(514.75390625, 709.8125)"><rect class="basic label-container" x="-125.0546875" y="-27" width="250.109375" height="54"/><g class="label" transform="translate(-95.0546875, -12)"><rect/><foreignObject width="190.109375" height="24"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="nodeLabel"><p>計算 Empty Tree Object ID</p></span></div></foreignObject></g></g><g class="node default" id="mermaid-mrnqc566-my-svg-flowchart-UseEmpty-11" data-look="classic" transform="translate(514.75390625, 813.8125)"><rect class="basic label-container" x="-129.7890625" y="-27" width="259.578125" height="54"/><g class="label" transform="translate(-99.7890625, -12)"><rect/><foreignObject width="199.578125" height="24"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="nodeLabel"><p>Diff base：零檔案 snapshot</p></span></div></foreignObject></g></g></g></g></g><defs><filter id="mermaid-mrnqc566-my-svg-drop-shadow" height="130%" width="130%"><feDropShadow dx="4" dy="4" stdDeviation="0" flood-opacity="0.06" flood-color="#000000"/></filter></defs><defs><filter id="mermaid-mrnqc566-my-svg-drop-shadow-small" height="150%" width="150%"><feDropShadow dx="2" dy="2" stdDeviation="0" flood-opacity="0.06" flood-color="#000000"/></filter></defs><linearGradient id="mermaid-mrnqc566-my-svg-gradient" gradientUnits="objectBoundingBox" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" stop-color="#E3DACC" stop-opacity="1"/><stop offset="100%" stop-color="hsl(48, 0%, 82.1568627451%)" stop-opacity="1"/></linearGradient></svg>
+          <svg class="flow-mobile" role="img" aria-labelledby="empty-tree-mobile-title empty-tree-mobile-desc" viewBox="0 0 360 610">
+            <title id="empty-tree-mobile-title">Git review base 的選擇流程</title>
+            <desc id="empty-tree-mobile-desc">已初始化的 repository 若有 HEAD commit，就以 HEAD 為 diff base；否則計算 empty tree object ID，代表零檔案 snapshot。</desc>
+            <defs>
+              <marker id="empty-tree-mobile-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--clay)"></path>
+              </marker>
+            </defs>
+
+            <g class="flow-node">
+              <rect x="80" y="12" width="200" height="48" rx="8"></rect>
+              <text class="flow-label" x="180" y="41" text-anchor="middle">目前目錄</text>
+            </g>
+            <path class="flow-arrow" d="M180 60 V88" marker-end="url(#empty-tree-mobile-arrow)"></path>
+
+            <g class="flow-node">
+              <polygon points="180,90 325,155 180,220 35,155"></polygon>
+              <text class="flow-label" x="180" y="151" text-anchor="middle">是 Git repository？</text>
+            </g>
+
+            <path class="flow-arrow" d="M35 155 H4 V250 H10" marker-end="url(#empty-tree-mobile-arrow)"></path>
+            <g class="flow-edge-label">
+              <rect x="10" y="184" width="28" height="20" rx="4"></rect>
+              <text x="24" y="198" text-anchor="middle">否</text>
+            </g>
+            <g class="flow-node">
+              <rect x="10" y="226" width="130" height="48" rx="8"></rect>
+              <text class="flow-label" x="75" y="255" text-anchor="middle">回報錯誤</text>
+            </g>
+
+            <path class="flow-arrow" d="M180 220 V270" marker-end="url(#empty-tree-mobile-arrow)"></path>
+            <g class="flow-edge-label">
+              <rect x="187" y="233" width="28" height="20" rx="4"></rect>
+              <text x="201" y="247" text-anchor="middle">是</text>
+            </g>
+            <g class="flow-node">
+              <polygon points="180,272 330,342 180,412 30,342"></polygon>
+              <text class="flow-label" x="180" y="337" text-anchor="middle">HEAD 可解析成</text>
+              <text class="flow-label" x="180" y="357" text-anchor="middle">commit？</text>
+            </g>
+
+            <path class="flow-arrow" d="M30 342 H15 V458 H55" marker-end="url(#empty-tree-mobile-arrow)"></path>
+            <g class="flow-edge-label">
+              <rect x="8" y="378" width="28" height="20" rx="4"></rect>
+              <text x="22" y="392" text-anchor="middle">是</text>
+            </g>
+            <g class="flow-node">
+              <rect x="59" y="434" width="126" height="52" rx="8"></rect>
+              <text class="flow-label" x="122" y="465" text-anchor="middle">Base：HEAD</text>
+            </g>
+
+            <path class="flow-arrow" d="M330 342 H345 V458 H305" marker-end="url(#empty-tree-mobile-arrow)"></path>
+            <g class="flow-edge-label">
+              <rect x="324" y="378" width="28" height="20" rx="4"></rect>
+              <text x="338" y="392" text-anchor="middle">否</text>
+            </g>
+            <g class="flow-node">
+              <rect x="194" y="426" width="142" height="68" rx="8"></rect>
+              <text class="flow-label" x="265" y="455" text-anchor="middle">計算 Empty Tree</text>
+              <text class="flow-label" x="265" y="475" text-anchor="middle">Object ID</text>
+            </g>
+
+            <path class="flow-arrow" d="M265 494 V532" marker-end="url(#empty-tree-mobile-arrow)"></path>
+            <g class="flow-node">
+              <rect x="184" y="536" width="162" height="58" rx="8"></rect>
+              <text class="flow-label" x="265" y="559" text-anchor="middle">Diff base：</text>
+              <text class="flow-label" x="265" y="579" text-anchor="middle">零檔案 snapshot</text>
+            </g>
+          </svg>
+          <figcaption>Empty tree 不是用來取代 git init；它只處理已初始化、但尚未有第一個 commit 的 repository。</figcaption>
+        </figure>
+
+        <p>這也是為什麼 Empty Tree Object ID 是比逐檔執行 <code>git diff --no-index /dev/null &lt;file&gt;</code> 更合適的整體 repository abstraction：前者代表一棵完整但為空的 tree，後者只是把單一檔案與空輸入比較。</p>
+      </section>
+
+      <section id="implementation">
+        <h2>安全且不過度設計的實作方式</h2>
+        <p>實務上可以先確認 <code>HEAD</code> 是否真的指向 commit：</p>
+        <pre class="language-shell"><span class="label">Shell</span><code><span class="sh-command">git</span> rev-parse <span class="sh-flag">--verify</span> <span class="sh-flag">--quiet</span> <span class="sh-string">'HEAD^{commit}'</span></code></pre>
+        <p>成功時使用 <code>HEAD</code>。若 exit code 明確表示名稱不存在，才讓 Git 依目前 repository 的 object format 計算 empty tree：</p>
+        <pre class="language-shell"><span class="label">Shell</span><code><span class="sh-command">git</span> hash-object <span class="sh-flag">-t</span> tree /dev/null</code></pre>
+        <p><code>-t tree</code> 指定 object type；<code>/dev/null</code> 提供零 bytes payload。命令沒有 <code>-w</code>，所以只計算 ID，不會把 object 寫入 object database，也不會建立 branch 或 commit。</p>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">const</span> baseResult <span class="o">=</span> <span class="k">yield</span><span class="o">*</span> <span class="f">execute</span><span class="o">(</span>
+  runner<span class="o">,</span>
+  <span class="s">"resolve review base"</span><span class="o">,</span>
+  <span class="o">[</span><span class="s">"rev-parse"</span><span class="o">,</span> <span class="s">"--verify"</span><span class="o">,</span> <span class="s">"--quiet"</span><span class="o">,</span> <span class="s">"HEAD^{commit}"</span><span class="o">]</span><span class="o">,</span>
+  <span class="n">1_024</span><span class="o">,</span>
+  repositoryRoot<span class="o">,</span>
+<span class="o">)</span><span class="o">;</span>
+
+<span class="k">if</span> <span class="o">(</span>baseResult<span class="o">.</span><span class="p">exitCode</span> <span class="o">!</span><span class="o">=</span><span class="o">=</span> <span class="n">0</span> <span class="o">&amp;</span><span class="o">&amp;</span> baseResult<span class="o">.</span><span class="p">exitCode</span> <span class="o">!</span><span class="o">=</span><span class="o">=</span> <span class="n">1</span><span class="o">)</span> <span class="o">{</span>
+  <span class="k">return</span> <span class="k">yield</span><span class="o">*</span> <span class="f">makeGitCommandError</span><span class="o">(</span><span class="s">"resolve review base"</span><span class="o">,</span> baseResult<span class="o">)</span><span class="o">;</span>
+<span class="o">}</span>
+
+<span class="k">const</span> base <span class="o">=</span> baseResult<span class="o">.</span><span class="p">exitCode</span> <span class="o">=</span><span class="o">=</span><span class="o">=</span> <span class="n">0</span>
+  <span class="o">?</span> <span class="s">"HEAD"</span>
+  <span class="o">:</span> <span class="k">yield</span><span class="o">*</span> <span class="f">resolveEmptyTree</span><span class="o">(</span>runner<span class="o">,</span> repositoryRoot<span class="o">)</span><span class="o">;</span></code></pre>
+
+        <h3>為什麼動態計算比寫死 SHA-1 常數好？</h3>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>方案</th><th>優點</th><th>限制</th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>寫死 <code>4b825d…</code></td>
+                <td>最短，不需額外 command</td>
+                <td>意圖像 magic string，且只適用 SHA-1 object format</td>
+              </tr>
+              <tr>
+                <td>依格式維護常數表</td>
+                <td>可支援 SHA-1 與 SHA-256</td>
+                <td>仍需判斷格式並維護 Git 已知道的資料</td>
+              </tr>
+              <tr>
+                <td>呼叫 <code>git hash-object</code></td>
+                <td>由 Git 決定格式，意圖清楚，不寫入 repository</td>
+                <td>unborn HEAD 情況多一次很小的 process call</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p>第三種做法在一般 CLI 或 code-review 工具裡是平衡的選擇：額外 command 只會發生在第一個 commit 之前，沒有引入新的 object abstraction、cache 或 hashing implementation。</p>
+
+        <div class="callout">
+          <p><strong>平台邊界：</strong><code>/dev/null</code> 是 Unix 路徑。如果工具需要完整支援 Windows，command runner 應支援空 stdin，並改用 <code>git hash-object -t tree --stdin</code>。這是跨平台需求出現時才需要處理的演進，不必為目前不存在的需求先擴張架構。</p>
+        </div>
+      </section>
+
+      <section>
+        <h2>常見誤解</h2>
+        <ul>
+          <li><strong>「使用 empty tree 表示還沒 git init。」</strong>不對。尚未初始化時應回報不是 Git repository；empty tree 只處理已初始化但沒有第一個 commit 的狀態。</li>
+          <li><strong>「Empty Tree Object ID 是隨機 magic value。」</strong>不對。它是固定 byte sequence 經指定 hash algorithm 計算出的 content address。</li>
+          <li><strong>「Empty tree 就是 empty commit。」</strong>不對。tree 描述目錄內容；commit 則包含 metadata 並指向 tree。</li>
+          <li><strong>「執行 hash-object 會污染 repository。」</strong>只有加上 <code>-w</code> 才會寫入；本文使用的命令只計算 ID。</li>
+          <li><strong>「HEAD 檔案存在就代表已有 commit。」</strong>不對。unborn branch 的 <code>.git/HEAD</code> 已存在，但尚未能解析成 commit。</li>
+        </ul>
+      </section>
+
+      <section class="sources">
+        <h2>延伸閱讀</h2>
+        <ul>
+          <li><a href="https://git-scm.com/docs/gitformat-loose/2.52.0.html">Git 官方文件：Loose object format</a>——包含 object header 與 SHA-256 empty tree 範例。</li>
+          <li><a href="https://git-scm.com/docs/git-hash-object.html">Git 官方文件：git hash-object</a>——說明 object type、stdin 與 <code>-w</code> 行為。</li>
+          <li><a href="https://git-scm.com/docs/git-rev-parse.html">Git 官方文件：git rev-parse</a>——說明 <code>--verify</code>、peeling syntax 與 object format。</li>
+          <li><a href="https://git-scm.com/docs/user-manual">Git User Manual：Object database</a>——介紹 blob、tree、commit 與 content-addressed storage。</li>
+        </ul>
+      </section>
+    </article>
+  </main>
+
+  <script>
+    (() => {
+      const copyIcon = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="11" height="11" rx="2"></rect><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"></path></svg>';
+      const checkIcon = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"></path></svg>';
+
+      const copyText = async (text) => {
+        if (navigator.clipboard && window.isSecureContext) {
+          await navigator.clipboard.writeText(text);
+          return;
+        }
+
+        const textarea = document.createElement('textarea');
+        textarea.value = text;
+        textarea.style.position = 'fixed';
+        textarea.style.opacity = '0';
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand('copy');
+        textarea.remove();
+      };
+
+      document.querySelectorAll('pre').forEach((pre) => {
+        const code = pre.querySelector('code');
+        if (!code) return;
+
+        const button = document.createElement('button');
+        button.className = 'copy-code';
+        button.type = 'button';
+        button.setAttribute('aria-label', '複製程式碼');
+        button.innerHTML = copyIcon;
+        button.addEventListener('click', async () => {
+          await copyText(code.textContent || '');
+          button.classList.add('copied');
+          button.innerHTML = checkIcon;
+          window.setTimeout(() => {
+            button.classList.remove('copied');
+            button.innerHTML = copyIcon;
+          }, 1400);
+        });
+        pre.appendChild(button);
+
+        const track = document.createElement('div');
+        const thumb = document.createElement('div');
+        track.className = 'code-scrollbar hidden';
+        thumb.className = 'code-scrollbar-thumb';
+        track.appendChild(thumb);
+        pre.appendChild(track);
+
+        const sync = () => {
+          const overflow = code.scrollWidth - code.clientWidth;
+          track.classList.toggle('hidden', overflow <= 0);
+          if (overflow <= 0) return;
+          const width = Math.max(24, track.clientWidth * code.clientWidth / code.scrollWidth);
+          const left = code.scrollLeft / overflow * (track.clientWidth - width);
+          thumb.style.width = `${width}px`;
+          thumb.style.transform = `translateX(${left}px)`;
+        };
+
+        code.addEventListener('scroll', sync, { passive: true });
+        window.addEventListener('resize', sync, { passive: true });
+        requestAnimationFrame(sync);
+      });
+    })();
+  </script>
+</body>
+</html>
