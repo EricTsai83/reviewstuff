@@ -1,0 +1,557 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>git-service.ts 完整程式碼導讀</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --clay: #D97757;
+      --slate: #141413;
+      --ivory: #FAF9F5;
+      --oat: #E3DACC;
+      --white: #FFFFFF;
+      --gray-100: #F0EEE6;
+      --gray-300: #D1CFC5;
+      --gray-500: #87867F;
+      --gray-700: #3D3D3A;
+      --warning: #C78E3F;
+      --space-sm: 8px;
+      --space-md: 12px;
+      --space-lg: 16px;
+      --space-xl: 24px;
+      --space-2xl: 32px;
+      --space-3xl: 48px;
+      --radius-sm: 4px;
+      --radius-md: 8px;
+      --content-width: 68ch;
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      background: var(--ivory);
+      color: var(--slate);
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 16px;
+      font-weight: 430;
+      line-height: 1.65;
+    }
+    main {
+      max-width: var(--content-width);
+      margin: 0 auto;
+      padding: var(--space-3xl) var(--space-xl) 72px;
+    }
+    article { background: transparent; border: 0; padding: 0; }
+    h1 {
+      margin: 0 0 var(--space-lg);
+      font-size: 1.8rem;
+      line-height: 1.18;
+      letter-spacing: -0.02em;
+      text-wrap: balance;
+    }
+    h2 {
+      margin: var(--space-3xl) 0 var(--space-lg);
+      padding-top: var(--space-sm);
+      border-top: 1px solid var(--oat);
+      font-size: 1.22rem;
+      line-height: 1.25;
+    }
+    h3 { margin: var(--space-2xl) 0 var(--space-md); font-size: 1rem; line-height: 1.35; }
+    p, ul, ol, .deck, .callout, table, pre { max-width: var(--content-width); }
+    p { margin: 0 0 var(--space-lg); }
+    ul, ol { margin: 0 0 var(--space-xl); padding-left: 1.4rem; }
+    li + li { margin-top: 0.38rem; }
+    .deck { color: var(--gray-700); font-size: 1.06rem; margin-bottom: var(--space-2xl); }
+    a { color: var(--clay); text-decoration-thickness: 1px; text-underline-offset: 3px; }
+    a:hover { text-decoration-thickness: 2px; }
+    :not(pre) > code {
+      padding: 0.08em 0.3em;
+      border: 1px solid var(--oat);
+      border-radius: var(--radius-sm);
+      background: var(--gray-100);
+      overflow-wrap: anywhere;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.9em;
+    }
+    .toc {
+      margin: var(--space-2xl) 0;
+      padding: var(--space-lg) var(--space-xl);
+      border-left: 3px solid var(--clay);
+      background: var(--gray-100);
+    }
+    .toc strong { display: block; margin-bottom: var(--space-sm); }
+    .toc ol { columns: 2; margin: 0; padding-left: 1.2rem; }
+    .toc li { break-inside: avoid; }
+    table {
+      width: 100%;
+      margin: var(--space-lg) 0 var(--space-xl);
+      border-collapse: collapse;
+      font-size: 0.93rem;
+    }
+    th, td { padding: 10px 12px; border: 1px solid var(--oat); text-align: left; vertical-align: top; }
+    th { background: var(--gray-100); font-weight: 680; }
+    td:first-child { white-space: nowrap; }
+    .table-wrap { max-width: 100%; overflow-x: auto; }
+    .callout {
+      margin: var(--space-xl) 0;
+      padding: var(--space-lg) var(--space-xl);
+      border: 1px solid var(--oat);
+      border-left: 4px solid var(--clay);
+      border-radius: 0 var(--radius-md) var(--radius-md) 0;
+      background: var(--gray-100);
+    }
+    .callout.warning { border-left-color: var(--warning); }
+    .callout p:last-child { margin-bottom: 0; }
+    .callout strong { display: block; margin-bottom: 4px; }
+    pre {
+      position: relative;
+      width: 100%;
+      margin: var(--space-lg) 0 var(--space-xl);
+      border: 1px solid #26241f;
+      border-radius: var(--radius-md);
+      background: #11110f;
+      color: #d8d4ca;
+      overflow: hidden;
+    }
+    pre code {
+      display: block;
+      border: 0;
+      background: transparent;
+      padding: 18px 64px 18px 22px;
+      color: inherit;
+      overflow-x: auto;
+      white-space: pre;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.875rem;
+      font-weight: 400;
+      line-height: 1.62;
+      scrollbar-width: none;
+    }
+    pre code::-webkit-scrollbar { width: 0; height: 0; }
+    pre .label { display: none; }
+    pre code .k { color: #ff946e; font-weight: 400; }
+    pre code .s { color: #8fb86a; }
+    pre code .n, pre code .p { color: #d8d4ca; }
+    pre code .c { color: #858177; font-style: italic; }
+    pre code .f, pre code .t { color: #cfc6a2; font-weight: 400; }
+    pre code .o { color: #ff946e; }
+    .copy-code {
+      position: absolute; top: 9px; right: 9px; z-index: 1;
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 30px; height: 30px; padding: 0;
+      border: 1px solid rgba(250, 249, 245, 0.14);
+      border-radius: var(--radius-sm);
+      background: rgba(250, 249, 245, 0.06);
+      color: rgba(250, 249, 245, 0.72);
+      cursor: pointer;
+    }
+    .copy-code:hover, .copy-code:focus-visible {
+      border-color: rgba(250, 249, 245, 0.28);
+      background: rgba(250, 249, 245, 0.12);
+      color: var(--ivory);
+      outline: none;
+    }
+    .copy-code.copied { border-color: rgba(143, 184, 106, 0.42); background: rgba(143, 184, 106, 0.14); color: #b8d99a; }
+    .copy-code svg { width: 13px; height: 13px; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; fill: none; pointer-events: none; }
+    .code-scrollbar { position: absolute; right: 0; bottom: 0; left: 0; height: 3px; border-radius: 999px; background: rgba(250, 249, 245, 0.1); cursor: pointer; }
+    .code-scrollbar.hidden { display: none; }
+    .code-scrollbar-thumb { height: 100%; border-radius: inherit; background: rgba(255, 148, 110, 0.82); transform: translateX(0); cursor: grab; }
+    .code-scrollbar-thumb:active { cursor: grabbing; }
+    .flow-figure { margin: var(--space-xl) 0 var(--space-2xl); overflow-x: auto; }
+    .flow-figure svg { display: block; width: 100%; height: auto; }
+    .flow-figure figcaption { margin-top: var(--space-md); color: var(--gray-700); font-size: 0.9rem; }
+    .section-map td:nth-child(2) { min-width: 15rem; }
+    .source-note { margin-top: var(--space-3xl); padding-top: var(--space-lg); border-top: 1px solid var(--oat); color: var(--gray-700); font-size: 0.9rem; }
+
+    @media (max-width: 640px) {
+      body { font-size: 15px; }
+      h1 { font-size: 1.65rem; }
+      main { padding: var(--space-xl); }
+      pre code { font-size: 0.8125rem; line-height: 1.5; }
+      p code, li code, td code { font-size: 0.9em; }
+      table, .deck, .source-note { font-size: 0.875rem; }
+      .toc ol { columns: 1; }
+      td:first-child { white-space: normal; }
+      .flow-figure svg { min-width: 520px; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <article>
+      <h1><code>git-service.ts</code> 完整程式碼導讀</h1>
+      <p class="deck">這個模組把 Git repository 中適合送去 code review 的文字差異，轉成有型別的 Effect service。它不只是執行 <code>git diff</code>：還要處理 staged、unstaged、untracked、rename、初始 repository、大檔案、binary patch、timeout、coverage 與可預期錯誤。</p>
+
+      <nav class="toc" aria-label="本文目錄">
+        <strong>閱讀路徑</strong>
+        <ol>
+          <li><a href="#scope">範圍與心智模型</a></li>
+          <li><a href="#contracts">常數與資料契約</a></li>
+          <li><a href="#service">錯誤與 service 介面</a></li>
+          <li><a href="#commands">Git 指令執行層</a></li>
+          <li><a href="#paths">路徑解析與合併</a></li>
+          <li><a href="#limits">檔案與輸出限制</a></li>
+          <li><a href="#patches">patch 讀取流程</a></li>
+          <li><a href="#orchestration">readDiff 總流程</a></li>
+          <li><a href="#layer">Layer 組裝</a></li>
+          <li><a href="#map">全檔案函式地圖</a></li>
+        </ol>
+      </nav>
+
+      <section id="scope">
+        <h2>1. 這個檔案負責什麼</h2>
+        <p><code>GitService</code> 對外只提供一個能力：<code>readDiff(scope)</code>。呼叫端給它 review 範圍，它回傳文字 patch 與明確標記的略過檔案；失敗時則以 <code>GitError</code> 中的其中一種錯誤結束。</p>
+        <p>兩個外部依賴各自扮演以下角色：<code>CommandRunner</code> 執行 Git 指令並限制合併輸出，<code>FileInspector</code> 取得 working tree 中的檔案大小。本文以本檔案為主，只有在解釋直接依賴的資料契約時才補充對應的 domain 與 platform contract。</p>
+
+        <h3>兩種 review 路徑</h3>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>scope 判斷</th><th>收集內容</th><th>diff 基準</th></tr></thead>
+            <tbody>
+              <tr><td><code>scope === "staged"</code></td><td>只處理 index 中已 staged 的路徑</td><td><code>git diff --cached</code></td></tr>
+              <tr><td><code>scope === "working-tree"</code></td><td>合併 staged 與 unstaged 的 tracked 路徑，另外加入 untracked</td><td>tracked 用 <code>HEAD</code>（初始 repository 用空 tree）對目前 working tree；untracked 用 <code>/dev/null</code> 對檔案</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p>完整模式不是「先產生 staged patch，再接上 unstaged patch」。它只合併兩邊出現過的路徑，然後從 review base 到目前 working tree 產生每個 tracked 檔案的單一 patch。因此，同一檔案同時有 staged 與 unstaged 修改時，結果仍只有一份 <code>source: "working-tree"</code> 的完整差異。</p>
+
+        <figure class="flow-figure">
+  <svg id="mermaid-mrnb2hwm-my-svg" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" class="flowchart" viewBox="0 0 533.90625 992.046875" aria-roledescription="flowchart-v2" role="img" aria-labelledby="mermaid-mrnb2hwm-title mermaid-mrnb2hwm-desc"><title id="mermaid-mrnb2hwm-title">GitService 的 readDiff 流程</title><desc id="mermaid-mrnb2hwm-desc">先確認 Git repository，再依 scope 分成 staged-only 與完整 working tree 兩條路徑，最後回傳包含文字 patch 與 skipped coverage 的 GitDiff。</desc><style>#mermaid-mrnb2hwm-my-svg{font-family:ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;font-size:16px;fill:#141413;}@keyframes edge-animation-frame{from{stroke-dashoffset:0;}}@keyframes dash{to{stroke-dashoffset:0;}}#mermaid-mrnb2hwm-my-svg .edge-animation-slow{stroke-dasharray:9,5!important;stroke-dashoffset:900;animation:dash 50s linear infinite;stroke-linecap:round;}#mermaid-mrnb2hwm-my-svg .edge-animation-fast{stroke-dasharray:9,5!important;stroke-dashoffset:900;animation:dash 20s linear infinite;stroke-linecap:round;}#mermaid-mrnb2hwm-my-svg .error-icon{fill:#FAF9F5;}#mermaid-mrnb2hwm-my-svg .error-text{fill:#05060a;stroke:#05060a;}#mermaid-mrnb2hwm-my-svg .edge-thickness-normal{stroke-width:1px;}#mermaid-mrnb2hwm-my-svg .edge-thickness-thick{stroke-width:3.5px;}#mermaid-mrnb2hwm-my-svg .edge-pattern-solid{stroke-dasharray:0;}#mermaid-mrnb2hwm-my-svg .edge-thickness-invisible{stroke-width:0;fill:none;}#mermaid-mrnb2hwm-my-svg .edge-pattern-dashed{stroke-dasharray:3;}#mermaid-mrnb2hwm-my-svg .edge-pattern-dotted{stroke-dasharray:2;}#mermaid-mrnb2hwm-my-svg .marker{fill:#D97757;stroke:#D97757;}#mermaid-mrnb2hwm-my-svg .marker.cross{stroke:#D97757;}#mermaid-mrnb2hwm-my-svg svg{font-family:ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;font-size:16px;}#mermaid-mrnb2hwm-my-svg p{margin:0;}#mermaid-mrnb2hwm-my-svg .label{font-family:ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;color:#141413;}#mermaid-mrnb2hwm-my-svg .cluster-label text{fill:#05060a;}#mermaid-mrnb2hwm-my-svg .cluster-label span{color:#05060a;}#mermaid-mrnb2hwm-my-svg .cluster-label span p{background-color:transparent;}#mermaid-mrnb2hwm-my-svg .label text,#mermaid-mrnb2hwm-my-svg span{fill:#141413;color:#141413;}#mermaid-mrnb2hwm-my-svg .node rect,#mermaid-mrnb2hwm-my-svg .node circle,#mermaid-mrnb2hwm-my-svg .node ellipse,#mermaid-mrnb2hwm-my-svg .node polygon,#mermaid-mrnb2hwm-my-svg .node path{fill:#FFFFFF;stroke:#E3DACC;stroke-width:1px;}#mermaid-mrnb2hwm-my-svg .rough-node .label text,#mermaid-mrnb2hwm-my-svg .node .label text,#mermaid-mrnb2hwm-my-svg .image-shape .label,#mermaid-mrnb2hwm-my-svg .icon-shape .label{text-anchor:middle;}#mermaid-mrnb2hwm-my-svg .node .katex path{fill:#000;stroke:#000;stroke-width:1px;}#mermaid-mrnb2hwm-my-svg .rough-node .label,#mermaid-mrnb2hwm-my-svg .node .label,#mermaid-mrnb2hwm-my-svg .image-shape .label,#mermaid-mrnb2hwm-my-svg .icon-shape .label{text-align:center;}#mermaid-mrnb2hwm-my-svg .node.clickable{cursor:pointer;}#mermaid-mrnb2hwm-my-svg .root .anchor path{fill:#D97757!important;stroke-width:0;stroke:#D97757;}#mermaid-mrnb2hwm-my-svg .arrowheadPath{fill:rgba(255, 255, 255, 0);}#mermaid-mrnb2hwm-my-svg .edgePath .path{stroke:#D97757;stroke-width:1px;}#mermaid-mrnb2hwm-my-svg .flowchart-link{stroke:#D97757;fill:none;}#mermaid-mrnb2hwm-my-svg .edgeLabel{background-color:#F0EEE6;text-align:center;}#mermaid-mrnb2hwm-my-svg .edgeLabel p{background-color:#F0EEE6;}#mermaid-mrnb2hwm-my-svg .edgeLabel rect{opacity:0.5;background-color:#F0EEE6;fill:#F0EEE6;}#mermaid-mrnb2hwm-my-svg .labelBkg{background-color:rgba(240, 238, 230, 0.5);}#mermaid-mrnb2hwm-my-svg .cluster rect{fill:#FAF9F5;stroke:hsl(48, 0%, 87.0588235294%);stroke-width:1px;}#mermaid-mrnb2hwm-my-svg .cluster text{fill:#05060a;}#mermaid-mrnb2hwm-my-svg .cluster span{color:#05060a;}#mermaid-mrnb2hwm-my-svg div.mermaidTooltip{position:absolute;text-align:center;max-width:200px;padding:2px;font-family:ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;font-size:12px;background:#FAF9F5;border:1px solid hsl(48, 0%, 87.0588235294%);border-radius:2px;pointer-events:none;z-index:100;}#mermaid-mrnb2hwm-my-svg .flowchartTitleText{text-anchor:middle;font-size:18px;fill:#141413;}#mermaid-mrnb2hwm-my-svg rect.text{fill:none;stroke-width:0;}#mermaid-mrnb2hwm-my-svg .icon-shape,#mermaid-mrnb2hwm-my-svg .image-shape{background-color:#F0EEE6;text-align:center;}#mermaid-mrnb2hwm-my-svg .icon-shape p,#mermaid-mrnb2hwm-my-svg .image-shape p{background-color:#F0EEE6;padding:2px;}#mermaid-mrnb2hwm-my-svg .icon-shape .label rect,#mermaid-mrnb2hwm-my-svg .image-shape .label rect{opacity:0.5;background-color:#F0EEE6;fill:#F0EEE6;}#mermaid-mrnb2hwm-my-svg .label-icon{display:inline-block;height:1em;overflow:visible;vertical-align:-0.125em;}#mermaid-mrnb2hwm-my-svg .node .label-icon path{fill:currentColor;stroke:revert;stroke-width:revert;}#mermaid-mrnb2hwm-my-svg .node .neo-node{stroke:#E3DACC;}#mermaid-mrnb2hwm-my-svg [data-look="neo"].node rect,#mermaid-mrnb2hwm-my-svg [data-look="neo"].cluster rect,#mermaid-mrnb2hwm-my-svg [data-look="neo"].node polygon{stroke:url(#mermaid-mrnb2hwm-my-svg-gradient);filter:drop-shadow( 1px 2px 2px rgba(185,185,185,1));}#mermaid-mrnb2hwm-my-svg [data-look="neo"].swimlane.cluster rect{filter:none;}#mermaid-mrnb2hwm-my-svg [data-look="neo"].node path{stroke:url(#mermaid-mrnb2hwm-my-svg-gradient);stroke-width:1px;}#mermaid-mrnb2hwm-my-svg [data-look="neo"].node .outer-path{filter:drop-shadow( 1px 2px 2px rgba(185,185,185,1));}#mermaid-mrnb2hwm-my-svg [data-look="neo"].node .neo-line path{stroke:#E3DACC;filter:none;}#mermaid-mrnb2hwm-my-svg [data-look="neo"].node circle{stroke:url(#mermaid-mrnb2hwm-my-svg-gradient);filter:drop-shadow( 1px 2px 2px rgba(185,185,185,1));}#mermaid-mrnb2hwm-my-svg [data-look="neo"].node circle .state-start{fill:#000000;}#mermaid-mrnb2hwm-my-svg [data-look="neo"].icon-shape .icon{fill:url(#mermaid-mrnb2hwm-my-svg-gradient);filter:drop-shadow( 1px 2px 2px rgba(185,185,185,1));}#mermaid-mrnb2hwm-my-svg [data-look="neo"].icon-shape .icon-neo path{stroke:url(#mermaid-mrnb2hwm-my-svg-gradient);filter:drop-shadow( 1px 2px 2px rgba(185,185,185,1));}#mermaid-mrnb2hwm-my-svg :root{--mermaid-font-family:"trebuchet ms",verdana,arial,sans-serif;}</style><g><marker id="mermaid-mrnb2hwm-my-svg_flowchart-v2-pointEnd" class="marker flowchart-v2" viewBox="0 0 10 10" refX="5" refY="5" markerUnits="userSpaceOnUse" markerWidth="8" markerHeight="8" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" class="arrowMarkerPath" style="stroke-width: 1; stroke-dasharray: 1, 0;"/></marker><marker id="mermaid-mrnb2hwm-my-svg_flowchart-v2-pointStart" class="marker flowchart-v2" viewBox="0 0 10 10" refX="4.5" refY="5" markerUnits="userSpaceOnUse" markerWidth="8" markerHeight="8" orient="auto"><path d="M 0 5 L 10 10 L 10 0 z" class="arrowMarkerPath" style="stroke-width: 1; stroke-dasharray: 1, 0;"/></marker><marker id="mermaid-mrnb2hwm-my-svg_flowchart-v2-pointEnd-margin" class="marker flowchart-v2" viewBox="0 0 11.5 14" refX="11.5" refY="7" markerUnits="userSpaceOnUse" markerWidth="10.5" markerHeight="14" orient="auto"><path d="M 0 0 L 11.5 7 L 0 14 z" class="arrowMarkerPath" style="stroke-width: 0; stroke-dasharray: 1, 0;"/></marker><marker id="mermaid-mrnb2hwm-my-svg_flowchart-v2-pointStart-margin" class="marker flowchart-v2" viewBox="0 0 11.5 14" refX="1" refY="7" markerUnits="userSpaceOnUse" markerWidth="11.5" markerHeight="14" orient="auto"><polygon points="0,7 11.5,14 11.5,0" class="arrowMarkerPath" style="stroke-width: 0; stroke-dasharray: 1, 0;"/></marker><marker id="mermaid-mrnb2hwm-my-svg_flowchart-v2-circleEnd" class="marker flowchart-v2" viewBox="0 0 10 10" refX="11" refY="5" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" orient="auto"><circle cx="5" cy="5" r="5" class="arrowMarkerPath" style="stroke-width: 1; stroke-dasharray: 1, 0;"/></marker><marker id="mermaid-mrnb2hwm-my-svg_flowchart-v2-circleStart" class="marker flowchart-v2" viewBox="0 0 10 10" refX="-1" refY="5" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" orient="auto"><circle cx="5" cy="5" r="5" class="arrowMarkerPath" style="stroke-width: 1; stroke-dasharray: 1, 0;"/></marker><marker id="mermaid-mrnb2hwm-my-svg_flowchart-v2-circleEnd-margin" class="marker flowchart-v2" viewBox="0 0 10 10" refY="5" refX="12.25" markerUnits="userSpaceOnUse" markerWidth="14" markerHeight="14" orient="auto"><circle cx="5" cy="5" r="5" class="arrowMarkerPath" style="stroke-width: 0; stroke-dasharray: 1, 0;"/></marker><marker id="mermaid-mrnb2hwm-my-svg_flowchart-v2-circleStart-margin" class="marker flowchart-v2" viewBox="0 0 10 10" refX="-2" refY="5" markerUnits="userSpaceOnUse" markerWidth="14" markerHeight="14" orient="auto"><circle cx="5" cy="5" r="5" class="arrowMarkerPath" style="stroke-width: 0; stroke-dasharray: 1, 0;"/></marker><marker id="mermaid-mrnb2hwm-my-svg_flowchart-v2-crossEnd" class="marker cross flowchart-v2" viewBox="0 0 11 11" refX="12" refY="5.2" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" orient="auto"><path d="M 1,1 l 9,9 M 10,1 l -9,9" class="arrowMarkerPath" style="stroke-width: 2; stroke-dasharray: 1, 0;"/></marker><marker id="mermaid-mrnb2hwm-my-svg_flowchart-v2-crossStart" class="marker cross flowchart-v2" viewBox="0 0 11 11" refX="-1" refY="5.2" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" orient="auto"><path d="M 1,1 l 9,9 M 10,1 l -9,9" class="arrowMarkerPath" style="stroke-width: 2; stroke-dasharray: 1, 0;"/></marker><marker id="mermaid-mrnb2hwm-my-svg_flowchart-v2-crossEnd-margin" class="marker cross flowchart-v2" viewBox="0 0 15 15" refX="17.7" refY="7.5" markerUnits="userSpaceOnUse" markerWidth="12" markerHeight="12" orient="auto"><path d="M 1,1 L 14,14 M 1,14 L 14,1" class="arrowMarkerPath" style="stroke-width: 2.5;"/></marker><marker id="mermaid-mrnb2hwm-my-svg_flowchart-v2-crossStart-margin" class="marker cross flowchart-v2" viewBox="0 0 15 15" refX="-3.5" refY="7.5" markerUnits="userSpaceOnUse" markerWidth="12" markerHeight="12" orient="auto"><path d="M 1,1 L 14,14 M 1,14 L 14,1" class="arrowMarkerPath" style="stroke-width: 2.5; stroke-dasharray: 1, 0;"/></marker><g class="root"><g class="clusters"/><g class="edgePaths"><path d="M253.93,86L253.93,90.167C253.93,94.333,253.93,102.667,253.93,110.333C253.93,118,253.93,125,253.93,128.5L253.93,132" id="mermaid-mrnb2hwm-my-svg-L_A_B_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" data-edge="true" data-et="edge" data-id="mermaid-mrnb2hwm-L_A_B_0" data-points="W3sieCI6MjUzLjkyOTY4NzUsInkiOjg2fSx7IngiOjI1My45Mjk2ODc1LCJ5IjoxMTF9LHsieCI6MjUzLjkyOTY4NzUsInkiOjEzNn1d" data-look="classic" marker-end="url(#mermaid-mrnb2hwm-my-svg_flowchart-v2-pointEnd)"/><path d="M253.93,190L253.93,194.167C253.93,198.333,253.93,206.667,253.93,214.333C253.93,222,253.93,229,253.93,232.5L253.93,236" id="mermaid-mrnb2hwm-my-svg-L_B_C_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" data-edge="true" data-et="edge" data-id="mermaid-mrnb2hwm-L_B_C_0" data-points="W3sieCI6MjUzLjkyOTY4NzUsInkiOjE5MH0seyJ4IjoyNTMuOTI5Njg3NSwieSI6MjE1fSx7IngiOjI1My45Mjk2ODc1LCJ5IjoyNDB9XQ==" data-look="classic" marker-end="url(#mermaid-mrnb2hwm-my-svg_flowchart-v2-pointEnd)"/><path d="M204.852,378.969L189.369,393.149C173.886,407.328,142.919,435.688,127.436,462.367C111.953,489.047,111.953,514.047,111.953,539.047C111.953,564.047,111.953,589.047,111.953,614.047C111.953,639.047,111.953,664.047,111.953,687.214C111.953,710.38,111.953,731.714,111.953,747.88C111.953,764.047,111.953,775.047,111.953,780.547L111.953,786.047" id="mermaid-mrnb2hwm-my-svg-L_C_D_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" data-edge="true" data-et="edge" data-id="mermaid-mrnb2hwm-L_C_D_0" data-points="W3sieCI6MjA0Ljg1MjAyNDA3ODM2OTE0LCJ5IjozNzguOTY5MjExNTc4MzY5MTR9LHsieCI6MTExLjk1MzEyNSwieSI6NDY0LjA0Njg3NX0seyJ4IjoxMTEuOTUzMTI1LCJ5Ijo1MzkuMDQ2ODc1fSx7IngiOjExMS45NTMxMjUsInkiOjYxNC4wNDY4NzV9LHsieCI6MTExLjk1MzEyNSwieSI6Njg5LjA0Njg3NX0seyJ4IjoxMTEuOTUzMTI1LCJ5Ijo3NTMuMDQ2ODc1fSx7IngiOjExMS45NTMxMjUsInkiOjc5MC4wNDY4NzV9XQ==" data-look="classic" marker-end="url(#mermaid-mrnb2hwm-my-svg_flowchart-v2-pointEnd)"/><path d="M303.007,378.969L318.491,393.149C333.974,407.328,364.94,435.688,380.423,455.201C395.906,474.714,395.906,485.38,395.906,490.714L395.906,496.047" id="mermaid-mrnb2hwm-my-svg-L_C_E_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" data-edge="true" data-et="edge" data-id="mermaid-mrnb2hwm-L_C_E_0" data-points="W3sieCI6MzAzLjAwNzM1MDkyMTYzMDg2LCJ5IjozNzguOTY5MjExNTc4MzY5MTR9LHsieCI6Mzk1LjkwNjI1LCJ5Ijo0NjQuMDQ2ODc1fSx7IngiOjM5NS45MDYyNSwieSI6NTAwLjA0Njg3NX1d" data-look="classic" marker-end="url(#mermaid-mrnb2hwm-my-svg_flowchart-v2-pointEnd)"/><path d="M395.906,578.047L395.906,584.047C395.906,590.047,395.906,602.047,395.906,613.38C395.906,624.714,395.906,635.38,395.906,640.714L395.906,646.047" id="mermaid-mrnb2hwm-my-svg-L_E_F_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" data-edge="true" data-et="edge" data-id="mermaid-mrnb2hwm-L_E_F_0" data-points="W3sieCI6Mzk1LjkwNjI1LCJ5Ijo1NzguMDQ2ODc1fSx7IngiOjM5NS45MDYyNSwieSI6NjE0LjA0Njg3NX0seyJ4IjozOTUuOTA2MjUsInkiOjY1MC4wNDY4NzV9XQ==" data-look="classic" marker-end="url(#mermaid-mrnb2hwm-my-svg_flowchart-v2-pointEnd)"/><path d="M395.906,728.047L395.906,732.214C395.906,736.38,395.906,744.714,395.906,752.38C395.906,760.047,395.906,767.047,395.906,770.547L395.906,774.047" id="mermaid-mrnb2hwm-my-svg-L_F_G_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" data-edge="true" data-et="edge" data-id="mermaid-mrnb2hwm-L_F_G_0" data-points="W3sieCI6Mzk1LjkwNjI1LCJ5Ijo3MjguMDQ2ODc1fSx7IngiOjM5NS45MDYyNSwieSI6NzUzLjA0Njg3NX0seyJ4IjozOTUuOTA2MjUsInkiOjc3OC4wNDY4NzV9XQ==" data-look="classic" marker-end="url(#mermaid-mrnb2hwm-my-svg_flowchart-v2-pointEnd)"/><path d="M111.953,868.047L111.953,874.214C111.953,880.38,111.953,892.714,123.104,902.964C134.256,913.215,156.558,921.384,167.71,925.468L178.861,929.552" id="mermaid-mrnb2hwm-my-svg-L_D_H_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" data-edge="true" data-et="edge" data-id="mermaid-mrnb2hwm-L_D_H_0" data-points="W3sieCI6MTExLjk1MzEyNSwieSI6ODY4LjA0Njg3NX0seyJ4IjoxMTEuOTUzMTI1LCJ5Ijo5MDUuMDQ2ODc1fSx7IngiOjE4Mi42MTcxODc1LCJ5Ijo5MzAuOTI4MTI3NDA3NDE3Nn1d" data-look="classic" marker-end="url(#mermaid-mrnb2hwm-my-svg_flowchart-v2-pointEnd)"/><path d="M395.906,880.047L395.906,884.214C395.906,888.38,395.906,896.714,384.755,904.964C373.604,913.215,351.301,921.384,340.15,925.468L328.998,929.552" id="mermaid-mrnb2hwm-my-svg-L_G_H_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" data-edge="true" data-et="edge" data-id="mermaid-mrnb2hwm-L_G_H_0" data-points="W3sieCI6Mzk1LjkwNjI1LCJ5Ijo4ODAuMDQ2ODc1fSx7IngiOjM5NS45MDYyNSwieSI6OTA1LjA0Njg3NX0seyJ4IjozMjUuMjQyMTg3NSwieSI6OTMwLjkyODEyNzQwNzQxNzZ9XQ==" data-look="classic" marker-end="url(#mermaid-mrnb2hwm-my-svg_flowchart-v2-pointEnd)"/></g><g class="edgeLabels"><g class="edgeLabel"><g class="label" data-id="mermaid-mrnb2hwm-L_A_B_0" transform="translate(0, 0)"><text y="-10.1" text-anchor="middle"><tspan class="text-outer-tspan row" x="0" y="-0.1em" dy="1.1em" text-anchor="middle"/></text></g></g><g><rect class="background" style="stroke: none"/></g><g class="edgeLabel"><g class="label" data-id="mermaid-mrnb2hwm-L_B_C_0" transform="translate(0, 0)"><text y="-10.1" text-anchor="middle"><tspan class="text-outer-tspan row" x="0" y="-0.1em" dy="1.1em" text-anchor="middle"/></text></g></g><g><rect class="background" style="stroke: none"/></g><g class="edgeLabel" transform="translate(111.953125, 614.046875)"><g class="label" data-id="mermaid-mrnb2hwm-L_C_D_0" transform="translate(0, -10)"><g><rect class="background" x="-9.9453125" y="-1" width="19.890625" height="22"/><text y="-10.1" text-anchor="middle"><tspan class="text-outer-tspan row" x="0" y="-0.1em" dy="1.1em" text-anchor="middle"><tspan font-style="normal" class="text-inner-tspan" font-weight="normal">是</tspan></tspan></text></g></g></g><g class="edgeLabel" transform="translate(395.90625, 464.046875)"><g class="label" data-id="mermaid-mrnb2hwm-L_C_E_0" transform="translate(0, -10)"><g><rect class="background" x="-9.9453125" y="-1" width="19.890625" height="22"/><text y="-10.1" text-anchor="middle"><tspan class="text-outer-tspan row" x="0" y="-0.1em" dy="1.1em" text-anchor="middle"><tspan font-style="normal" class="text-inner-tspan" font-weight="normal">否</tspan></tspan></text></g></g></g><g class="edgeLabel"><g class="label" data-id="mermaid-mrnb2hwm-L_E_F_0" transform="translate(0, 0)"><text y="-10.1" text-anchor="middle"><tspan class="text-outer-tspan row" x="0" y="-0.1em" dy="1.1em" text-anchor="middle"/></text></g></g><g><rect class="background" style="stroke: none"/></g><g class="edgeLabel"><g class="label" data-id="mermaid-mrnb2hwm-L_F_G_0" transform="translate(0, 0)"><text y="-10.1" text-anchor="middle"><tspan class="text-outer-tspan row" x="0" y="-0.1em" dy="1.1em" text-anchor="middle"/></text></g></g><g><rect class="background" style="stroke: none"/></g><g class="edgeLabel"><g class="label" data-id="mermaid-mrnb2hwm-L_D_H_0" transform="translate(0, 0)"><text y="-10.1" text-anchor="middle"><tspan class="text-outer-tspan row" x="0" y="-0.1em" dy="1.1em" text-anchor="middle"/></text></g></g><g><rect class="background" style="stroke: none"/></g><g class="edgeLabel"><g class="label" data-id="mermaid-mrnb2hwm-L_G_H_0" transform="translate(0, 0)"><text y="-10.1" text-anchor="middle"><tspan class="text-outer-tspan row" x="0" y="-0.1em" dy="1.1em" text-anchor="middle"/></text></g></g><g><rect class="background" style="stroke: none"/></g></g><g class="nodes"><g class="node default" id="mermaid-mrnb2hwm-my-svg-flowchart-A-0" data-look="classic" transform="translate(253.9296875, 47)"><rect class="basic label-container" x="-84.6875" y="-39" width="169.375" height="78"/><g class="label" transform="translate(-54.6875, -24)"><rect/><foreignObject width="109.375" height="48"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="nodeLabel"><p>確認 repository<br />解析 root</p></span></div></foreignObject></g></g><g class="node default" id="mermaid-mrnb2hwm-my-svg-flowchart-B-1" data-look="classic" transform="translate(253.9296875, 163)"><rect class="basic label-container" x="-95.2734375" y="-27" width="190.546875" height="54"/><g class="label" transform="translate(-65.2734375, -12)"><rect/><foreignObject width="130.546875" height="24"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="nodeLabel"><p>列出 staged paths</p></span></div></foreignObject></g></g><g class="node default" id="mermaid-mrnb2hwm-my-svg-flowchart-C-3" data-look="classic" transform="translate(253.9296875, 334.0234375)"><polygon points="94.0234375,0 188.046875,-94.0234375 94.0234375,-188.046875 0,-94.0234375" class="label-container" transform="translate(-93.5234375, 94.0234375)"/><g class="label" transform="translate(-67.0234375, -12)"><rect/><foreignObject width="134.046875" height="24"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="nodeLabel"><p>scope 是 staged？</p></span></div></foreignObject></g></g><g class="node default" id="mermaid-mrnb2hwm-my-svg-flowchart-D-5" data-look="classic" transform="translate(111.953125, 829.046875)"><rect class="basic label-container" x="-103.953125" y="-39" width="207.90625" height="78"/><g class="label" transform="translate(-73.953125, -24)"><rect/><foreignObject width="147.90625" height="48"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="nodeLabel"><p>收集 staged 結果<br />git diff --cached</p></span></div></foreignObject></g></g><g class="node default" id="mermaid-mrnb2hwm-my-svg-flowchart-E-7" data-look="classic" transform="translate(395.90625, 539.046875)"><rect class="basic label-container" x="-98.8515625" y="-39" width="197.703125" height="78"/><g class="label" transform="translate(-68.8515625, -24)"><rect/><foreignObject width="137.703125" height="48"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="nodeLabel"><p>列出 unstaged<br />與 untracked paths</p></span></div></foreignObject></g></g><g class="node default" id="mermaid-mrnb2hwm-my-svg-flowchart-F-9" data-look="classic" transform="translate(395.90625, 689.046875)"><rect class="basic label-container" x="-103.671875" y="-39" width="207.34375" height="78"/><g class="label" transform="translate(-73.671875, -24)"><rect/><foreignObject width="147.34375" height="48"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="nodeLabel"><p>合併 tracked paths<br />選擇 HEAD 或空 tree</p></span></div></foreignObject></g></g><g class="node default" id="mermaid-mrnb2hwm-my-svg-flowchart-G-11" data-look="classic" transform="translate(395.90625, 829.046875)"><rect class="basic label-container" x="-130" y="-51" width="260" height="102"/><g class="label" transform="translate(-100, -36)"><rect/><foreignObject width="200" height="72"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table; white-space: break-spaces; line-height: 1.5; max-width: 200px; text-align: center; width: 200px;"><span class="nodeLabel"><p>平行收集<br />tracked 與 untracked 結果</p></span></div></foreignObject></g></g><g class="node default" id="mermaid-mrnb2hwm-my-svg-flowchart-H-13" data-look="classic" transform="translate(253.9296875, 957.046875)"><rect class="basic label-container" x="-71.3125" y="-27" width="142.625" height="54"/><g class="label" transform="translate(-41.3125, -12)"><rect/><foreignObject width="82.625" height="24"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="nodeLabel"><p>回傳 GitDiff</p></span></div></foreignObject></g></g></g></g></g><defs><filter id="mermaid-mrnb2hwm-my-svg-drop-shadow" height="130%" width="130%"><feDropShadow dx="4" dy="4" stdDeviation="0" flood-opacity="0.06" flood-color="#000000"/></filter></defs><defs><filter id="mermaid-mrnb2hwm-my-svg-drop-shadow-small" height="150%" width="150%"><feDropShadow dx="2" dy="2" stdDeviation="0" flood-opacity="0.06" flood-color="#000000"/></filter></defs><linearGradient id="mermaid-mrnb2hwm-my-svg-gradient" gradientUnits="objectBoundingBox" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" stop-color="#E3DACC" stop-opacity="1"/><stop offset="100%" stop-color="hsl(48, 0%, 82.1568627451%)" stop-opacity="1"/></linearGradient></svg>
+  <figcaption>staged 模式直接以 index 產生結果；完整模式則平行收集 tracked 與 untracked 兩組結果。兩條路徑都可能同時產生文字 patch 與 skipped coverage。</figcaption>
+</figure>
+      </section>
+
+      <section id="contracts">
+        <h2>2. imports、常數與資料契約</h2>
+        <h3>Effect 與 domain imports</h3>
+        <p><code>Context</code> 用來宣告 service tag，<code>Data</code> 建立可辨識的 tagged error，<code>Effect</code> 描述成功值與錯誤流程，<code>Layer</code> 則把實作與依賴組裝成可注入的 service。<code>ReviewScope</code> 是輸入型別；<code>ReviewFileSource</code> 與 <code>ReviewSkippedFile</code> 讓 Git adapter 和 report domain 共用相同的 coverage 契約；兩個 platform module 則是本服務的執行依賴。</p>
+
+        <h3>四個限制值與空 tree</h3>
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">const</span> commandTimeoutMilliseconds <span class="o">=</span> <span class="n">10_000</span><span class="o">;</span>
+<span class="k">const</span> listOutputLimit <span class="o">=</span> <span class="n">4</span> <span class="o">*</span> <span class="n">1024</span> <span class="o">*</span> <span class="n">1024</span><span class="o">;</span>
+<span class="k">const</span> patchOutputLimit <span class="o">=</span> <span class="n">512</span> <span class="o">*</span> <span class="n">1024</span><span class="o">;</span>
+<span class="k">const</span> fileSizeLimit <span class="o">=</span> <span class="f">BigInt</span><span class="o">(</span>patchOutputLimit<span class="o">)</span><span class="o">;</span>
+<span class="k">const</span> emptyTree <span class="o">=</span> <span class="s">"4b825dc642cb6eb9a060e54bf8d69288fbee4904"</span><span class="o">;</span></code></pre>
+        <ul>
+          <li>所有 Git 指令最多執行 10 秒。</li>
+          <li>列舉路徑等操作最多接收 4 MiB 輸出。</li>
+          <li>單一 patch 指令的 stdout 與 stderr 合併輸出上限是 512 KiB。</li>
+          <li>檔案大小也以 512 KiB 為門檻；轉成 <code>bigint</code> 是為了與檔案大小結果安全比較。</li>
+          <li><code>emptyTree</code> 是 Git 的空 tree object ID；沒有 <code>HEAD</code> 的初始 repository 可以拿它當 diff base。</li>
+        </ul>
+
+        <h3>輸出資料結構</h3>
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">export</span> interface <span class="t">GitFilePatch</span> <span class="o">{</span>
+  readonly path<span class="o">:</span> string<span class="o">;</span>
+  readonly patch<span class="o">:</span> string<span class="o">;</span>
+  readonly source<span class="o">:</span> <span class="t">ReviewFileSource</span><span class="o">;</span>
+<span class="o">}</span>
+
+<span class="k">export</span> <span class="k">type</span> <span class="t">GitSkippedFile</span> <span class="o">=</span> <span class="t">ReviewSkippedFile</span><span class="o">;</span>
+
+<span class="k">export</span> interface <span class="t">GitDiff</span> <span class="o">{</span>
+  readonly files<span class="o">:</span> <span class="t">ReadonlyArray</span><span class="o">&lt;</span><span class="t">GitFilePatch</span><span class="o">&gt;</span><span class="o">;</span>
+  readonly skippedFiles<span class="o">:</span> <span class="t">ReadonlyArray</span><span class="o">&lt;</span><span class="t">GitSkippedFile</span><span class="o">&gt;</span><span class="o">;</span>
+<span class="o">}</span></code></pre>
+        <p><code>files</code> 中每筆結果包含顯示用的目標路徑、完整文字 patch，以及 patch 來源。<code>skippedFiles</code> 則保留已偵測但不適合送入文字 review 的檔案：binary 會記錄 <code>reason: "binary"</code>；大檔案會額外記錄實際大小與 512 KiB 限制。這些 skipped records 讓上層能產生完整的 coverage，而不是把略過行為隱藏起來。</p>
+        <p>所有欄位與陣列都只讀，表示此模組把結果當作不可變資料傳遞。</p>
+        <p>內部的 <code>GitChangedPath</code> 除了最終 <code>path</code>，還保存一組 <code>pathspecs</code>。普通修改通常兩者只有同一條路徑；rename 或 copy 則需要同時保存舊路徑與新路徑，確保後續指定路徑產生 diff 時不漏掉關聯。</p>
+      </section>
+
+      <section id="service">
+        <h2>3. 錯誤模型與 GitService</h2>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>錯誤</th><th>代表情況</th><th>攜帶資訊</th></tr></thead>
+            <tbody>
+              <tr><td><code>GitNotRepositoryError</code></td><td>目前位置不在 Git working tree 內</td><td>exit code、stdout 與 stderr 長度</td></tr>
+              <tr><td><code>GitCommandError</code></td><td>指令有執行完成，但 exit code 不符合預期</td><td>操作名稱、exit code、stderr 長度與正規化的 failure 類別</td></tr>
+              <tr><td><code>GitExecutionError</code></td><td>指令啟動、process I/O、終止或檔案檢查失敗</td><td>操作名稱、failure、可選 phase 與原始 <code>cause</code></td></tr>
+              <tr><td><code>GitCommandTimeoutError</code></td><td>Git 指令超過執行時間</td><td>操作名稱、timeout 毫秒數與原始 <code>cause</code></td></tr>
+              <tr><td><code>GitCommandOutputLimitError</code></td><td>Git 指令的合併輸出超過限制</td><td>操作名稱、限制、至少已觀察到的 bytes 與原始 <code>cause</code></td></tr>
+              <tr><td><code>GitChangedFileUnavailableError</code></td><td>列出的變更檔案在讀取時已不存在或沒有 patch</td><td>路徑與來源</td></tr>
+              <tr><td><code>GitInvalidOutputError</code></td><td>Git 回傳不符合預期格式的 object ID 或大小</td><td>操作名稱與輸出長度</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p>七種錯誤以 <code>Data.TaggedError</code> 建立，再合成 <code>GitError</code> union。這讓 Effect 的錯誤 channel 保持明確，呼叫端可以依 tag 分支處理。timeout 與 output limit 不會再被壓成一般 execution error；檔案 race 與 Git 輸出格式錯誤也各有獨立語意。</p>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">export</span> <span class="k">class</span> <span class="t">GitService</span> <span class="k">extends</span> <span class="t">Context</span><span class="o">.</span><span class="p">Service</span><span class="o">&lt;</span>
+  <span class="t">GitService</span><span class="o">,</span>
+  <span class="o">{</span>
+    readonly readDiff<span class="o">:</span> <span class="o">(</span>
+      scope<span class="o">:</span> <span class="t">ReviewScope</span><span class="o">,</span>
+    <span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span> <span class="t">Effect</span><span class="o">.</span><span class="p">Effect</span><span class="o">&lt;</span><span class="t">GitDiff</span><span class="o">,</span> <span class="t">GitError</span><span class="o">&gt;</span><span class="o">;</span>
+  <span class="o">}</span>
+<span class="o">&gt;</span><span class="o">(</span><span class="o">)</span><span class="o">(</span><span class="s">"reviewstuff/GitService"</span><span class="o">)</span> <span class="o">{</span><span class="o">}</span></code></pre>
+        <p>service 的公開介面刻意很小：成功值是 <code>GitDiff</code>，失敗值是 <code>GitError</code>。型別沒有列出環境依賴，表示依賴會在建立 layer 時被注入，而不是要求每個 <code>readDiff</code> 呼叫端再提供一次。</p>
+      </section>
+
+      <section id="commands">
+        <h2>4. Git 指令執行層：execute 與 requireSuccess</h2>
+        <h3><code>execute</code>：統一執行設定</h3>
+        <p><code>execute</code> 封裝共通的 runner 設定：程式固定是 <code>git</code>、所有參數前面加上 <code>--literal-pathspecs</code>、套用 timeout 與輸出限制，並視需要指定 working directory。</p>
+        <p><code>--literal-pathspecs</code> 很重要：它要求 Git 把 pathspec 中的特殊字元當成檔名本身，而不是 glob 或其他 pathspec 語法。runner error 會交給 <code>mapCommandExecutionError</code>：timeout 與 output limit 保留成專屬 Git error；process、termination 與 start failure 才映射成帶分類的 <code>GitExecutionError</code>。</p>
+
+        <h3><code>requireSuccess</code>：exit code 必須是 0</h3>
+        <p><code>execute</code> 本身不把非零 exit code 視為 Effect failure，因為有些 Git 指令的非零結果是正常語意。<code>requireSuccess</code> 才加上「必須為 0」的政策：成功只取 <code>stdout</code>，否則透過 <code>makeGitCommandError</code> 建立已分類的 <code>GitCommandError</code>。</p>
+        <div class="callout">
+          <strong>為什麼不保存 stderr 本文？</strong>
+          <p>Git adapter 會用 stderr 辨識 index lock、權限不足與 repository 損毀等可行動的失敗類別，但 domain error 只保存正規化後的 <code>failure</code> 與 stderr 長度。CLI 依類別顯示穩定的處理建議；無法安全分類時則引導使用者執行 <code>git status</code> 取得原始 Git 診斷。這避免錯誤值承載大量或敏感的命令輸出，同時不會只留下缺乏行動性的 exit code。</p>
+        </div>
+      </section>
+
+      <section id="paths">
+        <h2>5. NUL 分隔路徑、rename 與路徑合併</h2>
+        <p>Git 指令使用 <code>-z</code> 輸出 NUL 分隔資料。相較用換行切割，NUL 能正確處理檔名裡真的含有換行、空白或其他特殊字元的情況。</p>
+
+        <h3><code>nulSeparatedPaths</code></h3>
+        <p>這是簡單版本：以 <code>\0</code> 切開、丟掉末尾空欄位，再按字典順序排序。它用於 untracked 路徑，因為 <code>git ls-files --others -z</code> 只輸出路徑，不附 status。</p>
+
+        <h3><code>nulSeparatedChangedPaths</code></h3>
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">if</span> <span class="o">(</span>status<span class="o">.</span><span class="p">startsWith</span><span class="o">(</span><span class="s">"R"</span><span class="o">)</span> <span class="o">|</span><span class="o">|</span> status<span class="o">.</span><span class="p">startsWith</span><span class="o">(</span><span class="s">"C"</span><span class="o">)</span><span class="o">)</span> <span class="o">{</span>
+  <span class="k">const</span> targetPath <span class="o">=</span> fields<span class="o">[</span>index <span class="o">+</span> <span class="n">2</span><span class="o">]</span><span class="o">;</span>
+
+  changes<span class="o">.</span><span class="p">push</span><span class="o">(</span><span class="o">{</span>
+    path<span class="o">:</span> targetPath<span class="o">,</span>
+    pathspecs<span class="o">:</span> <span class="o">[</span>sourcePath<span class="o">,</span> targetPath<span class="o">]</span><span class="o">,</span>
+  <span class="o">}</span><span class="o">)</span><span class="o">;</span>
+  index <span class="o">+</span><span class="o">=</span> <span class="n">3</span><span class="o">;</span>
+  <span class="k">continue</span><span class="o">;</span>
+<span class="o">}</span>
+
+changes<span class="o">.</span><span class="p">push</span><span class="o">(</span><span class="o">{</span> path<span class="o">:</span> sourcePath<span class="o">,</span> pathspecs<span class="o">:</span> <span class="o">[</span>sourcePath<span class="o">]</span> <span class="o">}</span><span class="o">)</span><span class="o">;</span>
+index <span class="o">+</span><span class="o">=</span> <span class="n">2</span><span class="o">;</span></code></pre>
+        <p><code>git diff --name-status -z</code> 的普通紀錄是「status、path」兩欄；rename（R）與 copy（C）則是「status、舊 path、新 path」三欄。函式把新路徑當成輸出 <code>path</code>，但把新舊兩條路徑都保留在 <code>pathspecs</code>。</p>
+        <p>遇到空 status 或欄位不足時，parser 會停止而不是丟錯。最後再排序，讓輸出順序穩定。</p>
+
+        <h3><code>mergeChangedPaths</code></h3>
+        <p>完整模式可能在 staged 與 unstaged 清單中看到同一個最終路徑。此函式用 <code>Map&lt;path, Set&lt;pathspec&gt;&gt;</code> 去重，同時保留 rename/copy 所需的所有相關 pathspec；輸出時 pathspec 與 change 都排序。</p>
+        <div class="callout">
+          <strong>穩定排序的價值</strong>
+          <p>Git 回傳順序或兩份清單合併順序不應讓 review 結果隨機變動。固定排序讓測試、快取與後續呈現更可預測。</p>
+        </div>
+      </section>
+
+      <section id="limits">
+        <h2>6. binary 與大檔案保護</h2>
+        <h3><code>isBinaryPatch</code></h3>
+        <p>函式逐行尋找 <code>Binary files ...</code> 或完整等於 <code>GIT binary patch</code> 的標記。命中後不會建立文字 patch，而是產生 <code>reason: "binary"</code> 的 skipped record；service 因此既專注於可讀的文字 diff，也不會隱藏 coverage 缺口。</p>
+
+        <h3><code>readObjectSize</code></h3>
+        <p>它先用 <code>git rev-parse --verify --quiet object</code> 解析 object。exit code 1 才代表 object 不存在並回傳 <code>undefined</code>；其他非零 exit code 是 <code>GitCommandError</code>。成功時，stdout 必須是 40 到 64 位十六進位 object ID，否則回傳 <code>GitInvalidOutputError</code>。</p>
+        <p>取得 object ID 後才執行 <code>git cat-file -s objectId</code>。這一步的非零 exit code 同樣是 <code>GitCommandError</code>；stdout 必須是純數字，否則是 <code>GitInvalidOutputError</code>。兩個指令都把輸出限制在 1 KiB。</p>
+
+        <h3><code>readChangedFileSize</code></h3>
+        <p>大小來源會依 patch 類型改變，目的是盡量檢查真正要比較的內容，又能處理刪除或尚未存在於某一層的檔案。這個函式回傳實際大小或 <code>undefined</code>；是否過大、是否能繼續則由 <code>collectPatches</code> 決定。</p>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>來源</th><th>第一選擇</th><th>fallback</th><th>完全找不到時</th></tr></thead>
+            <tbody>
+              <tr><td>staged</td><td>index object：<code>:./path</code></td><td><code>HEAD:path</code></td><td>交給 <code>readPatch</code>；若沒有 patch 則失敗</td></tr>
+              <tr><td>working-tree</td><td>filesystem size</td><td><code>HEAD:path</code>，再試 index object</td><td>交給 <code>readPatch</code>；若沒有 patch 則失敗</td></tr>
+              <tr><td>untracked</td><td>filesystem size</td><td>無</td><td>立即回傳 <code>GitChangedFileUnavailableError</code></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p>staged 刪除在 index 中可能已沒有 object，所以回頭查 <code>HEAD</code>。working-tree 刪除在 filesystem 中找不到，也會回頭查 Git object。untracked 檔案若 filesystem 都找不到，就沒有任何可靠內容可產生 patch，因此視為讀取期間的檔案 race，而不是略過。</p>
+        <p>檔案大小是第一層預防：超過 512 KiB 時會產生 <code>reason: "file-too-large"</code> 的 skipped record。<code>readPatch</code> 還有獨立的 512 KiB command output 上限；若這層超限，因為無法判定完整 patch 或 coverage，整次讀取會以 <code>GitCommandOutputLimitError</code> 失敗。</p>
+      </section>
+
+      <section id="patches">
+        <h2>7. 從單一路徑讀取 patch</h2>
+        <h3><code>readPatch</code></h3>
+        <p>這個函式透過共用的 <code>execute</code> 執行 patch 指令，因此沿用 timeout 與 typed error mapping，同時把 command output 限制為 512 KiB。呼叫端可以指定預期 exit codes；超限不是 coverage skip，而是 fatal <code>GitCommandOutputLimitError</code>。</p>
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">if</span> <span class="o">(</span><span class="o">!</span>expectedExitCodes<span class="o">.</span><span class="p">has</span><span class="o">(</span>result<span class="o">.</span><span class="p">exitCode</span><span class="o">)</span><span class="o">)</span> <span class="o">{</span>
+  <span class="k">return</span> <span class="t">Effect</span><span class="o">.</span><span class="p">fail</span><span class="o">(</span><span class="f">makeGitCommandError</span><span class="o">(</span>operation<span class="o">,</span> result<span class="o">)</span><span class="o">)</span><span class="o">;</span>
+<span class="o">}</span>
+
+<span class="k">if</span> <span class="o">(</span>result<span class="o">.</span><span class="p">stdout</span><span class="o">.</span><span class="p">length</span> <span class="o">=</span><span class="o">=</span><span class="o">=</span> <span class="n">0</span><span class="o">)</span> <span class="o">{</span>
+  <span class="k">return</span> <span class="t">Effect</span><span class="o">.</span><span class="p">fail</span><span class="o">(</span>
+    <span class="k">new</span> <span class="f">GitChangedFileUnavailableError</span><span class="o">(</span><span class="o">{</span> path<span class="o">,</span> source <span class="o">}</span><span class="o">)</span><span class="o">,</span>
+  <span class="o">)</span><span class="o">;</span>
+<span class="o">}</span>
+
+<span class="k">return</span> <span class="t">Effect</span><span class="o">.</span><span class="p">succeed</span><span class="o">(</span>
+  <span class="f">isBinaryPatch</span><span class="o">(</span>result<span class="o">.</span><span class="p">stdout</span><span class="o">)</span>
+    <span class="o">?</span> <span class="o">{</span> path<span class="o">,</span> source<span class="o">,</span> reason<span class="o">:</span> <span class="s">"binary"</span> <span class="o">}</span>
+    <span class="o">:</span> <span class="o">{</span> path<span class="o">,</span> patch<span class="o">:</span> result<span class="o">.</span><span class="p">stdout</span><span class="o">,</span> source <span class="o">}</span><span class="o">,</span>
+<span class="o">)</span><span class="o">;</span></code></pre>
+        <p>正常完成後，非預期 exit code 會變成 <code>GitCommandError</code>；空 stdout 代表列舉結果與實際 patch 已不一致，因此是 <code>GitChangedFileUnavailableError</code>；binary patch 則是可解釋的 coverage skip。只有一般文字輸出才建立 <code>GitFilePatch</code>。</p>
+
+        <h3><code>collectPatches</code></h3>
+        <p>它對每個 <code>GitChangedPath</code> 執行同一套流程：先讀取大小；大於限制就建立 <code>file-too-large</code> record；其餘才依來源組出 Git diff 指令。所有結果最後依是否具有 <code>patch</code> 或 <code>reason</code> 分成 <code>files</code> 與 <code>skippedFiles</code>。</p>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>kind</th><th>主要指令形態</th><th>允許 exit code</th></tr></thead>
+            <tbody>
+              <tr><td>untracked</td><td><code>git diff --no-index ... -- /dev/null path</code></td><td>0 或 1</td></tr>
+              <tr><td>staged</td><td><code>git diff --cached ... -- pathspecs</code></td><td>0</td></tr>
+              <tr><td>working-tree</td><td><code>git diff base ... -- pathspecs</code></td><td>0</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p><code>--no-index</code> 比較兩個 filesystem 路徑；找到差異時 Git 通常回傳 1，所以 untracked 分支把 0 與 1 都當作預期結果。tracked 分支加入 rename 偵測、關閉顏色與 external diff，並固定三行 context，確保產物是穩定、純文字、可供後續處理的 patch。</p>
+        <p><code>Effect.forEach</code> 在這裡沒有指定 concurrency，因此本檔案沒有宣告單一群組內要平行處理所有檔案；真正明確的平行點出現在 <code>readDiff</code> 同時啟動 tracked 與 untracked 兩大群組時。</p>
+        <div class="callout warning">
+          <strong>skip 與 fatal error 的界線</strong>
+          <p>只有「內容已確認，但不適合文字 review」的 binary 與大檔案會進入 <code>skippedFiles</code>。timeout、command output 超限、空 patch、檔案消失或非法 Git 輸出都代表無法可靠描述 coverage，因此會讓整個 <code>readDiff</code> 失敗。</p>
+        </div>
+      </section>
+
+      <section id="orchestration">
+        <h2>8. readDiff：整個模組的編排核心</h2>
+        <h3>步驟一：確認 repository 與 root</h3>
+        <ol>
+          <li>執行 <code>git rev-parse --is-inside-work-tree</code>。</li>
+          <li>exit code 非 0 或 stdout 去空白後不是 <code>true</code>，回傳帶有 exit code 與輸出長度的 <code>GitNotRepositoryError</code>。</li>
+          <li>執行 <code>git rev-parse --show-toplevel</code>，並只移除結尾的一個換行序列，取得 repository root。</li>
+        </ol>
+        <p>第一次檢查尚未知道 repository root，所以使用 runner 的預設 working directory；知道 root 後，後續指令全部固定在 root 執行。</p>
+
+        <h3>步驟二：一定先列出 staged paths</h3>
+        <p>指令使用 <code>git diff --cached --find-renames --name-status -z --diff-filter=ACDMRTUXB --</code>。<code>--name-status</code> 同時取得狀態與路徑，<code>-z</code> 保證檔名安全，<code>--find-renames</code> 讓 parser 能收到 R 類型紀錄。diff filter 收納新增、複製、刪除、修改、rename、type change、unmerged、unknown 與 pairing broken 等狀態。</p>
+
+        <h3>步驟三 A：staged 模式提早回傳</h3>
+        <p>若 <code>scope === "staged"</code>，就直接用 staged paths 呼叫 <code>collectPatches(..., "staged")</code>，回傳該函式產生的 <code>{ files, skippedFiles }</code>。後面的 unstaged 與 untracked 查詢完全不會執行。</p>
+
+        <h3>步驟三 B：完整 working tree 模式</h3>
+        <ol>
+          <li>以相似的 <code>git diff --name-status -z</code> 列出 unstaged paths。</li>
+          <li>以 <code>git ls-files --others --exclude-standard -z</code> 列出未被 ignore 規則排除的 untracked files。</li>
+          <li>用 <code>git rev-parse --verify --quiet HEAD^{commit}</code> 判斷 commit base 是否存在：exit code 0 使用 <code>HEAD</code>，1 使用 <code>emptyTree</code>，其他 exit code 回傳 <code>GitCommandError</code>。</li>
+          <li>合併 staged 與 unstaged tracked paths；把 untracked path 轉成統一的 <code>GitChangedPath</code> 結構。</li>
+          <li>用 <code>Effect.all(..., { concurrency: "unbounded" })</code> 同時收集 tracked 與 untracked patch 群組。</li>
+          <li><code>files</code> 與 <code>skippedFiles</code> 都以 tracked 在前、untracked 在後的順序串接。</li>
+        </ol>
+        <div class="callout warning">
+          <strong>初始 repository 的關鍵處理</strong>
+          <p>尚未建立第一個 commit 時沒有 <code>HEAD</code>。若硬跑 <code>git diff HEAD</code> 會失敗；改用空 tree object，語意就變成「從空內容到目前 working tree 的差異」，因此第一次 review 仍可運作。</p>
+        </div>
+      </section>
+
+      <section id="layer">
+        <h2>9. Layer：把依賴封裝到服務實作</h2>
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">export</span> <span class="k">const</span> layer<span class="o">:</span> <span class="t">Layer</span><span class="o">.</span><span class="p">Layer</span><span class="o">&lt;</span>
+  <span class="t">GitService</span><span class="o">,</span>
+  never<span class="o">,</span>
+  <span class="t">CommandRunner</span><span class="o">.</span><span class="p">CommandRunner</span> <span class="o">|</span> <span class="t">FileInspector</span><span class="o">.</span><span class="p">FileInspector</span>
+<span class="o">&gt;</span> <span class="o">=</span> <span class="t">Layer</span><span class="o">.</span><span class="p">effect</span><span class="o">(</span>
+  <span class="t">GitService</span><span class="o">,</span>
+  <span class="t">Effect</span><span class="o">.</span><span class="p">gen</span><span class="o">(</span><span class="k">function</span><span class="o">*</span> <span class="o">(</span><span class="o">)</span> <span class="o">{</span>
+    <span class="k">const</span> runner <span class="o">=</span> <span class="k">yield</span><span class="o">*</span> <span class="t">CommandRunner</span><span class="o">.</span><span class="p">CommandRunner</span><span class="o">;</span>
+    <span class="k">const</span> inspector <span class="o">=</span> <span class="k">yield</span><span class="o">*</span> <span class="t">FileInspector</span><span class="o">.</span><span class="p">FileInspector</span><span class="o">;</span>
+
+    <span class="k">return</span> <span class="o">{</span>
+      readDiff<span class="o">:</span> <span class="o">(</span>scope<span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span> <span class="f">readDiff</span><span class="o">(</span>runner<span class="o">,</span> inspector<span class="o">,</span> scope<span class="o">)</span><span class="o">,</span>
+    <span class="o">}</span><span class="o">;</span>
+  <span class="o">}</span><span class="o">)</span><span class="o">,</span>
+<span class="o">)</span><span class="o">;</span></code></pre>
+        <p><code>Layer.Layer&lt;輸出, 建立錯誤, 輸入依賴&gt;</code> 在這裡可讀成：此 layer 提供 <code>GitService</code>；建立 layer 本身不會失敗（<code>never</code>）；但建立時需要 <code>CommandRunner</code> 與 <code>FileInspector</code>。</p>
+        <p>generator 先從環境取出兩個依賴，再回傳 service 實作。對外的 <code>readDiff</code> closure 已經捕捉 runner 與 inspector，因此使用者只需要傳 <code>scope</code>。</p>
+      </section>
+
+      <section id="map">
+        <h2>10. 全檔案函式地圖</h2>
+        <div class="table-wrap">
+          <table class="section-map">
+            <thead><tr><th>符號</th><th>單一責任</th><th>被誰使用</th></tr></thead>
+            <tbody>
+              <tr><td><code>mapCommandExecutionError</code></td><td>把 runner errors 分成 timeout、output limit 與 execution failures</td><td><code>execute</code></td></tr>
+              <tr><td><code>execute</code></td><td>套用共通 Git 執行設定並正規化底層錯誤</td><td><code>requireSuccess</code>、<code>readObjectSize</code>、<code>readPatch</code>、<code>readDiff</code></td></tr>
+              <tr><td><code>makeGitCommandError</code></td><td>依 stderr 分類已完成但 exit code 不符預期的 Git 指令</td><td><code>requireSuccess</code>、<code>readObjectSize</code>、<code>readPatch</code>、<code>readDiff</code></td></tr>
+              <tr><td><code>requireSuccess</code></td><td>要求 exit code 0 並只回傳 stdout</td><td><code>readDiff</code></td></tr>
+              <tr><td><code>nulSeparatedPaths</code></td><td>解析單純 NUL 路徑清單</td><td>untracked path 查詢</td></tr>
+              <tr><td><code>nulSeparatedChangedPaths</code></td><td>解析 status/path，特別保留 rename/copy 的雙路徑</td><td>staged、unstaged path 查詢</td></tr>
+              <tr><td><code>mergeChangedPaths</code></td><td>依最終路徑去重並聯集 pathspecs</td><td>完整模式</td></tr>
+              <tr><td><code>isBinaryPatch</code></td><td>辨識 Git binary patch 標記</td><td><code>readPatch</code></td></tr>
+              <tr><td><code>readObjectSize</code></td><td>解析 object ID 並讀取大小；只有 verify exit code 1 代表不存在</td><td><code>readChangedFileSize</code></td></tr>
+              <tr><td><code>readChangedFileSize</code></td><td>依來源選擇 filesystem、index 或 HEAD 的大小來源</td><td><code>collectPatches</code></td></tr>
+              <tr><td><code>readPatch</code></td><td>執行單一 diff，回傳文字 patch、binary skip 或 typed error</td><td><code>collectPatches</code></td></tr>
+              <tr><td><code>collectPatches</code></td><td>做大小檢查、選擇 diff 形態，並分組 files 與 skippedFiles</td><td><code>readDiff</code></td></tr>
+              <tr><td><code>readDiff</code></td><td>辨識 repository、列舉路徑並編排 staged 或完整模式</td><td><code>layer</code> 暴露的 service method</td></tr>
+              <tr><td><code>layer</code></td><td>取得 platform 依賴並提供 <code>GitService</code></td><td>模組外部的 Effect app</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>最後的整體理解</h3>
+        <p>這份程式碼的設計重點是把「Git 差異」收斂成可預測、有限制、可型別化失敗的資料來源。路徑列舉與 patch 讀取被拆開，因此能先處理 rename、去重與大小檢查；staged 與完整模式共用底層能力，又保留不同的 diff 語意；Effect service 與 Layer 則把命令執行和檔案系統依賴留在邊界。</p>
+        <p>結果不是 repository 的完整鏡像：binary 與檔案大小超限會保留成明確的 skipped coverage；空 patch、讀取期間消失的檔案、command output 超限與無法解析的 Git 輸出則是 fatal typed error。這條界線讓 <code>GitService</code> 能誠實描述 review coverage，同時仍專注於「為文字 code review 準備輸入」，而不是成為通用 Git library。</p>
+      </section>
+
+      <p class="source-note">本文以 <code>src/git/git-service.ts</code> 的公開契約與實作為主，並在解釋共用 coverage 型別與 command output limit 時，參照它直接依賴的 domain 與 platform contract；不依賴未在這些邊界中保證的實作細節。</p>
+    </article>
+  </main>
+  <script>
+    (() => {
+      const copyIcon = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="10" height="10" rx="1"></rect><path d="M15 9V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v9a1 1 0 0 0 1 1h4"></path></svg>';
+      const checkIcon = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"></path></svg>';
+
+      const copyText = async (text) => {
+        if (navigator.clipboard && window.isSecureContext) {
+          await navigator.clipboard.writeText(text);
+          return;
+        }
+        const area = document.createElement('textarea');
+        area.value = text;
+        area.style.position = 'fixed';
+        area.style.opacity = '0';
+        document.body.appendChild(area);
+        area.select();
+        document.execCommand('copy');
+        area.remove();
+      };
+
+      document.querySelectorAll('pre').forEach((pre) => {
+        const code = pre.querySelector('code');
+        if (!code) return;
+
+        const button = document.createElement('button');
+        button.className = 'copy-code';
+        button.type = 'button';
+        button.setAttribute('aria-label', '複製程式碼');
+        button.innerHTML = copyIcon;
+        button.addEventListener('click', async () => {
+          try {
+            await copyText(code.textContent || '');
+            button.classList.add('copied');
+            button.setAttribute('aria-label', '已複製');
+            button.innerHTML = checkIcon;
+            window.setTimeout(() => {
+              button.classList.remove('copied');
+              button.setAttribute('aria-label', '複製程式碼');
+              button.innerHTML = copyIcon;
+            }, 1400);
+          } catch (_) {}
+        });
+        pre.appendChild(button);
+
+        const track = document.createElement('div');
+        track.className = 'code-scrollbar';
+        const thumb = document.createElement('div');
+        thumb.className = 'code-scrollbar-thumb';
+        track.appendChild(thumb);
+        pre.appendChild(track);
+
+        const update = () => {
+          const ratio = Math.min(1, code.clientWidth / code.scrollWidth);
+          track.classList.toggle('hidden', ratio >= 1);
+          const width = track.clientWidth * ratio;
+          const maxLeft = track.clientWidth - width;
+          const scrollRatio = code.scrollWidth === code.clientWidth ? 0 : code.scrollLeft / (code.scrollWidth - code.clientWidth);
+          thumb.style.width = `${width}px`;
+          thumb.style.transform = `translateX(${maxLeft * scrollRatio}px)`;
+        };
+        code.addEventListener('scroll', update, { passive: true });
+        window.addEventListener('resize', update, { passive: true });
+        requestAnimationFrame(update);
+      });
+    })();
+  </script>
+</body>
+</html>
