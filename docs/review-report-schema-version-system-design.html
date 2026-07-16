@@ -1,0 +1,511 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Reviewstuff ReviewReport schema version 的精簡 system design。">
+  <title>ReviewReport Schema Version System Design</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --clay: #d97757;
+      --slate: #141413;
+      --ivory: #faf9f5;
+      --oat: #e3dacc;
+      --white: #ffffff;
+      --gray-100: #f0eee6;
+      --gray-500: #87867f;
+      --gray-700: #3d3d3a;
+      --success: #356f59;
+      --space-sm: 8px;
+      --space-md: 12px;
+      --space-lg: 16px;
+      --space-xl: 24px;
+      --space-2xl: 32px;
+      --space-3xl: 48px;
+      --radius-sm: 4px;
+      --radius-md: 8px;
+      --content-width: 68ch;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      background: var(--ivory);
+      color: var(--slate);
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 16px;
+      font-weight: 430;
+      line-height: 1.58;
+    }
+
+    main {
+      width: 100%;
+      max-width: var(--content-width);
+      margin: 0 auto;
+      padding: var(--space-3xl) var(--space-xl);
+    }
+
+    h1,
+    h2,
+    h3 {
+      color: var(--slate);
+      text-wrap: balance;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 1.8rem;
+      line-height: 1.18;
+    }
+
+    h2 {
+      margin: var(--space-3xl) 0 var(--space-lg);
+      font-size: 1.22rem;
+      line-height: 1.25;
+    }
+
+    h3 {
+      margin: var(--space-2xl) 0 var(--space-md);
+      font-size: 1rem;
+      line-height: 1.35;
+    }
+
+    p { margin: 0 0 var(--space-lg); }
+
+    ul,
+    ol {
+      margin: 0 0 var(--space-xl);
+      padding-left: 1.35rem;
+    }
+
+    li { margin: 6px 0; }
+
+    code {
+      overflow-wrap: anywhere;
+      border: 1px solid var(--oat);
+      border-radius: var(--radius-sm);
+      padding: 0.08em 0.3em;
+      background: var(--gray-100);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 0.9em;
+    }
+
+    .deck {
+      margin: var(--space-lg) 0 0;
+      color: var(--gray-700);
+      font-size: 1.04rem;
+      line-height: 1.62;
+    }
+
+    .decision {
+      margin: var(--space-2xl) 0;
+      padding: var(--space-lg) var(--space-xl);
+      border: 1px solid var(--oat);
+      border-left: 4px solid var(--clay);
+      border-radius: var(--radius-md);
+      background: var(--gray-100);
+    }
+
+    .decision strong {
+      display: block;
+      margin-bottom: var(--space-sm);
+    }
+
+    .decision p:last-child { margin-bottom: 0; }
+
+    .table-wrap {
+      width: 100%;
+      margin: var(--space-xl) 0;
+      overflow-x: auto;
+      border: 1px solid var(--oat);
+      border-radius: var(--radius-md);
+      background: var(--white);
+    }
+
+    table {
+      width: 100%;
+      min-width: 580px;
+      border-collapse: collapse;
+      font-size: 0.9rem;
+    }
+
+    th,
+    td {
+      padding: var(--space-md) var(--space-lg);
+      border-bottom: 1px solid var(--oat);
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th {
+      color: var(--gray-700);
+      background: var(--gray-100);
+      font-size: 0.8rem;
+    }
+
+    tr:last-child td { border-bottom: 0; }
+
+    pre {
+      position: relative;
+      width: 100%;
+      margin: var(--space-lg) 0 var(--space-xl);
+      overflow: hidden;
+      border: 1px solid #26241f;
+      border-radius: var(--radius-md);
+      background: #11110f;
+      color: #d8d4ca;
+    }
+
+    pre code {
+      display: block;
+      overflow-x: auto;
+      border: 0;
+      border-radius: 0;
+      padding: 18px 56px 18px 22px;
+      background: transparent;
+      color: inherit;
+      white-space: pre;
+      overflow-wrap: normal;
+      font-size: 0.875rem;
+      font-weight: 400;
+      line-height: 1.62;
+      scrollbar-width: none;
+    }
+
+    pre code::-webkit-scrollbar { width: 0; height: 0; }
+
+    pre .label { display: none; }
+
+    .copy-code {
+      position: absolute;
+      top: 9px;
+      right: 9px;
+      z-index: 1;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 30px;
+      height: 30px;
+      padding: 0;
+      border: 1px solid rgba(250, 249, 245, 0.14);
+      border-radius: var(--radius-sm);
+      background: rgba(250, 249, 245, 0.06);
+      color: rgba(250, 249, 245, 0.72);
+      cursor: pointer;
+    }
+
+    .copy-code:hover,
+    .copy-code:focus-visible {
+      border-color: rgba(250, 249, 245, 0.28);
+      outline: none;
+      background: rgba(250, 249, 245, 0.12);
+      color: var(--ivory);
+    }
+
+    .copy-code.copied { color: #b8d99a; }
+
+    .copy-code svg {
+      width: 13px;
+      height: 13px;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 1.8;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      pointer-events: none;
+    }
+
+    .code-scrollbar {
+      position: absolute;
+      right: 0;
+      bottom: 0;
+      left: 0;
+      height: 3px;
+      border-radius: 999px;
+      background: rgba(250, 249, 245, 0.1);
+      cursor: pointer;
+    }
+
+    .code-scrollbar.hidden { display: none; }
+
+    .code-scrollbar-thumb {
+      height: 100%;
+      border-radius: inherit;
+      background: rgba(255, 148, 110, 0.82);
+      transform: translateX(0);
+      cursor: grab;
+    }
+
+    .code-scrollbar-thumb:active { cursor: grabbing; }
+
+    pre code .k { color: #ff946e; font-weight: 400; }
+    pre code .s { color: #8fb86a; }
+    pre code .n,
+    pre code .p { color: #d8d4ca; }
+    pre code .c { color: #858177; font-style: italic; }
+    pre code .f,
+    pre code .t { color: #cfc6a2; font-weight: 400; }
+    pre code .o { color: #ff946e; }
+
+    .implementation {
+      margin: var(--space-xl) 0;
+      border-top: 1px solid var(--oat);
+    }
+
+    .implementation li {
+      padding: var(--space-md) 0;
+      border-bottom: 1px solid var(--oat);
+    }
+
+    .acceptance {
+      margin: var(--space-xl) 0 0;
+      padding: var(--space-lg) var(--space-xl);
+      border: 1px solid var(--oat);
+      border-radius: var(--radius-md);
+      background: var(--white);
+    }
+
+    .acceptance ul { margin-bottom: 0; }
+
+    .check {
+      color: var(--success);
+      font-weight: 700;
+    }
+
+    @media (max-width: 640px) {
+      body { font-size: 15px; }
+      h1 { font-size: 1.65rem; }
+      main { padding: var(--space-xl); }
+      pre code { font-size: 0.8125rem; line-height: 1.5; }
+      table,
+      .deck { font-size: 0.875rem; }
+    }
+
+    @media print {
+      body { background: var(--white); }
+      main { max-width: none; padding: var(--space-xl); }
+      .copy-code { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>ReviewReport Schema Version System Design</h1>
+    <p class="deck">本文件定義 <code>reviewstuff review --json</code> 的版本策略。目標是保留必要的相容性資訊，同時避免在沒有獨立演進需求的巢狀資料上增加版本。</p>
+
+    <section>
+      <h2>系統背景</h2>
+      <p><code>review</code> command 會產生一份 <code>ReviewReport</code>，terminal renderer 將它顯示給人閱讀，JSON renderer 則把它輸出給 script、CI 或其他工具。因為 JSON 可能由不同版本的 consumer 解析，所以完整 report 是一個需要版本的資料契約。</p>
+      <p><code>coverage</code> 只存在於 <code>ReviewReport</code> 裡面，目前不會獨立儲存、傳輸或解析。它不是獨立契約，因此不需要自己的版本。</p>
+    </section>
+
+    <section>
+      <h2>設計決策</h2>
+      <div class="decision">
+        <strong>只保留外層 <code>ReviewReport.schemaVersion</code></strong>
+        <p>目標格式使用 <code>schemaVersion: 2</code>。移除 <code>coverage.schemaVersion</code>，並把 <code>ReviewCoverageV1</code> 更名為 <code>ReviewCoverage</code>。</p>
+      </div>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>資料</th>
+              <th>是否版本化</th>
+              <th>原因</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>ReviewReport</code></td>
+              <td>是，版本 2</td>
+              <td>它是 <code>--json</code> 輸出的完整 machine-readable contract。</td>
+            </tr>
+            <tr>
+              <td><code>ReviewCoverage</code></td>
+              <td>否</td>
+              <td>它只由 report 包含，跟隨外層 report 一起演進。</td>
+            </tr>
+            <tr>
+              <td>Terminal text</td>
+              <td>否</td>
+              <td>它是給人閱讀的 presentation，不是 JSON schema。</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section>
+      <h2>目標資料契約</h2>
+      <p>維持目前簡單的 TypeScript contract。系統只負責產生 report，現階段不需要額外導入 runtime schema 或 migration framework。</p>
+
+      <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">export</span> interface <span class="t">ReviewCoverage</span> <span class="o">{</span>
+  readonly complete<span class="o">:</span> boolean<span class="o">;</span>
+  readonly files<span class="o">:</span> <span class="t">ReadonlyArray</span><span class="o">&lt;</span><span class="t">ReviewFileCoverage</span><span class="o">&gt;</span><span class="o">;</span>
+<span class="o">}</span>
+
+<span class="k">export</span> interface <span class="t">ReviewReport</span> <span class="o">{</span>
+  readonly schemaVersion<span class="o">:</span> <span class="n">2</span><span class="o">;</span>
+  readonly scope<span class="o">:</span> <span class="t">ReviewScope</span><span class="o">;</span>
+  readonly summary<span class="o">:</span> <span class="t">ReviewReportSummary</span><span class="o">;</span>
+  readonly coverage<span class="o">:</span> <span class="t">ReviewCoverage</span><span class="o">;</span>
+  readonly findings<span class="o">:</span> <span class="t">ReadonlyArray</span><span class="o">&lt;</span><span class="t">Finding</span><span class="o">&gt;</span><span class="o">;</span>
+<span class="o">}</span></code></pre>
+
+      <p><code>runReview</code> 必須明確回傳 <code>Effect.Effect&lt;ReviewReport, ...&gt;</code>，讓 TypeScript 在 report 的生產位置檢查版本與欄位。JSON renderer 保持單純：</p>
+
+      <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">export</span> <span class="k">const</span> renderJsonReport <span class="o">=</span> <span class="o">(</span>report<span class="o">:</span> <span class="t">ReviewReport</span><span class="o">)</span><span class="o">:</span> string <span class="o">=</span><span class="o">&gt;</span>
+  <span class="t">JSON</span><span class="o">.</span><span class="p">stringify</span><span class="o">(</span>report<span class="o">,</span> <span class="n">undefined</span><span class="o">,</span> <span class="n">2</span><span class="o">)</span><span class="o">;</span></code></pre>
+    </section>
+
+    <section>
+      <h2>版本演進規則</h2>
+      <h3>需要提升外層版本</h3>
+      <ul>
+        <li>新增、移除或重新命名欄位。</li>
+        <li>改變欄位型別或 enum 值。</li>
+        <li>改變既有欄位的業務語意。</li>
+      </ul>
+
+      <h3>不需要提升版本</h3>
+      <ul>
+        <li>內部實作重構。</li>
+        <li>terminal 顯示文字改變。</li>
+        <li>JSON indentation 或欄位輸出順序改變。</li>
+        <li>修正 bug，使輸出重新符合既有契約。</li>
+      </ul>
+
+      <h3>這次變更使用 v2 或 v3</h3>
+      <p>預設假設目前含有 <code>coverage.schemaVersion</code> 的 v2 尚未對外發布，因此直接整理成最終 v2。如果現有 consumer 已經依賴該欄位，則不得重新定義 v2，必須把外層版本提升為 v3。</p>
+    </section>
+
+    <section>
+      <h2>實作範圍</h2>
+      <ol class="implementation">
+        <li><strong><code>src/domain/review-file.ts</code></strong><br>將 <code>ReviewCoverageV1</code> 更名為 <code>ReviewCoverage</code>，移除其 <code>schemaVersion</code>。</li>
+        <li><strong><code>src/domain/report.ts</code></strong><br>改為引用 <code>ReviewCoverage</code>，外層維持 <code>schemaVersion: 2</code>。</li>
+        <li><strong><code>src/use-cases/run-review.ts</code></strong><br>移除建立 coverage 時的 <code>schemaVersion: 1</code>。</li>
+        <li><strong>相關 tests</strong><br>更新 fixtures 與 JSON expectations，確認版本只出現在 report 最外層。</li>
+      </ol>
+    </section>
+
+    <section>
+      <h2>驗收標準</h2>
+      <div class="acceptance">
+        <ul>
+          <li><span class="check">✓</span> <code>review --json</code> 的最外層包含 <code>schemaVersion: 2</code>。</li>
+          <li><span class="check">✓</span> <code>coverage</code> 不包含 <code>schemaVersion</code>。</li>
+          <li><span class="check">✓</span> 專案中不再存在 <code>ReviewCoverageV1</code>。</li>
+          <li><span class="check">✓</span> <code>bun run typecheck</code> 通過。</li>
+          <li><span class="check">✓</span> report renderer、run-review 與 CLI e2e tests 通過。</li>
+        </ul>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    (() => {
+      const copyIcon = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="11" height="11" rx="2"></rect><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"></path></svg>';
+      const checkIcon = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"></path></svg>';
+
+      const copyText = async (text) => {
+        if (navigator.clipboard?.writeText) {
+          await navigator.clipboard.writeText(text);
+          return;
+        }
+
+        const textarea = document.createElement("textarea");
+        textarea.value = text;
+        textarea.style.position = "fixed";
+        textarea.style.opacity = "0";
+        document.body.append(textarea);
+        textarea.select();
+        document.execCommand("copy");
+        textarea.remove();
+      };
+
+      document.querySelectorAll("pre").forEach((pre) => {
+        const code = pre.querySelector("code");
+        if (!code) return;
+
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "copy-code";
+        button.setAttribute("aria-label", "複製程式碼");
+        button.innerHTML = copyIcon;
+        button.addEventListener("click", async () => {
+          try {
+            await copyText(code.textContent ?? "");
+            button.classList.add("copied");
+            button.setAttribute("aria-label", "已複製");
+            button.innerHTML = checkIcon;
+            window.setTimeout(() => {
+              button.classList.remove("copied");
+              button.setAttribute("aria-label", "複製程式碼");
+              button.innerHTML = copyIcon;
+            }, 1400);
+          } catch {
+            button.setAttribute("aria-label", "複製失敗");
+          }
+        });
+        pre.append(button);
+
+        const scrollbar = document.createElement("div");
+        scrollbar.className = "code-scrollbar";
+        const thumb = document.createElement("div");
+        thumb.className = "code-scrollbar-thumb";
+        scrollbar.append(thumb);
+        pre.append(scrollbar);
+
+        const syncScrollbar = () => {
+          const visibleRatio = Math.min(1, code.clientWidth / code.scrollWidth);
+          const available = scrollbar.clientWidth * (1 - visibleRatio);
+          const maxScroll = code.scrollWidth - code.clientWidth;
+          const position = maxScroll === 0 ? 0 : (code.scrollLeft / maxScroll) * available;
+          thumb.style.width = `${visibleRatio * 100}%`;
+          thumb.style.transform = `translateX(${position}px)`;
+          scrollbar.classList.toggle("hidden", visibleRatio === 1);
+        };
+
+        code.addEventListener("scroll", syncScrollbar, { passive: true });
+        scrollbar.addEventListener("click", (event) => {
+          if (event.target === thumb) return;
+          const rect = scrollbar.getBoundingClientRect();
+          const ratio = (event.clientX - rect.left) / rect.width;
+          code.scrollLeft = ratio * (code.scrollWidth - code.clientWidth);
+        });
+
+        thumb.addEventListener("pointerdown", (event) => {
+          const startX = event.clientX;
+          const startScroll = code.scrollLeft;
+          const available = scrollbar.clientWidth - thumb.clientWidth;
+          const maxScroll = code.scrollWidth - code.clientWidth;
+          thumb.setPointerCapture(event.pointerId);
+
+          const move = (moveEvent) => {
+            if (available <= 0) return;
+            code.scrollLeft = startScroll + ((moveEvent.clientX - startX) / available) * maxScroll;
+          };
+          const stop = () => {
+            thumb.removeEventListener("pointermove", move);
+            thumb.removeEventListener("pointerup", stop);
+            thumb.removeEventListener("pointercancel", stop);
+          };
+
+          thumb.addEventListener("pointermove", move);
+          thumb.addEventListener("pointerup", stop);
+          thumb.addEventListener("pointercancel", stop);
+        });
+
+        if (typeof ResizeObserver === "function") {
+          new ResizeObserver(syncScrollbar).observe(code);
+        }
+        syncScrollbar();
+      });
+    })();
+  </script>
+</body>
+</html>
