@@ -2,21 +2,8 @@
 
 ## Current Status
 
-`VERIFY`。2026-07-18 baseline audit 確認本 plan 的 source、typecheck 與 106 個直接
-`bun test` cases 已通過；本次未獲授權執行 build，所以不要重做 implementation。下一次只完成
-下列 closure：
-
-```bash
-bun run build
-./dist/reviewstuff --version
-./dist/reviewstuff --help
-./dist/reviewstuff review --json
-./dist/reviewstuff review --staged --json
-```
-
-在 temporary Git fixtures 驗 marker、no-change、binary/large skip 與 non-repo error後，把
-[README](./README.md) 的 005 改成 `DONE`。除非 closure 發現 regression，005 不再接受新 scope；
-engine/schema/provider 工作從 007 開始。
+`DONE`。Git diff review pipeline 已完成；005 不再接受新 scope，engine/schema/provider 工作從
+007 開始。
 
 ## Goal
 

@@ -3,19 +3,6 @@
 這裡只維護一條可依序執行的主線。每個編號各有一份 canonical plan，本文件只負責共通規則、
 執行順序、狀態與 milestone，避免單一 roadmap 隨主線增長而必須整份載入。
 
-## 這次重整的結論
-
-- 現有 005 功能已存在且 typecheck、106 個直接 Bun tests 通過；因本次未獲授權重跑 build，
-  狀態是 `VERIFY`，先完成 closure verification 才能標記 DONE。
-- 007–037 舊草案把 provider、storage、fix、deep agent、analyzer、distribution、update 混在同一條
-  production path；它們已由新的小型 v1 slices 取代。
-- v1 定義為「安全、可觀察、可發布的 read-only local code review CLI」。Fix apply、deep agent、
-  多語言 analyzer、Anthropic、多平台與 self-update 都不是 v1 blocker。
-- 主線每一個 plan 只引入一個主要概念，且只依賴編號更小、已完成的 plan。
-
-上述非 v1 功能不屬於目前主線，也不應提前建立 schema、service、flag 或 skeleton。若未來有
-實際使用證據，再為單一功能另寫符合本文件 sizing contract 的新 plan。
-
 ## 執行規則
 
 每次只 implement 一個 plan。開始前只需讀本文件的共通規則與當前 plan；只有直接前置 contract
@@ -36,20 +23,6 @@ service skeleton、flag 或空目錄。
 「獨立」在這裡指 change set 自足、驗收不借用未來功能；不是指完全沒有前置依賴。每個 plan
 可以依賴前序已完成 contract，但不可依賴後續 plan 才能通過測試或讓 CLI 恢復 working state。
 
-## 架構約束
-
-- `commands/` 只解析 flags、呼叫 use-case、render typed result。
-- `use-cases/` 編排 semantic services，不直接使用 filesystem、network、provider SDK 或 subprocess。
-- `domain/`、`review/` 放 versioned schema 與 pure policy。
-- `platform/` 集中低階 filesystem、command、clock、environment、network 能力。
-- `git/`、`engines/`、`storage/` 等 capability module 擁有自己的 contract 與 canonical implementation。
-- 外部 command 一律經 `CommandRunner`，使用 argv、timeout、combined output limit 與 cancellation cleanup；
-  不使用 shell string、`child_process` 或 feature code 內的 `Bun.spawn`。
-- Public/persisted schema 必須 versioned；破壞性變更新增版本與 migration/refusal fixture。
-- Machine-readable stdout 不混入 diagnostics。`--json` 是單一 document；`--agent` 是 NDJSON。
-- Repo path 先 canonicalize，再以選定 repo root 做 containment；拒絕 symlink/traversal escape。
-- 多檔案替換不能宣稱 filesystem-atomic；需要 journal 與 recovery，但該能力不在 v1 主線。
-
 ## 技術與驗證基線
 
 - Runtime/package manager/test/build target：Bun。
@@ -68,7 +41,7 @@ service skeleton、flag 或空目錄。
 | [x] DONE | 002 | [Binary Test Harness](./002-binary-test-harness.md) | compiled binary e2e |
 | [x] DONE | 003 | [Local CLI Workflow](./003-local-cli-workflow.md) | 本機 binary workflow |
 | [x] DONE | 004 | [Repository Structure Boundaries](./004-repository-structure-boundaries.md) | module boundary 固定 |
-| [!] VERIFY | 005 | [Git Diff Review MVP](./005-git-diff-review-mvp.md) | 已實作；待 closure build/smoke |
+| [x] DONE | 005 | [Git Diff Review MVP](./005-git-diff-review-mvp.md) | deterministic Git diff review |
 | [x] DONE | 006 | [Config Profiles](./006-config-profiles-and-prompts.md) | versioned config/profile |
 | [ ] TODO | 007 | [Normalize Review Contracts](./007-normalize-review-contracts.md) | Safe cloud dogfood |
 | [ ] TODO | 008 | [Extract The Fake Review Engine](./008-extract-the-fake-review-engine.md) | Safe cloud dogfood |
@@ -110,8 +83,7 @@ service skeleton、flag 或空目錄。
 | [ ] TODO | 044 | [Document Installation And First Review](./044-document-installation-and-first-review.md) | Supported macOS v1 |
 | [ ] TODO | 045 | [Pass The Read-only macOS v1 Readiness Gate](./045-pass-the-read-only-macos-v1-readiness-gate.md) | Supported macOS v1 |
 
-狀態只能由 `TODO` → `IN PROGRESS` → `DONE`。005 的 `VERIFY` 是本次 baseline audit 的一次性狀態；
-完成其 closure commands 後改為 `DONE`，之後從 007 開始維持嚴格順序。
+狀態只能由 `TODO` → `IN PROGRESS` → `DONE`；從 007 開始維持嚴格順序。
 
 ## Milestones
 
