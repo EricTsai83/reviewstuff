@@ -37,7 +37,7 @@ reviewstuff review prompts --finding <id>
    replay 內容；不假設 010 保存完整 source snapshot。若使用者明確要求 current context，先驗
    preimage hash，輸出標示為 regenerated，hash drift 則拒絕並要求重新 review。
 5. 實作 `review prompts --finding <id>` 作為 prompt replay subcommand；它不進入一般
-   `review` provider flow，也不建立模糊的 `review --show-prompts` mode flag。
+   `review` provider flow，也不建立會改變主 command 語意的 mode flag。
 6. prompt replay 不呼叫 AI engine。
 7. 這一階段不持久化完整 prompt，只保存 prompt schema version/hash 等非敏感 metadata；
    prompt/request snapshot 必須等 029 的 redaction、retention 與 cleanup policy 完成後才能 opt-in 保存。

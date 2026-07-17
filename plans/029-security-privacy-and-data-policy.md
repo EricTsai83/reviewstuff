@@ -54,8 +54,8 @@
 
 ```bash
 bun run test
-./dist/reviewstuff review --privacy local-only --json
-./dist/reviewstuff review --dry-run-request --json
+./dist/reviewstuff review --engine fake --privacy local-only --json
+./dist/reviewstuff review --engine fake --dry-run-request --json
 ./dist/reviewstuff sessions clean --dry-run
 ```
 
