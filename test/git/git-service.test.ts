@@ -5,10 +5,6 @@ import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import {
   GitCommandError,
-  GitCommandOutputLimitError,
-  GitCommandProcessError,
-  GitCommandTimeoutError,
-  GitChangedFileUnavailableError,
   GitExecutionError,
   GitInvalidOutputError,
   GitNotRepositoryError,
@@ -18,37 +14,291 @@ import {
   layer,
 } from "../../src/git/git-service";
 import {
-  CommandOutputLimitError,
-  CommandProcessError,
   CommandRunner,
   CommandStartError,
-  CommandTimeoutError,
-  type CommandRequest,
   type CommandResult,
   type Service,
   layer as commandRunnerLayer,
 } from "../../src/platform/command-runner";
 import {
   FileInspector,
+  type Service as FileInspectorService,
 } from "../../src/platform/file-inspector";
+import { gitResult, makeGitRunnerFixture } from "./git-runner-fixture";
 
-const provideGit = (runner: Service) =>
+const detectRepository = ["rev-parse", "--is-inside-work-tree"] as const;
+const resolveRepositoryRoot = ["rev-parse", "--show-toplevel"] as const;
+const listStaged = [
+  "diff",
+  "--cached",
+  "--find-renames",
+  "--name-status",
+  "-z",
+  "--diff-filter=ACDMRTUXB",
+  "--",
+] as const;
+const listUnstaged = [
+  "diff",
+  "--find-renames",
+  "--name-status",
+  "-z",
+  "--diff-filter=ACDMRTUXB",
+  "--",
+] as const;
+const listUntracked = [
+  "ls-files",
+  "--others",
+  "--exclude-standard",
+  "-z",
+  "--",
+] as const;
+const resolveHead = [
+  "rev-parse",
+  "--verify",
+  "--quiet",
+  "HEAD^{commit}",
+] as const;
+
+const provideGit = (
+  runner: Service,
+  inspector: FileInspectorService = { size: () => Effect.succeed(1n) },
+) =>
   layer.pipe(
     Layer.provide(
       Layer.merge(
         Layer.succeed(CommandRunner, runner),
-        Layer.succeed(FileInspector, {
-          size: () => Effect.succeed(0n),
-        }),
+        Layer.succeed(FileInspector, inspector),
       ),
     ),
   );
 
-const result = (
-  stdout: string,
-  exitCode = 0,
-  stderr = "",
-): CommandResult => ({ stdout, stderr, exitCode });
+const readDiff = (
+  runner: Service,
+  scope: "staged" | "working-tree",
+  inspector?: FileInspectorService,
+) =>
+  GitService.pipe(
+    Effect.flatMap((git) => git.readDiff(scope)),
+    Effect.provide(provideGit(runner, inspector)),
+  );
+
+const expectRepositoryPrelude = (
+  fixture: ReturnType<typeof makeGitRunnerFixture>,
+  stagedOutput = "",
+) => {
+  fixture.expectGit(detectRepository, gitResult("true\n"));
+  fixture.expectGit(resolveRepositoryRoot, gitResult("/repo\n"));
+  fixture.expectGit(listStaged, gitResult(stagedOutput));
+};
+
+describe("GitService orchestration", () => {
+  test("validates repository and forces a stable English locale", async () => {
+    const fixture = makeGitRunnerFixture();
+    fixture.expectGit(
+      detectRepository,
+      gitResult("", 128, "fatal: not a git repository"),
+    );
+
+    const error = await readDiff(fixture.runner, "working-tree").pipe(
+      Effect.flip,
+      Effect.runPromise,
+    );
+
+    expect(error).toBeInstanceOf(GitNotRepositoryError);
+    expect(fixture.requests[0]?.environment).toEqual({ LC_ALL: "C" });
+    fixture.verify();
+  });
+
+  test("rejects a repository without a working tree", async () => {
+    const fixture = makeGitRunnerFixture();
+    fixture.expectGit(detectRepository, gitResult("false\n"));
+
+    const error = await readDiff(fixture.runner, "staged").pipe(
+      Effect.flip,
+      Effect.runPromise,
+    );
+
+    expect(error).toBeInstanceOf(GitWorkingTreeUnavailableError);
+    fixture.verify();
+  });
+
+  test("rejects malformed repository detection output using UTF-8 bytes", async () => {
+    const fixture = makeGitRunnerFixture();
+    const stdout = "錯誤\n";
+    fixture.expectGit(detectRepository, gitResult(stdout));
+
+    const error = await readDiff(fixture.runner, "staged").pipe(
+      Effect.flip,
+      Effect.runPromise,
+    );
+
+    expect(error).toBeInstanceOf(GitInvalidOutputError);
+    if (!(error instanceof GitInvalidOutputError)) {
+      throw new Error("Expected GitInvalidOutputError");
+    }
+    expect(error.outputBytes).toBe(Buffer.byteLength(stdout));
+    fixture.verify();
+  });
+
+  test("preserves unexpected repository detection failures", async () => {
+    const fixture = makeGitRunnerFixture();
+    fixture.expectGit(
+      detectRepository,
+      gitResult(
+        "",
+        128,
+        "fatal: detected dubious ownership; configure safe.directory",
+      ),
+    );
+
+    const error = await readDiff(fixture.runner, "staged").pipe(
+      Effect.flip,
+      Effect.runPromise,
+    );
+
+    expect(error).toBeInstanceOf(GitCommandError);
+    if (!(error instanceof GitCommandError)) {
+      throw new Error("Expected GitCommandError");
+    }
+    expect(error.operation).toBe("detect git repository");
+    expect(error.failure).toBe("unsafe-repository");
+    fixture.verify();
+  });
+
+  test("collects only the staged flow for staged scope", async () => {
+    const fixture = makeGitRunnerFixture();
+    const objectId = "a".repeat(40);
+    expectRepositoryPrelude(fixture, "A\0staged.ts\0");
+    fixture.expectGit(
+      ["rev-parse", "--verify", "--quiet", ":./staged.ts"],
+      gitResult(objectId),
+    );
+    fixture.expectGit(["cat-file", "-s", objectId], gitResult("10\n"));
+    fixture.expectGit(
+      (args) =>
+        args[0] === "diff" &&
+        args.includes("--cached") &&
+        args.includes("staged.ts"),
+      gitResult("patch:staged.ts"),
+      "staged patch",
+    );
+
+    const diff = await readDiff(fixture.runner, "staged").pipe(
+      Effect.runPromise,
+    );
+
+    expect(diff.files).toEqual([
+      { path: "staged.ts", source: "staged", patch: "patch:staged.ts" },
+    ]);
+    fixture.verify();
+  });
+
+  test("combines tracked and untracked working-tree patches", async () => {
+    const fixture = makeGitRunnerFixture();
+    expectRepositoryPrelude(fixture, "M\0tracked.ts\0");
+    fixture.expectGit(listUnstaged, gitResult("M\0tracked.ts\0"));
+    fixture.expectGit(listUntracked, gitResult("new.ts\0"));
+    fixture.expectGit(resolveHead, gitResult("a".repeat(40)));
+    fixture.expectGit(
+      (args) =>
+        args[0] === "diff" &&
+        args.includes("HEAD") &&
+        args.filter((argument) => argument === "tracked.ts").length === 1,
+      gitResult("patch:tracked.ts"),
+      "merged tracked patch",
+    );
+    fixture.expectGit(
+      (args) =>
+        args[0] === "diff" &&
+        args.includes("--no-index") &&
+        args.includes("new.ts"),
+      gitResult("patch:new.ts", 1),
+      "untracked patch",
+    );
+
+    const diff = await readDiff(fixture.runner, "working-tree").pipe(
+      Effect.runPromise,
+    );
+
+    expect(diff.files).toEqual([
+      {
+        path: "tracked.ts",
+        source: "working-tree",
+        patch: "patch:tracked.ts",
+      },
+      { path: "new.ts", source: "untracked", patch: "patch:new.ts" },
+    ]);
+    fixture.verify();
+  });
+
+  test("uses the repository-format empty tree in an unborn repository", async () => {
+    const fixture = makeGitRunnerFixture();
+    const emptyTreeObjectId = "b".repeat(64);
+    expectRepositoryPrelude(fixture, "A\0file.ts\0");
+    fixture.expectGit(listUnstaged, gitResult(""));
+    fixture.expectGit(listUntracked, gitResult(""));
+    fixture.expectGit(resolveHead, gitResult("", 1));
+    fixture.expectGit(
+      ["hash-object", "-t", "tree", "/dev/null"],
+      gitResult(`${emptyTreeObjectId}\n`),
+    );
+    fixture.expectGit(
+      (args) =>
+        args[0] === "diff" &&
+        args.includes(emptyTreeObjectId) &&
+        args.includes("file.ts"),
+      gitResult("patch:file.ts"),
+      "initial tracked patch",
+    );
+
+    const diff = await readDiff(fixture.runner, "working-tree").pipe(
+      Effect.runPromise,
+    );
+
+    expect(diff.files[0]?.path).toBe("file.ts");
+    fixture.verify();
+  });
+
+  test("fails before patch collection when conflicts exist", async () => {
+    const fixture = makeGitRunnerFixture();
+    expectRepositoryPrelude(fixture, "U\0z.ts\0");
+    fixture.expectGit(listUnstaged, gitResult("U\0b.ts\0U\0z.ts\0"));
+
+    const error = await readDiff(fixture.runner, "working-tree").pipe(
+      Effect.flip,
+      Effect.runPromise,
+    );
+
+    expect(error).toBeInstanceOf(GitUnmergedPathsError);
+    if (!(error instanceof GitUnmergedPathsError)) {
+      throw new Error("Expected GitUnmergedPathsError");
+    }
+    expect(error.paths).toEqual(["b.ts", "z.ts"]);
+    fixture.verify();
+  });
+
+  test("preserves typed command failures at the orchestration boundary", async () => {
+    const fixture = makeGitRunnerFixture();
+    const runnerError = new CommandStartError({
+      program: "git",
+      cause: new Error("spawn failed"),
+    });
+    fixture.expectGit(detectRepository, runnerError);
+
+    const error = await readDiff(fixture.runner, "working-tree").pipe(
+      Effect.flip,
+      Effect.runPromise,
+    );
+
+    expect(error).toBeInstanceOf(GitExecutionError);
+    if (!(error instanceof GitExecutionError)) {
+      throw new Error("Expected GitExecutionError");
+    }
+    expect(error.failure).toBe("command-start");
+    expect(error.cause).toBe(runnerError);
+    fixture.verify();
+  });
+});
 
 const commandRunnerLive = commandRunnerLayer.pipe(
   Layer.provide(BunServices.layer),
@@ -80,579 +330,11 @@ const runGit = (
     Effect.provide(commandRunnerLive),
   );
 
-describe("GitService error mapping", () => {
-  test("fails before reading patches when unmerged paths exist", async () => {
-    let call = 0;
-    const error = await GitService.pipe(
-      Effect.flatMap((git) => git.readDiff("working-tree")),
-      Effect.provide(
-        provideGit({
-          run: () => {
-            call += 1;
-
-            switch (call) {
-              case 1:
-                return Effect.succeed(result("true\n"));
-              case 2:
-                return Effect.succeed(result("/repo\n"));
-              case 3:
-                return Effect.succeed(result("U\0z.ts\0"));
-              case 4:
-                return Effect.succeed(result("U\0b.ts\0U\0z.ts\0"));
-              default:
-                throw new Error("GitService read past unmerged-path detection");
-            }
-          },
-        }),
-      ),
-      Effect.flip,
-      Effect.runPromise,
-    );
-
-    expect(error).toBeInstanceOf(GitUnmergedPathsError);
-    if (!(error instanceof GitUnmergedPathsError)) {
-      throw new Error("Expected GitUnmergedPathsError");
-    }
-
-    expect(error.paths).toEqual(["b.ts", "z.ts"]);
-    expect(call).toBe(4);
-  });
-
-  test("forces a stable English locale for Git commands", async () => {
-    const requests: Array<CommandRequest> = [];
-
-    await GitService.pipe(
-      Effect.flatMap((git) => git.readDiff("working-tree")),
-      Effect.provide(
-        provideGit({
-          run: (request) => {
-            requests.push(request);
-            return Effect.succeed(
-              result("", 128, "fatal: not a git repository"),
-            );
-          },
-        }),
-      ),
-      Effect.flip,
-      Effect.runPromise,
-    );
-
-    expect(requests[0]?.environment).toEqual({ LC_ALL: "C" });
-  });
-
-  test("maps repository detection failure to GitNotRepositoryError", async () => {
-    const error = await GitService.pipe(
-      Effect.flatMap((git) => git.readDiff("working-tree")),
-      Effect.provide(
-        provideGit({
-          run: () =>
-            Effect.succeed(
-              result("", 128, "fatal: not a git repository"),
-            ),
-        }),
-      ),
-      Effect.flip,
-      Effect.runPromise,
-    );
-
-    expect(error).toBeInstanceOf(GitNotRepositoryError);
-  });
-
-  test("distinguishes a repository without a working tree", async () => {
-    const error = await GitService.pipe(
-      Effect.flatMap((git) => git.readDiff("working-tree")),
-      Effect.provide(
-        provideGit({ run: () => Effect.succeed(result("false\n")) }),
-      ),
-      Effect.flip,
-      Effect.runPromise,
-    );
-
-    expect(error).toBeInstanceOf(GitWorkingTreeUnavailableError);
-  });
-
-  test("preserves unexpected repository detection failures", async () => {
-    const error = await GitService.pipe(
-      Effect.flatMap((git) => git.readDiff("working-tree")),
-      Effect.provide(
-        provideGit({
-          run: () =>
-            Effect.succeed(
-              result(
-                "",
-                128,
-                "fatal: detected dubious ownership; configure safe.directory",
-              ),
-            ),
-        }),
-      ),
-      Effect.flip,
-      Effect.runPromise,
-    );
-
-    expect(error).toBeInstanceOf(GitCommandError);
-    if (!(error instanceof GitCommandError)) {
-      throw new Error("Expected GitCommandError");
-    }
-
-    expect(error.operation).toBe("detect git repository");
-    expect(error.failure).toBe("unsafe-repository");
-  });
-
-  test("rejects malformed repository detection output using UTF-8 bytes", async () => {
-    const stdout = "錯誤\n";
-    const error = await GitService.pipe(
-      Effect.flatMap((git) => git.readDiff("working-tree")),
-      Effect.provide(
-        provideGit({ run: () => Effect.succeed(result(stdout)) }),
-      ),
-      Effect.flip,
-      Effect.runPromise,
-    );
-
-    expect(error).toBeInstanceOf(GitInvalidOutputError);
-    if (!(error instanceof GitInvalidOutputError)) {
-      throw new Error("Expected GitInvalidOutputError");
-    }
-
-    expect(error.operation).toBe("detect git repository");
-    expect(error.outputBytes).toBe(Buffer.byteLength(stdout));
-  });
-
-  test("maps runner errors to GitExecutionError", async () => {
-    const runnerError = new CommandStartError({
-      program: "git",
-      cause: new Error("spawn failed"),
-    });
-    const error = await GitService.pipe(
-      Effect.flatMap((git) => git.readDiff("working-tree")),
-      Effect.provide(
-        provideGit({ run: () => Effect.fail(runnerError) }),
-      ),
-      Effect.flip,
-      Effect.runPromise,
-    );
-
-    expect(error).toBeInstanceOf(GitExecutionError);
-    if (!(error instanceof GitExecutionError)) {
-      throw new Error("Expected GitExecutionError");
-    }
-
-    expect(error.cause).toBe(runnerError);
-    expect(error.failure).toBe("command-start");
-  });
-
-  test("preserves the failed process phase", async () => {
-    const runnerError = new CommandProcessError({
-      program: "git",
-      phase: "stderr",
-      cause: new Error("stream failed"),
-    });
-    const error = await GitService.pipe(
-      Effect.flatMap((git) => git.readDiff("working-tree")),
-      Effect.provide(
-        provideGit({ run: () => Effect.fail(runnerError) }),
-      ),
-      Effect.flip,
-      Effect.runPromise,
-    );
-
-    expect(error).toBeInstanceOf(GitCommandProcessError);
-    if (!(error instanceof GitCommandProcessError)) {
-      throw new Error("Expected GitCommandProcessError");
-    }
-
-    expect(error.operation).toBe("detect git repository");
-    expect(error.phase).toBe("stderr");
-    expect(error.cause).toBe(runnerError);
-  });
-
-  test("preserves timeout details as a GitCommandTimeoutError", async () => {
-    const runnerError = new CommandTimeoutError({
-      program: "git",
-      timeoutMilliseconds: 10_000,
-    });
-    const error = await GitService.pipe(
-      Effect.flatMap((git) => git.readDiff("working-tree")),
-      Effect.provide(
-        provideGit({ run: () => Effect.fail(runnerError) }),
-      ),
-      Effect.flip,
-      Effect.runPromise,
-    );
-
-    expect(error).toBeInstanceOf(GitCommandTimeoutError);
-    if (!(error instanceof GitCommandTimeoutError)) {
-      throw new Error("Expected GitCommandTimeoutError");
-    }
-
-    expect(error.operation).toBe("detect git repository");
-    expect(error.timeoutMilliseconds).toBe(10_000);
-    expect(error.cause).toBe(runnerError);
-  });
-
-  test("preserves output limits as a fatal GitCommandOutputLimitError", async () => {
-    const runnerError = new CommandOutputLimitError({
-      program: "git",
-      maxOutputBytes: 4 * 1024 * 1024,
-      observedOutputBytes: 4 * 1024 * 1024 + 1,
-    });
-    const error = await GitService.pipe(
-      Effect.flatMap((git) => git.readDiff("working-tree")),
-      Effect.provide(
-        provideGit({ run: () => Effect.fail(runnerError) }),
-      ),
-      Effect.flip,
-      Effect.runPromise,
-    );
-
-    expect(error).toBeInstanceOf(GitCommandOutputLimitError);
-    if (!(error instanceof GitCommandOutputLimitError)) {
-      throw new Error("Expected GitCommandOutputLimitError");
-    }
-
-    expect(error.operation).toBe("detect git repository");
-    expect(error.maxOutputBytes).toBe(4 * 1024 * 1024);
-    expect(error.observedOutputBytes).toBe(4 * 1024 * 1024 + 1);
-    expect(error.cause).toBe(runnerError);
-  });
-
-  test("does not downgrade a patch output limit to skipped coverage", async () => {
-    let call = 0;
-    const runnerError = new CommandOutputLimitError({
-      program: "git",
-      maxOutputBytes: 512 * 1024,
-      observedOutputBytes: 512 * 1024 + 1,
-    });
-    const error = await GitService.pipe(
-      Effect.flatMap((git) => git.readDiff("staged")),
-      Effect.provide(
-        provideGit({
-          run: () => {
-            call += 1;
-
-            switch (call) {
-              case 1:
-                return Effect.succeed(result("true\n"));
-              case 2:
-                return Effect.succeed(result("/repo\n"));
-              case 3:
-                return Effect.succeed(result("A\0large.ts\0"));
-              case 4:
-                return Effect.succeed(result("a".repeat(40)));
-              case 5:
-                return Effect.succeed(result("100\n"));
-              default:
-                return Effect.fail(runnerError);
-            }
-          },
-        }),
-      ),
-      Effect.flip,
-      Effect.runPromise,
-    );
-
-    expect(error).toBeInstanceOf(GitCommandOutputLimitError);
-    if (!(error instanceof GitCommandOutputLimitError)) {
-      throw new Error("Expected GitCommandOutputLimitError");
-    }
-
-    expect(error.operation).toBe("read staged diff");
-    expect(error.maxOutputBytes).toBe(512 * 1024);
-  });
-
-  test("does not treat fatal object resolution as a missing object", async () => {
-    let call = 0;
-    const error = await GitService.pipe(
-      Effect.flatMap((git) => git.readDiff("staged")),
-      Effect.provide(
-        provideGit({
-          run: () => {
-            call += 1;
-
-            switch (call) {
-              case 1:
-                return Effect.succeed(result("true\n"));
-              case 2:
-                return Effect.succeed(result("/repo\n"));
-              case 3:
-                return Effect.succeed(result("A\0file.ts\0"));
-              default:
-                return Effect.succeed(
-                  result("", 128, "fatal: permission denied"),
-                );
-            }
-          },
-        }),
-      ),
-      Effect.flip,
-      Effect.runPromise,
-    );
-
-    expect(error).toBeInstanceOf(GitCommandError);
-    if (!(error instanceof GitCommandError)) {
-      throw new Error("Expected GitCommandError");
-    }
-
-    expect(error.operation).toBe("resolve git object");
-    expect(error.exitCode).toBe(128);
-    expect(error.failure).toBe("permission-denied");
-  });
-
-  test("fails when a listed tracked file no longer has a patch", async () => {
-    let call = 0;
-    const error = await GitService.pipe(
-      Effect.flatMap((git) => git.readDiff("staged")),
-      Effect.provide(
-        provideGit({
-          run: () => {
-            call += 1;
-
-            switch (call) {
-              case 1:
-                return Effect.succeed(result("true\n"));
-              case 2:
-                return Effect.succeed(result("/repo\n"));
-              case 3:
-                return Effect.succeed(result("A\0file.ts\0"));
-              case 4:
-                return Effect.succeed(result("a".repeat(40)));
-              case 5:
-                return Effect.succeed(result("100\n"));
-              default:
-                return Effect.succeed(result(""));
-            }
-          },
-        }),
-      ),
-      Effect.flip,
-      Effect.runPromise,
-    );
-
-    expect(error).toBeInstanceOf(GitChangedFileUnavailableError);
-    if (!(error instanceof GitChangedFileUnavailableError)) {
-      throw new Error("Expected GitChangedFileUnavailableError");
-    }
-
-    expect(error.path).toBe("file.ts");
-    expect(error.source).toBe("staged");
-  });
-
-  test("fails when review-base resolution has an unexpected exit code", async () => {
-    let call = 0;
-    const error = await GitService.pipe(
-      Effect.flatMap((git) => git.readDiff("working-tree")),
-      Effect.provide(
-        provideGit({
-          run: () => {
-            call += 1;
-
-            switch (call) {
-              case 1:
-                return Effect.succeed(result("true\n"));
-              case 2:
-                return Effect.succeed(result("/repo\n"));
-              case 3:
-              case 4:
-              case 5:
-                return Effect.succeed(result(""));
-              default:
-                return Effect.succeed(result("", 2, "corrupt ref"));
-            }
-          },
-        }),
-      ),
-      Effect.flip,
-      Effect.runPromise,
-    );
-
-    expect(error).toBeInstanceOf(GitCommandError);
-    if (!(error instanceof GitCommandError)) {
-      throw new Error("Expected GitCommandError");
-    }
-
-    expect(error.operation).toBe("resolve review base");
-    expect(error.exitCode).toBe(2);
-    expect(error.failure).toBe("repository-corrupt");
-  });
-
-  test("asks Git for the repository-format empty tree when HEAD is missing", async () => {
-    const emptyTreeSha256 =
-      "6ef19b41225c5369f1c104d45d8d85efa9b057b53b14b4b9b939dd74decc5321";
-    const calls: Array<ReadonlyArray<string>> = [];
-    let call = 0;
-    const diff = await GitService.pipe(
-      Effect.flatMap((git) => git.readDiff("working-tree")),
-      Effect.provide(
-        provideGit({
-          run: (request) => {
-            calls.push(request.args ?? []);
-            call += 1;
-
-            switch (call) {
-              case 1:
-                return Effect.succeed(result("true\n"));
-              case 2:
-                return Effect.succeed(result("/repo\n"));
-              case 3:
-                return Effect.succeed(result("A\0file.ts\0"));
-              case 4:
-              case 5:
-                return Effect.succeed(result(""));
-              case 6:
-                return Effect.succeed(result("", 1));
-              case 7:
-                return Effect.succeed(result(`${emptyTreeSha256}\n`));
-              default:
-                return Effect.succeed(result("diff --git a/file.ts b/file.ts\n"));
-            }
-          },
-        }),
-      ),
-      Effect.runPromise,
-    );
-
-    expect(calls[6]).toEqual([
-      "--literal-pathspecs",
-      "hash-object",
-      "-t",
-      "tree",
-      "/dev/null",
-    ]);
-    expect(calls[7]).toContain(emptyTreeSha256);
-    expect(diff.files).toHaveLength(1);
-  });
-
-  test("rejects an invalid empty-tree object ID from Git", async () => {
-    let call = 0;
-    const error = await GitService.pipe(
-      Effect.flatMap((git) => git.readDiff("working-tree")),
-      Effect.provide(
-        provideGit({
-          run: () => {
-            call += 1;
-
-            switch (call) {
-              case 1:
-                return Effect.succeed(result("true\n"));
-              case 2:
-                return Effect.succeed(result("/repo\n"));
-              case 3:
-              case 4:
-              case 5:
-                return Effect.succeed(result(""));
-              case 6:
-                return Effect.succeed(result("", 1));
-              default:
-                return Effect.succeed(result("not-an-object-id\n"));
-            }
-          },
-        }),
-      ),
-      Effect.flip,
-      Effect.runPromise,
-    );
-
-    expect(error).toBeInstanceOf(GitInvalidOutputError);
-    if (!(error instanceof GitInvalidOutputError)) {
-      throw new Error("Expected GitInvalidOutputError");
-    }
-
-    expect(error.operation).toBe("resolve empty tree");
-    expect(error.outputBytes).toBe(Buffer.byteLength("not-an-object-id\n"));
-  });
-
-  test("maps command exit codes to GitCommandError", async () => {
-    let call = 0;
-    const error = await GitService.pipe(
-      Effect.flatMap((git) => git.readDiff("staged")),
-      Effect.provide(
-        provideGit({
-          run: () => {
-            call += 1;
-            return Effect.succeed(
-              call === 1 ? result("true\n") : result("", 2, "bad index"),
-            );
-          },
-        }),
-      ),
-      Effect.flip,
-      Effect.runPromise,
-    );
-
-    expect(error).toBeInstanceOf(GitCommandError);
-    if (!(error instanceof GitCommandError)) {
-      throw new Error("Expected GitCommandError");
-    }
-
-    expect(error.exitCode).toBe(2);
-    expect(error.stderrLength).toBe("bad index".length);
-    expect(error.failure).toBe("unknown");
-  });
-
-  test("classifies actionable Git command failures without retaining stderr", async () => {
-    let call = 0;
-    const stderr = "fatal: Unable to create '.git/index.lock': File exists.";
-    const error = await GitService.pipe(
-      Effect.flatMap((git) => git.readDiff("staged")),
-      Effect.provide(
-        provideGit({
-          run: () => {
-            call += 1;
-            return Effect.succeed(
-              call === 1 ? result("true\n") : result("", 2, stderr),
-            );
-          },
-        }),
-      ),
-      Effect.flip,
-      Effect.runPromise,
-    );
-
-    expect(error).toBeInstanceOf(GitCommandError);
-    if (!(error instanceof GitCommandError)) {
-      throw new Error("Expected GitCommandError");
-    }
-
-    expect(error.stderrLength).toBe(stderr.length);
-    expect(error.failure).toBe("index-locked");
-    expect(error).not.toHaveProperty("stderr");
-  });
-
-  test("prioritizes permission failures over index lock wording", async () => {
-    let call = 0;
-    const stderr =
-      "fatal: Unable to create '.git/index.lock': Permission denied";
-    const error = await GitService.pipe(
-      Effect.flatMap((git) => git.readDiff("staged")),
-      Effect.provide(
-        provideGit({
-          run: () => {
-            call += 1;
-            return Effect.succeed(
-              call === 1 ? result("true\n") : result("", 128, stderr),
-            );
-          },
-        }),
-      ),
-      Effect.flip,
-      Effect.runPromise,
-    );
-
-    expect(error).toBeInstanceOf(GitCommandError);
-    if (!(error instanceof GitCommandError)) {
-      throw new Error("Expected GitCommandError");
-    }
-
-    expect(error.failure).toBe("permission-denied");
-  });
-});
-
-describe("GitService coverage", () => {
+describe("GitService temporary repository integration", () => {
   test("blocks staged review when the repository has merge conflicts", async () => {
     const repository = await FileSystem.FileSystem.pipe(
       Effect.flatMap((fileSystem) =>
-        fileSystem.makeTempDirectory({ prefix: "reviewstuff-git-conflict-" }),
+        fileSystem.makeTempDirectory({ prefix: "reviewstuff-git-conflict-" })
       ),
       Effect.provide(BunServices.layer),
       Effect.runPromise,
@@ -689,7 +371,7 @@ describe("GitService coverage", () => {
           workingDirectory: repository,
           timeout: 10_000,
           maxOutputBytes: 4 * 1024 * 1024,
-        }),
+        })
       ),
       Effect.provide(commandRunnerLive),
       Effect.runPromise,
@@ -707,10 +389,10 @@ describe("GitService coverage", () => {
     expect(cliResult.stderr).not.toContain("Reviewed");
   });
 
-  test("supports an initial repository and reports binary and large files", async () => {
+  test("supports initial repositories, binary files, and large files", async () => {
     const repository = await FileSystem.FileSystem.pipe(
       Effect.flatMap((fileSystem) =>
-        fileSystem.makeTempDirectory({ prefix: "reviewstuff-git-service-" }),
+        fileSystem.makeTempDirectory({ prefix: "reviewstuff-git-service-" })
       ),
       Effect.provide(BunServices.layer),
       Effect.runPromise,
@@ -721,10 +403,7 @@ describe("GitService coverage", () => {
       `${repository}/included.ts`,
       "export const included = true;\n",
     );
-    await Bun.write(
-      `${repository}/binary.dat`,
-      new Uint8Array([0, 1, 2, 3]),
-    );
+    await Bun.write(`${repository}/binary.dat`, new Uint8Array([0, 1, 2, 3]));
     await Bun.write(
       `${repository}/large.txt`,
       `large\n${"x".repeat(600 * 1024)}`,
@@ -741,7 +420,7 @@ describe("GitService coverage", () => {
           workingDirectory: repository,
           timeout: 10_000,
           maxOutputBytes: 4 * 1024 * 1024,
-        }),
+        })
       ),
       Effect.provide(commandRunnerLive),
       Effect.runPromise,

@@ -15,12 +15,12 @@ const AppLive = GitService.layer.pipe(
   Layer.provideMerge(BunServices.layer),
 );
 
-const command = Command.make("reviewstuff").pipe(
+const rootCommand = Command.make("reviewstuff").pipe(
   Command.withDescription("A code review CLI scaffold."),
   Command.withSubcommands([reviewCommand, doctorCommand]),
 );
 
-Command.run(command, { version: packageJson.version }).pipe(
+Command.run(rootCommand, { version: packageJson.version }).pipe(
   Effect.scoped,
   Effect.provide(AppLive),
   BunRuntime.runMain,

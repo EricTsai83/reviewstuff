@@ -561,7 +561,7 @@
         <pre class="language-shell"><span class="label">Shell</span><code><span class="sh-command">git</span> hash-object <span class="sh-flag">-t</span> tree /dev/null</code></pre>
         <p><code>-t tree</code> 指定 object type；<code>/dev/null</code> 提供零 bytes payload。命令沒有 <code>-w</code>，所以只計算 ID，不會把 object 寫入 object database，也不會建立 branch 或 commit。</p>
 
-        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">const</span> baseResult <span class="o">=</span> <span class="k">yield</span><span class="o">*</span> <span class="f">execute</span><span class="o">(</span>
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">const</span> headCommitVerification <span class="o">=</span> <span class="k">yield</span><span class="o">*</span> <span class="f">executeGit</span><span class="o">(</span>
   runner<span class="o">,</span>
   <span class="s">"resolve review base"</span><span class="o">,</span>
   <span class="o">[</span><span class="s">"rev-parse"</span><span class="o">,</span> <span class="s">"--verify"</span><span class="o">,</span> <span class="s">"--quiet"</span><span class="o">,</span> <span class="s">"HEAD^{commit}"</span><span class="o">]</span><span class="o">,</span>
@@ -569,13 +569,13 @@
   repositoryRoot<span class="o">,</span>
 <span class="o">)</span><span class="o">;</span>
 
-<span class="k">if</span> <span class="o">(</span>baseResult<span class="o">.</span><span class="p">exitCode</span> <span class="o">!</span><span class="o">=</span><span class="o">=</span> <span class="n">0</span> <span class="o">&amp;</span><span class="o">&amp;</span> baseResult<span class="o">.</span><span class="p">exitCode</span> <span class="o">!</span><span class="o">=</span><span class="o">=</span> <span class="n">1</span><span class="o">)</span> <span class="o">{</span>
-  <span class="k">return</span> <span class="k">yield</span><span class="o">*</span> <span class="f">makeGitCommandError</span><span class="o">(</span><span class="s">"resolve review base"</span><span class="o">,</span> baseResult<span class="o">)</span><span class="o">;</span>
+<span class="k">if</span> <span class="o">(</span>headCommitVerification<span class="o">.</span><span class="p">exitCode</span> <span class="o">!</span><span class="o">=</span><span class="o">=</span> <span class="n">0</span> <span class="o">&amp;</span><span class="o">&amp;</span> headCommitVerification<span class="o">.</span><span class="p">exitCode</span> <span class="o">!</span><span class="o">=</span><span class="o">=</span> <span class="n">1</span><span class="o">)</span> <span class="o">{</span>
+  <span class="k">return</span> <span class="k">yield</span><span class="o">*</span> <span class="f">makeGitCommandError</span><span class="o">(</span><span class="s">"resolve review base"</span><span class="o">,</span> headCommitVerification<span class="o">)</span><span class="o">;</span>
 <span class="o">}</span>
 
-<span class="k">const</span> base <span class="o">=</span> baseResult<span class="o">.</span><span class="p">exitCode</span> <span class="o">=</span><span class="o">=</span><span class="o">=</span> <span class="n">0</span>
+<span class="k">const</span> reviewBase <span class="o">=</span> headCommitVerification<span class="o">.</span><span class="p">exitCode</span> <span class="o">=</span><span class="o">=</span><span class="o">=</span> <span class="n">0</span>
   <span class="o">?</span> <span class="s">"HEAD"</span>
-  <span class="o">:</span> <span class="k">yield</span><span class="o">*</span> <span class="f">resolveEmptyTree</span><span class="o">(</span>runner<span class="o">,</span> repositoryRoot<span class="o">)</span><span class="o">;</span></code></pre>
+  <span class="o">:</span> <span class="k">yield</span><span class="o">*</span> <span class="f">resolveEmptyTreeObjectId</span><span class="o">(</span>runner<span class="o">,</span> repositoryRoot<span class="o">)</span><span class="o">;</span></code></pre>
 
         <h3>為什麼動態計算比寫死 SHA-1 常數好？</h3>
         <div class="table-wrap">

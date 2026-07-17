@@ -1,139 +1,195 @@
 import { describe, expect, test } from "bun:test";
 import * as Effect from "effect/Effect";
-import {
-  collectPatches,
-  nulSeparatedChangedPaths,
-  nulSeparatedPaths,
-  unmergedPaths,
-} from "../../src/git/git-diff";
-import { GitInvalidOutputError } from "../../src/git/git-errors";
-import type * as CommandRunner from "../../src/platform/command-runner";
+import { collectDiffPatches } from "../../src/git/git-diff";
+import { GitChangedFileUnavailableError } from "../../src/git/git-errors";
 import type * as FileInspector from "../../src/platform/file-inspector";
+import { gitResult, makeGitRunnerFixture } from "./git-runner-fixture";
 
-const operation = "list changed files";
+const repositoryRoot = "/repo";
+const objectId = "a".repeat(40);
+const target = (path: string) => ({ path, pathspecs: [path] });
+const stagedSizeCommands = (
+  fixture: ReturnType<typeof makeGitRunnerFixture>,
+  path: string,
+  size: bigint,
+  id = objectId,
+) => {
+  fixture.expectGit(
+    ["rev-parse", "--verify", "--quiet", `:./${path}`],
+    gitResult(id),
+  );
+  fixture.expectGit(["cat-file", "-s", id], gitResult(`${size}\n`));
+};
 
-describe("Git NUL-separated output parsing", () => {
-  test("preserves statuses, scores, rename paths, and special filenames", async () => {
-    const specialPath = "src/line\nwith\ttabs.ts";
-    const changes = await nulSeparatedChangedPaths(
-      `U\0src/conflict.ts\0R100\0src/old.ts\0src/new.ts\0M\0${specialPath}\0`,
-      operation,
+describe("Git diff patch collection", () => {
+  test("collects a staged text patch", async () => {
+    const fixture = makeGitRunnerFixture();
+    stagedSizeCommands(fixture, "file.ts", 12n);
+    fixture.expectGit(
+      [
+        "diff",
+        "--cached",
+        "--find-renames",
+        "--no-color",
+        "--no-ext-diff",
+        "--unified=3",
+        "--",
+        "file.ts",
+      ],
+      gitResult("diff --git a/file.ts b/file.ts\n"),
+    );
+
+    const collection = await collectDiffPatches(
+      fixture.runner,
+      { size: () => Effect.die("unused") },
+      [target("file.ts")],
+      "staged",
+      repositoryRoot,
     ).pipe(Effect.runPromise);
 
-    expect(changes).toEqual([
+    expect(collection).toEqual({
+      files: [
+        {
+          path: "file.ts",
+          source: "staged",
+          patch: "diff --git a/file.ts b/file.ts\n",
+        },
+      ],
+      skippedFiles: [],
+    });
+    fixture.verify();
+  });
+
+  test("reports binary patches as skipped", async () => {
+    const fixture = makeGitRunnerFixture();
+    stagedSizeCommands(fixture, "image.dat", 4n);
+    fixture.expectGit(
+      (args) => args[0] === "diff" && args.includes("image.dat"),
+      gitResult("Binary files a/image.dat and b/image.dat differ\n"),
+      "binary diff",
+    );
+
+    const collection = await collectDiffPatches(
+      fixture.runner,
+      { size: () => Effect.die("unused") },
+      [target("image.dat")],
+      "staged",
+      repositoryRoot,
+    ).pipe(Effect.runPromise);
+
+    expect(collection.skippedFiles).toEqual([
+      { path: "image.dat", source: "staged", reason: "binary" },
+    ]);
+    fixture.verify();
+  });
+
+  test("skips oversized files without reading a patch", async () => {
+    const fixture = makeGitRunnerFixture();
+    stagedSizeCommands(fixture, "large.txt", 524_289n);
+
+    const collection = await collectDiffPatches(
+      fixture.runner,
+      { size: () => Effect.die("unused") },
+      [target("large.txt")],
+      "staged",
+      repositoryRoot,
+    ).pipe(Effect.runPromise);
+
+    expect(collection.skippedFiles).toEqual([
       {
-        status: "U",
-        path: "src/conflict.ts",
-        pathspecs: ["src/conflict.ts"],
-      },
-      {
-        status: "M",
-        path: specialPath,
-        pathspecs: [specialPath],
-      },
-      {
-        status: "R",
-        score: 100,
-        path: "src/new.ts",
-        pathspecs: ["src/old.ts", "src/new.ts"],
+        path: "large.txt",
+        source: "staged",
+        reason: "file-too-large",
+        sizeBytes: "524289",
+        limitBytes: 524_288,
       },
     ]);
+    fixture.verify();
   });
 
-  test("accepts empty output and sorts plain paths", async () => {
-    expect(
-      await nulSeparatedChangedPaths("", operation).pipe(Effect.runPromise),
-    ).toEqual([]);
-    expect(
-      await nulSeparatedPaths("z.ts\0a.ts\0", operation).pipe(
-        Effect.runPromise,
-      ),
-    ).toEqual(["a.ts", "z.ts"]);
-  });
-
-  test("deduplicates and sorts unmerged paths", () => {
-    expect(
-      unmergedPaths([
-        { status: "U", path: "z.ts", pathspecs: ["z.ts"] },
-        { status: "M", path: "a.ts", pathspecs: ["a.ts"] },
-        { status: "U", path: "z.ts", pathspecs: ["z.ts"] },
-        { status: "U", path: "b.ts", pathspecs: ["b.ts"] },
-      ]),
-    ).toEqual(["b.ts", "z.ts"]);
-  });
-
-  test.each([
-    ["missing final NUL", "A\0file.ts"],
-    ["missing rename target", "R100\0old.ts\0"],
-    ["unknown status", "Q\0file.ts\0"],
-    ["invalid score", "R101\0old.ts\0new.ts\0"],
-    ["empty path", "A\0\0"],
-  ])("rejects %s", async (_name, output) => {
-    const error = await nulSeparatedChangedPaths(output, operation).pipe(
-      Effect.flip,
-      Effect.runPromise,
+  test("uses the HEAD object size for a deleted working-tree file", async () => {
+    const fixture = makeGitRunnerFixture();
+    fixture.expectGit(
+      ["rev-parse", "--verify", "--quiet", "HEAD:deleted.ts"],
+      gitResult(objectId),
     );
-
-    expect(error).toBeInstanceOf(GitInvalidOutputError);
-    expect(error.operation).toBe(operation);
-    expect(error.outputBytes).toBe(Buffer.byteLength(output));
-  });
-
-  test("rejects malformed plain path output", async () => {
-    const output = "complete.ts\0partial.ts";
-    const error = await nulSeparatedPaths(output, operation).pipe(
-      Effect.flip,
-      Effect.runPromise,
+    fixture.expectGit(["cat-file", "-s", objectId], gitResult("10\n"));
+    fixture.expectGit(
+      (args) => args[0] === "diff" && args.includes("deleted.ts"),
+      gitResult("diff --git a/deleted.ts b/deleted.ts\n"),
+      "deleted-file diff",
     );
-
-    expect(error).toBeInstanceOf(GitInvalidOutputError);
-    expect(error.outputBytes).toBe(Buffer.byteLength(output));
-  });
-});
-
-describe("Git patch collection", () => {
-  test("processes files concurrently without exceeding the configured limit", async () => {
-    let activeCommands = 0;
-    let peakActiveCommands = 0;
-    const runner: CommandRunner.Service = {
-      run: (request) =>
-        Effect.promise(async () => {
-          activeCommands += 1;
-          peakActiveCommands = Math.max(peakActiveCommands, activeCommands);
-          await Bun.sleep(5);
-          activeCommands -= 1;
-
-          const args = request.args ?? [];
-          if (args.includes("rev-parse")) {
-            return { stdout: "a".repeat(40), stderr: "", exitCode: 0 };
-          }
-          if (args.includes("cat-file")) {
-            return { stdout: "1\n", stderr: "", exitCode: 0 };
-          }
-          return {
-            stdout: "diff --git a/file.ts b/file.ts\n",
-            stderr: "",
-            exitCode: 0,
-          };
-        }),
-    };
     const inspector: FileInspector.Service = {
-      size: () => Effect.succeed(1n),
+      size: () => Effect.succeed(undefined),
     };
-    const changes = Array.from({ length: 12 }, (_, index) => {
-      const path = `file-${index}.ts`;
-      return { path, pathspecs: [path] };
-    });
 
-    const collection = await collectPatches(
-      runner,
+    const collection = await collectDiffPatches(
+      fixture.runner,
       inspector,
-      changes,
-      "staged",
-      "/repo",
+      [target("deleted.ts")],
+      "working-tree",
+      repositoryRoot,
     ).pipe(Effect.runPromise);
 
-    expect(collection.files).toHaveLength(changes.length);
+    expect(collection.files[0]?.path).toBe("deleted.ts");
+    fixture.verify();
+  });
+
+  test("fails when an untracked file becomes unavailable", async () => {
+    const fixture = makeGitRunnerFixture();
+    const error = await collectDiffPatches(
+      fixture.runner,
+      { size: () => Effect.succeed(undefined) },
+      [target("gone.ts")],
+      "untracked",
+      repositoryRoot,
+    ).pipe(Effect.flip, Effect.runPromise);
+
+    expect(error).toBeInstanceOf(GitChangedFileUnavailableError);
+    if (!(error instanceof GitChangedFileUnavailableError)) {
+      throw new Error("Expected GitChangedFileUnavailableError");
+    }
+    expect(error.path).toBe("gone.ts");
+    fixture.verify();
+  });
+
+  test("limits concurrent patch work and preserves target order", async () => {
+    const fixture = makeGitRunnerFixture();
+    let activeCommands = 0;
+    let peakActiveCommands = 0;
+    const paths = Array.from({ length: 12 }, (_, index) => `file-${index}.ts`);
+
+    for (const [index, path] of paths.entries()) {
+      const id = index.toString(16).padStart(40, "0");
+      fixture.expectGit(
+        ["rev-parse", "--verify", "--quiet", `:./${path}`],
+        () =>
+          Effect.promise(async () => {
+            activeCommands += 1;
+            peakActiveCommands = Math.max(peakActiveCommands, activeCommands);
+            await Bun.sleep(12 - index);
+            activeCommands -= 1;
+            return gitResult(id);
+          }),
+      );
+      fixture.expectGit(["cat-file", "-s", id], gitResult("1\n"));
+      fixture.expectGit(
+        (args) => args[0] === "diff" && args.includes(path),
+        gitResult(`patch:${path}`),
+        `patch for ${path}`,
+      );
+    }
+
+    const collection = await collectDiffPatches(
+      fixture.runner,
+      { size: () => Effect.die("unused") },
+      paths.map(target),
+      "staged",
+      repositoryRoot,
+    ).pipe(Effect.runPromise);
+
     expect(peakActiveCommands).toBe(4);
+    expect(collection.files.map((file) => file.path)).toEqual(paths);
+    fixture.verify();
   });
 });

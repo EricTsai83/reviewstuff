@@ -337,7 +337,7 @@
 
     <section id="flow">
       <h2>2. 完整資料流</h2>
-      <p><code>GitService.readDiff(scope)</code> 是入口。它先確認執行位置、取得 repository root，再列出並解析 changed records。Conflict gate 位在 patch collection 之前，因此 unmerged path 不可能流入 <code>readPatch</code>。</p>
+      <p><code>GitService.readDiff(scope)</code> 是入口。它先確認執行位置、取得 repository root，再列出並解析 changed records。Conflict gate 位在 patch collection 之前，因此 unmerged path 不可能流入 <code>readDiffPatch</code>。</p>
 
       <figure class="flow-figure">
         <svg class="flow-desktop" role="img" aria-labelledby="flow-desktop-title flow-desktop-desc" viewBox="0 0 900 238">
@@ -431,7 +431,7 @@
   <span class="o">|</span> <span class="s">"A"</span> <span class="o">|</span> <span class="s">"B"</span> <span class="o">|</span> <span class="s">"C"</span> <span class="o">|</span> <span class="s">"D"</span> <span class="o">|</span> <span class="s">"M"</span>
   <span class="o">|</span> <span class="s">"R"</span> <span class="o">|</span> <span class="s">"T"</span> <span class="o">|</span> <span class="s">"U"</span> <span class="o">|</span> <span class="s">"X"</span><span class="o">;</span>
 
-interface <span class="t">GitChangedPath</span> <span class="o">{</span>
+interface <span class="t">GitChange</span> <span class="o">{</span>
   readonly status<span class="o">:</span> <span class="t">GitChangeStatus</span><span class="o">;</span>
   readonly score<span class="o">?</span><span class="o">:</span> number<span class="o">;</span>
   readonly path<span class="o">:</span> string<span class="o">;</span>
@@ -453,7 +453,7 @@ interface <span class="t">GitChangedPath</span> <span class="o">{</span>
       </div>
 
       <h3>Parser 採 all-or-nothing</h3>
-      <p><code>nulSeparatedChangedPaths</code> 不會回傳部分結果。只要出現下列任一情況，就回傳 <code>GitInvalidOutputError</code>：</p>
+      <p><code>parseNulSeparatedChanges</code> 不會回傳部分結果。只要出現下列任一情況，就回傳 <code>GitInvalidOutputError</code>：</p>
       <ul class="checklist">
         <li>非空輸出沒有以 NUL 結尾。</li>
         <li>任何欄位為空，包含空 path。</li>
@@ -466,9 +466,9 @@ interface <span class="t">GitChangedPath</span> <span class="o">{</span>
 
     <section id="conflict">
       <h2>4. Unmerged path 的 fail-fast 設計</h2>
-      <p><code>unmergedPaths</code> 從解析完成的 records 中挑出 <code>status === "U"</code>，去除重複路徑並排序。這個檢查發生在任何 <code>collectPatches</code> 呼叫之前。</p>
+      <p><code>findUnmergedPaths</code> 從解析完成的 records 中挑出 <code>status === "U"</code>，去除重複路徑並排序。這個檢查發生在任何 <code>collectDiffPatches</code> 呼叫之前。</p>
 
-      <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">const</span> paths <span class="o">=</span> <span class="f">unmergedPaths</span><span class="o">(</span>stagedPaths<span class="o">)</span><span class="o">;</span>
+      <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">const</span> paths <span class="o">=</span> <span class="f">findUnmergedPaths</span><span class="o">(</span>stagedPaths<span class="o">)</span><span class="o">;</span>
 
 <span class="k">if</span> <span class="o">(</span>paths<span class="o">.</span><span class="p">length</span> <span class="o">&gt;</span> <span class="n">0</span><span class="o">)</span> <span class="o">{</span>
   <span class="k">return</span> <span class="k">yield</span><span class="o">*</span> <span class="k">new</span> <span class="f">GitUnmergedPathsError</span><span class="o">(</span><span class="o">{</span> paths <span class="o">}</span><span class="o">)</span><span class="o">;</span>
@@ -510,14 +510,14 @@ Resolve and stage these files, or abort the merge/rebase, then run review again.
       </div>
 
       <h3>Working-tree 如何合併重複的 tracked path</h3>
-      <p>同一個 tracked file 可能同時有 staged 與 unstaged change。<code>mergeChangedPaths</code> 以顯示 path 分組，合併所有 pathspecs，再從 base 到目前 working tree 只取一次完整 patch。這避免同一 tracked path 被 review 兩次，也保留 rename 的 source 與 target。</p>
+      <p>同一個 tracked file 可能同時有 staged 與 unstaged change。<code>mergePatchTargetsByPath</code> 以顯示 path 分組，合併所有 pathspecs，再從 base 到目前 working tree 只取一次完整 patch。這避免同一 tracked path 被 review 兩次，也保留 rename 的 source 與 target。</p>
 
       <p>若 repository 還沒有第一個 commit，<code>HEAD^{commit}</code> 解析會以 exit code <code>1</code> 表示不存在。程式改用 <code>git hash-object -t tree /dev/null</code> 取得 empty tree object id，讓 initial working tree 仍有穩定的 diff base。</p>
     </section>
 
     <section id="patch">
       <h2>6. 逐檔 patch collection</h2>
-      <p>設計刻意保留「先列 records、再逐檔取 patch」，因為這讓每個檔案都能獨立套用大小限制、binary 判斷與 coverage reason。<code>collectPatches</code> 對 records 執行以下步驟：</p>
+      <p>設計刻意保留「先列 records、再逐檔取 patch」，因為這讓每個檔案都能獨立套用大小限制、binary 判斷與 coverage reason。檔案配置也反映責任邊界：<code>git-command.ts</code> 執行 Git 與讀取 object metadata，<code>git-change-parser.ts</code> 解析 records，<code>git-diff.ts</code> 的 <code>collectDiffPatches</code> 執行以下步驟：</p>
 
       <ol class="steps">
         <li><strong>取得檔案大小。</strong>Staged file 優先查 index object；working-tree 與 untracked file 優先檢查 filesystem，必要時再查 HEAD 或 index object。</li>
@@ -632,7 +632,9 @@ Resolve and stage these files, or abort the merge/rebase, then run review again.
         <table>
           <thead><tr><th>檔案</th><th>責任</th></tr></thead>
           <tbody>
-            <tr><td><code>src/git/git-diff.ts</code></td><td>Command 包裝、NUL parser、change model、unmerged path extraction、patch collection。</td></tr>
+            <tr><td><code>src/git/git-command.ts</code></td><td>Git command policy、empty-tree resolution 與 object-size metadata。</td></tr>
+            <tr><td><code>src/git/git-change-parser.ts</code></td><td>NUL parser、change model、conflict path extraction 與 patch target merging。</td></tr>
+            <tr><td><code>src/git/git-diff.ts</code></td><td>Binary detection、大小政策與 concurrent patch collection。</td></tr>
             <tr><td><code>src/git/git-errors.ts</code></td><td>Git typed-error taxonomy，包括 <code>GitUnmergedPathsError</code>。</td></tr>
             <tr><td><code>src/git/git-service.ts</code></td><td>Repository 驗證、scope orchestration、conflict gate、tracked／untracked 合併。</td></tr>
             <tr><td><code>src/use-cases/run-review.ts</code></td><td>把成功的 <code>GitDiff</code> 轉成 findings、summary 與 coverage。</td></tr>

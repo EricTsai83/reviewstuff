@@ -32,7 +32,7 @@ export const renderTerminalReport = (report: ReviewReport): string => {
       `${escapeTerminalText(finding.file)}:${finding.line} [${escapeTerminalText(finding.severity)}] ${escapeTerminalText(finding.message)} (${escapeTerminalText(finding.ruleId)})`,
   );
 
-  const result = report.findings.length === 0
+  const reviewSummaryText = report.findings.length === 0
     ? `Reviewed ${report.summary.reviewedFiles} changed file(s). No findings.`
     : [
         ...findings,
@@ -41,7 +41,7 @@ export const renderTerminalReport = (report: ReviewReport): string => {
       ].join("\n");
 
   if (report.coverage.complete) {
-    return result;
+    return reviewSummaryText;
   }
 
   const skippedFiles = report.coverage.files.filter(
@@ -52,7 +52,7 @@ export const renderTerminalReport = (report: ReviewReport): string => {
   );
 
   return [
-    result,
+    reviewSummaryText,
     "",
     `Review coverage incomplete: reviewed ${report.summary.reviewedFiles} of ${report.summary.changedFiles} changed file(s).`,
     "Skipped file(s):",

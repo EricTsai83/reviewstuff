@@ -5,15 +5,21 @@ import type { ReviewScope } from "../domain/scope";
 import * as CommandRunner from "../platform/command-runner";
 import * as FileInspector from "../platform/file-inspector";
 import {
-  collectPatches,
+  findUnmergedPaths,
+  mergePatchTargetsByPath,
+  parseNulSeparatedChanges,
+  parseNulSeparatedPaths,
+  type GitChange,
+} from "./git-change-parser";
+import {
   executeGit,
-  mergeChangedPaths,
-  nulSeparatedChangedPaths,
-  nulSeparatedPaths,
+  gitMetadataMaxOutputBytes,
+  gitObjectMetadataMaxOutputBytes,
   requireGitSuccess,
-  resolveEmptyTree,
-  unmergedPaths,
-  type GitChangedPath,
+  resolveEmptyTreeObjectId,
+} from "./git-command";
+import {
+  collectDiffPatches,
   type GitDiff,
 } from "./git-diff";
 import {
@@ -59,8 +65,6 @@ export class GitService extends Context.Service<
   }
 >()("reviewstuff/GitService") {}
 
-const repositoryDetectionMaxOutputBytes = 4 * 1024 * 1024;
-const reviewBaseMaxOutputBytes = 1_024;
 const diffSourceCollectionConcurrency = 2;
 const trackedChangeListingArguments = [
   "--find-renames",
@@ -81,7 +85,7 @@ const ensureReviewableWorkingTree = Effect.fn(
     runner,
     operation,
     ["rev-parse", "--is-inside-work-tree"],
-    repositoryDetectionMaxOutputBytes,
+    gitMetadataMaxOutputBytes,
   );
 
   if (workingTreeDetection.exitCode !== 0) {
@@ -128,7 +132,7 @@ const resolveRepositoryRoot = (
 const listStagedChanges = (
   runner: CommandRunner.Service,
   repositoryRoot: string,
-): Effect.Effect<ReadonlyArray<GitChangedPath>, GitError> => {
+): Effect.Effect<ReadonlyArray<GitChange>, GitError> => {
   const operation = "list staged files";
 
   return requireGitSuccess(
@@ -142,7 +146,7 @@ const listStagedChanges = (
     repositoryRoot,
   ).pipe(
     Effect.flatMap((output) =>
-      nulSeparatedChangedPaths(output, operation)
+      parseNulSeparatedChanges(output, operation)
     ),
   );
 };
@@ -150,7 +154,7 @@ const listStagedChanges = (
 const listUnstagedChanges = (
   runner: CommandRunner.Service,
   repositoryRoot: string,
-): Effect.Effect<ReadonlyArray<GitChangedPath>, GitError> => {
+): Effect.Effect<ReadonlyArray<GitChange>, GitError> => {
   const operation = "list unstaged files";
 
   return requireGitSuccess(
@@ -163,7 +167,7 @@ const listUnstagedChanges = (
     repositoryRoot,
   ).pipe(
     Effect.flatMap((output) =>
-      nulSeparatedChangedPaths(output, operation)
+      parseNulSeparatedChanges(output, operation)
     ),
   );
 };
@@ -181,15 +185,15 @@ const listUntrackedFiles = (
     repositoryRoot,
   ).pipe(
     Effect.flatMap((output) =>
-      nulSeparatedPaths(output, operation)
+      parseNulSeparatedPaths(output, operation)
     ),
   );
 };
 
 const ensureNoUnmergedChanges = (
-  changes: ReadonlyArray<GitChangedPath>,
+  changes: ReadonlyArray<GitChange>,
 ): Effect.Effect<void, GitUnmergedPathsError> => {
-  const conflictingPaths = unmergedPaths(changes);
+  const conflictingPaths = findUnmergedPaths(changes);
 
   return conflictingPaths.length === 0
     ? Effect.void
@@ -206,7 +210,7 @@ const resolveReviewBase = Effect.fn("GitService.resolveReviewBase")(
       runner,
       operation,
       ["rev-parse", "--verify", "--quiet", "HEAD^{commit}"],
-      reviewBaseMaxOutputBytes,
+      gitObjectMetadataMaxOutputBytes,
       repositoryRoot,
     );
 
@@ -219,7 +223,7 @@ const resolveReviewBase = Effect.fn("GitService.resolveReviewBase")(
 
     // An initial repository has no HEAD commit, so its tracked files are
     // compared against the repository-format-specific empty tree.
-    return yield* resolveEmptyTree(runner, repositoryRoot);
+    return yield* resolveEmptyTreeObjectId(runner, repositoryRoot);
   },
 );
 
@@ -228,11 +232,11 @@ const collectStagedDiff = Effect.fn("GitService.collectStagedDiff")(
     runner: CommandRunner.Service,
     inspector: FileInspector.Service,
     repositoryRoot: string,
-    stagedChanges: ReadonlyArray<GitChangedPath>,
+    stagedChanges: ReadonlyArray<GitChange>,
   ): Effect.Effect<GitDiff, GitError> =>
     ensureNoUnmergedChanges(stagedChanges).pipe(
       Effect.andThen(
-        collectPatches(
+        collectDiffPatches(
           runner,
           inspector,
           stagedChanges,
@@ -249,7 +253,7 @@ const collectWorkingTreeDiff = Effect.fn(
   runner: CommandRunner.Service,
   inspector: FileInspector.Service,
   repositoryRoot: string,
-  stagedChanges: ReadonlyArray<GitChangedPath>,
+  stagedChanges: ReadonlyArray<GitChange>,
 ): Effect.fn.Return<GitDiff, GitError> {
   const unstagedChanges = yield* listUnstagedChanges(runner, repositoryRoot);
   const trackedChanges = [...stagedChanges, ...unstagedChanges];
@@ -260,14 +264,14 @@ const collectWorkingTreeDiff = Effect.fn(
 
   // A file may appear in both staged and unstaged changes. Merge its
   // pathspecs so the working-tree diff reads every tracked file only once.
-  const trackedPatchTargets = mergeChangedPaths(trackedChanges);
+  const trackedPatchTargets = mergePatchTargetsByPath(trackedChanges);
   const untrackedPatchTargets = untrackedFiles.map((path) => ({
     path,
     pathspecs: [path],
   }));
   const [trackedDiff, untrackedDiff] = yield* Effect.all(
     [
-      collectPatches(
+      collectDiffPatches(
         runner,
         inspector,
         trackedPatchTargets,
@@ -275,7 +279,7 @@ const collectWorkingTreeDiff = Effect.fn(
         repositoryRoot,
         reviewBase,
       ),
-      collectPatches(
+      collectDiffPatches(
         runner,
         inspector,
         untrackedPatchTargets,

@@ -145,29 +145,31 @@ export const makeGitCommandError = (
   operation: string,
   result: CommandRunner.CommandResult,
 ): GitCommandError => {
-  const stderr = result.stderr.toLowerCase();
+  const normalizedStderr = result.stderr.toLowerCase();
   let failure: GitCommandFailure = "unknown";
 
   if (
-    stderr.includes("permission denied") || stderr.includes("access is denied")
+    normalizedStderr.includes("permission denied") ||
+    normalizedStderr.includes("access is denied")
   ) {
     failure = "permission-denied";
   } else if (
-    stderr.includes("dubious ownership") || stderr.includes("safe.directory")
+    normalizedStderr.includes("dubious ownership") ||
+    normalizedStderr.includes("safe.directory")
   ) {
     failure = "unsafe-repository";
   } else if (
-    stderr.includes("index.lock") &&
-    (stderr.includes("file exists") ||
-      stderr.includes("another git process") ||
-      stderr.includes("index is locked"))
+    normalizedStderr.includes("index.lock") &&
+    (normalizedStderr.includes("file exists") ||
+      normalizedStderr.includes("another git process") ||
+      normalizedStderr.includes("index is locked"))
   ) {
     failure = "index-locked";
   } else if (
-    stderr.includes("corrupt") ||
-    stderr.includes("bad object") ||
-    stderr.includes("invalid object") ||
-    stderr.includes("index file smaller than expected")
+    normalizedStderr.includes("corrupt") ||
+    normalizedStderr.includes("bad object") ||
+    normalizedStderr.includes("invalid object") ||
+    normalizedStderr.includes("index file smaller than expected")
   ) {
     failure = "repository-corrupt";
   }

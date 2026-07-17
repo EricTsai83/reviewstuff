@@ -78,23 +78,23 @@ export class CommandRunner extends Context.Service<
 
 export type Service = CommandRunner["Service"];
 
-const terminate = (
-  process: ChildProcessSpawner.ChildProcessHandle,
+const terminateChildProcess = (
+  childProcess: ChildProcessSpawner.ChildProcessHandle,
   program: string,
 ): Effect.Effect<void, CommandTerminationError> =>
-  process.isRunning.pipe(
+  childProcess.isRunning.pipe(
     Effect.flatMap((isRunning) =>
-      isRunning ? process.kill({ killSignal: "SIGKILL" }) : Effect.void,
+      isRunning ? childProcess.kill({ killSignal: "SIGKILL" }) : Effect.void,
     ),
     Effect.mapError(
       (cause) => new CommandTerminationError({ program, cause }),
     ),
   );
 
-const readOutput = (
+const collectOutputStream = (
   stream: Stream.Stream<Uint8Array, unknown>,
   request: CommandRequest,
-  byteCount: Ref.Ref<number>,
+  combinedOutputBytes: Ref.Ref<number>,
   phase: Extract<CommandProcessPhase, "stdout" | "stderr">,
 ): Effect.Effect<string, CommandProcessError | CommandOutputLimitError> =>
   stream.pipe(
@@ -107,7 +107,12 @@ const readOutput = (
         }),
     ),
     Stream.tap((chunk) =>
-      Ref.updateAndGet(byteCount, (count) => count + chunk.byteLength).pipe(
+      // Both pipes share one budget so a command cannot bypass the limit by
+      // splitting output between stdout and stderr.
+      Ref.updateAndGet(
+        combinedOutputBytes,
+        (count) => count + chunk.byteLength,
+      ).pipe(
         Effect.flatMap((count) =>
           count > request.maxOutputBytes
             ? Effect.fail(
@@ -148,25 +153,39 @@ const runCommand = (
   );
 
   return Effect.gen(function* () {
-    const processRef = yield* Ref.make<
+    // Cleanup runs outside the timeout region, so the handle must remain
+    // reachable even when startup or stream collection is interrupted.
+    const childProcessRef = yield* Ref.make<
       ChildProcessSpawner.ChildProcessHandle | undefined
     >(undefined);
 
     return yield* Effect.gen(function* () {
-      const process = yield* command.pipe(
+      const childProcess = yield* command.pipe(
         Effect.mapError(
           (cause) =>
             new CommandStartError({ program: request.program, cause }),
         ),
       );
-      yield* Ref.set(processRef, process);
-      const byteCount = yield* Ref.make(0);
+      yield* Ref.set(childProcessRef, childProcess);
+      const combinedOutputBytes = yield* Ref.make(0);
 
+      // Drain both pipes while waiting for exit. Sequential draining can let
+      // one full OS pipe block the child process and deadlock the command.
       const [stdout, stderr, exitCode] = yield* Effect.all(
         [
-          readOutput(process.stdout, request, byteCount, "stdout"),
-          readOutput(process.stderr, request, byteCount, "stderr"),
-          process.exitCode.pipe(
+          collectOutputStream(
+            childProcess.stdout,
+            request,
+            combinedOutputBytes,
+            "stdout",
+          ),
+          collectOutputStream(
+            childProcess.stderr,
+            request,
+            combinedOutputBytes,
+            "stderr",
+          ),
+          childProcess.exitCode.pipe(
             Effect.mapError((cause) =>
               new CommandProcessError({
                 program: request.program,
@@ -176,7 +195,7 @@ const runCommand = (
             ),
           ),
         ],
-        { concurrency: "unbounded" },
+        { concurrency: 3 },
       );
 
       return { stdout, stderr, exitCode };
@@ -192,11 +211,11 @@ const runCommand = (
           ),
       }),
       Effect.onExit(() =>
-        Ref.get(processRef).pipe(
-          Effect.flatMap((process) =>
-            process === undefined
+        Ref.get(childProcessRef).pipe(
+          Effect.flatMap((childProcess) =>
+            childProcess === undefined
               ? Effect.void
-              : terminate(process, request.program)
+              : terminateChildProcess(childProcess, request.program)
           ),
         )
       ),
