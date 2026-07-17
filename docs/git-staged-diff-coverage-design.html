@@ -1,0 +1,813 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="解析 Git staged changes 時，如何避免丟失 status、誤判 unmerged path，並建立可信任的 per-file review coverage。">
+  <title>從 Git staged paths 到可信任的 Review Coverage</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --clay: #D97757;
+      --slate: #141413;
+      --ivory: #FAF9F5;
+      --oat: #E3DACC;
+      --white: #FFFFFF;
+      --gray-100: #F0EEE6;
+      --gray-300: #D1CFC5;
+      --gray-500: #87867F;
+      --gray-700: #3D3D3A;
+      --warning: #C78E3F;
+      --green: #4F765D;
+      --space-sm: 8px;
+      --space-md: 12px;
+      --space-lg: 16px;
+      --space-xl: 24px;
+      --space-2xl: 32px;
+      --space-3xl: 48px;
+      --radius-sm: 4px;
+      --radius-md: 8px;
+      --content-width: 68ch;
+    }
+
+    * { box-sizing: border-box; }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      margin: 0;
+      max-width: 100%;
+      overflow-x: hidden;
+      background: var(--ivory);
+      color: var(--slate);
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 16px;
+      font-weight: 430;
+      line-height: 1.55;
+    }
+
+    main {
+      width: 100%;
+      min-width: 0;
+      max-width: var(--content-width);
+      margin: 0 auto;
+      padding: var(--space-3xl) var(--space-xl);
+    }
+
+    h1, h2, h3 {
+      color: var(--slate);
+      letter-spacing: -0.012em;
+    }
+
+    h1 {
+      max-width: none;
+      margin: 0 0 var(--space-lg);
+      font-size: 1.8rem;
+      line-height: 1.18;
+      font-weight: 720;
+      text-wrap: balance;
+    }
+
+    h2 {
+      margin: var(--space-3xl) 0 var(--space-lg);
+      font-size: 1.22rem;
+      line-height: 1.25;
+    }
+
+    h3 {
+      margin: var(--space-2xl) 0 var(--space-sm);
+      font-size: 1rem;
+      line-height: 1.35;
+    }
+
+    p { margin: 0 0 var(--space-lg); overflow-wrap: anywhere; }
+
+    a {
+      color: var(--clay);
+      text-decoration-thickness: 1px;
+      text-underline-offset: 3px;
+    }
+
+    code {
+      border-radius: 5px;
+      border: 1px solid var(--oat);
+      background: var(--gray-100);
+      padding: 0.12em 0.35em;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 0.9em;
+      overflow-wrap: anywhere;
+      word-break: break-word;
+    }
+
+    .deck {
+      margin-bottom: var(--space-xl);
+      color: var(--gray-700);
+      font-size: 1.04rem;
+    }
+
+    .toc {
+      margin: var(--space-2xl) 0 var(--space-3xl);
+      padding: var(--space-lg) var(--space-xl);
+      border: 1px solid var(--oat);
+      border-radius: var(--radius-md);
+      background: var(--white);
+    }
+
+    .toc strong { display: block; margin-bottom: 8px; }
+    .toc ol { margin: 0; padding-left: 1.35rem; columns: 2; column-gap: 32px; }
+    .toc li { break-inside: avoid; margin: 4px 0; }
+
+    .problem-solution {
+      display: grid;
+      width: 100%;
+      min-width: 0;
+      grid-template-columns: 1fr 1fr;
+      gap: var(--space-lg);
+      margin: var(--space-2xl) 0;
+    }
+
+    .problem-solution article {
+      min-width: 0;
+      padding: var(--space-xl);
+      border: 1px solid var(--oat);
+      border-radius: var(--radius-md);
+      background: var(--white);
+    }
+
+    .problem-solution article:first-child { border-top: 4px solid var(--warning); }
+    .problem-solution article:last-child { border-top: 4px solid var(--green); }
+    .problem-solution h2 { margin: 0 0 var(--space-md); font-size: 1.08rem; }
+    .problem-solution p:last-child { margin-bottom: 0; }
+
+    .decision-line {
+      margin: var(--space-xl) 0;
+      padding: var(--space-lg) var(--space-xl);
+      border-left: 4px solid var(--clay);
+      background: var(--gray-100);
+    }
+
+    .callout {
+      margin: var(--space-xl) 0;
+      padding: var(--space-lg) var(--space-xl);
+      border: 1px solid var(--oat);
+      border-left: 4px solid var(--warning);
+      border-radius: var(--radius-md);
+      background: var(--gray-100);
+    }
+
+    .callout strong { color: var(--gray-700); }
+
+    pre {
+      position: relative;
+      width: 100%;
+      margin: var(--space-lg) 0 var(--space-xl);
+      border: 1px solid #26241f;
+      border-radius: var(--radius-md);
+      background: #11110f;
+      color: #d8d4ca;
+      overflow: hidden;
+    }
+
+    pre code {
+      display: block;
+      padding: 18px 64px 18px 22px;
+      background: transparent;
+      color: inherit;
+      overflow-x: auto;
+      white-space: pre;
+      font-size: 0.875rem;
+      font-weight: 400;
+      line-height: 1.62;
+      scrollbar-width: none;
+      overflow-wrap: normal;
+      word-break: normal;
+    }
+
+    pre code::-webkit-scrollbar { width: 0; height: 0; }
+    pre .label { display: none; }
+    pre code .k { color: #ff946e; font-weight: 400; }
+    pre code .s { color: #8fb86a; }
+    pre code .n, pre code .p { color: #d8d4ca; }
+    pre code .c { color: #858177; font-style: italic; }
+    pre code .f, pre code .t { color: #cfc6a2; font-weight: 400; }
+    pre code .o { color: #ff946e; }
+    pre code .sh-command { color: #ff946e; font-weight: 400; }
+    pre code .sh-flag, pre code .sh-var { color: #cfc6a2; font-weight: 400; }
+    pre code .sh-string { color: #8fb86a; }
+    pre code .sh-comment { color: #858177; font-style: italic; }
+    pre code .sh-prompt { color: #ff946e; font-weight: 400; }
+
+    .copy-code {
+      position: absolute;
+      top: 9px;
+      right: 9px;
+      z-index: 1;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 30px;
+      height: 30px;
+      padding: 0;
+      border: 1px solid rgba(250, 249, 245, 0.14);
+      border-radius: var(--radius-sm);
+      background: rgba(250, 249, 245, 0.06);
+      color: rgba(250, 249, 245, 0.72);
+      cursor: pointer;
+    }
+
+    .copy-code:hover, .copy-code:focus-visible {
+      border-color: rgba(250, 249, 245, 0.28);
+      background: rgba(250, 249, 245, 0.12);
+      color: var(--ivory);
+      outline: none;
+    }
+
+    .copy-code.copied {
+      border-color: rgba(143, 184, 106, 0.42);
+      background: rgba(143, 184, 106, 0.14);
+      color: #b8d99a;
+    }
+
+    .copy-code svg {
+      width: 13px;
+      height: 13px;
+      stroke: currentColor;
+      stroke-width: 1.8;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      fill: none;
+      pointer-events: none;
+    }
+
+    .code-scrollbar {
+      position: absolute;
+      right: 0;
+      bottom: 0;
+      left: 0;
+      height: 3px;
+      border-radius: 999px;
+      background: rgba(250, 249, 245, 0.1);
+      cursor: pointer;
+    }
+
+    .code-scrollbar.hidden { display: none; }
+    .code-scrollbar-thumb { height: 100%; border-radius: inherit; background: rgba(255, 148, 110, 0.82); }
+
+    .table-wrap {
+      max-width: 100%;
+      overflow-x: auto;
+      margin: var(--space-xl) 0;
+      border: 1px solid var(--oat);
+      border-radius: var(--radius-md);
+      background: var(--white);
+    }
+
+    table {
+      width: 100%;
+      min-width: 680px;
+      border-collapse: collapse;
+      font-size: 0.93rem;
+    }
+
+    th, td {
+      padding: 15px 17px;
+      border-bottom: 1px solid var(--oat);
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th { background: var(--gray-100); font-weight: 700; }
+    tr:last-child td { border-bottom: 0; }
+
+    .flow-figure {
+      margin: var(--space-2xl) 0;
+      padding: var(--space-lg);
+      border: 1px solid var(--oat);
+      border-radius: var(--radius-md);
+      background: var(--white);
+    }
+
+    .flow-figure svg {
+      display: block;
+      width: 100%;
+      height: auto;
+    }
+
+    .flow-figure .flow-mobile { display: none; }
+
+    .flow-node rect {
+      fill: var(--white);
+      stroke: var(--oat);
+      stroke-width: 1.5;
+    }
+
+    .flow-node.problem rect {
+      fill: #F7E8E1;
+      stroke: var(--clay);
+      stroke-width: 2;
+    }
+
+    .flow-node.result rect {
+      fill: #F7EEDC;
+      stroke: var(--warning);
+    }
+
+    .flow-node text {
+      fill: var(--slate);
+      font-family: ui-sans-serif, system-ui, sans-serif;
+      font-size: 14px;
+      font-weight: 700;
+    }
+
+    .flow-node .flow-note {
+      fill: var(--gray-700);
+      font-size: 11.5px;
+      font-weight: 500;
+    }
+
+    .flow-arrow {
+      fill: none;
+      stroke: var(--clay);
+      stroke-width: 2;
+    }
+
+    figcaption {
+      margin-top: 12px;
+      color: var(--gray-700);
+      font-size: 0.88rem;
+      text-align: center;
+    }
+
+    .steps {
+      counter-reset: step;
+      display: grid;
+      gap: 14px;
+      margin: 24px 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .steps li {
+      position: relative;
+      min-height: 62px;
+      padding: 14px 18px 14px 62px;
+      border: 1px solid var(--oat);
+      border-radius: var(--radius-md);
+      background: var(--white);
+    }
+
+    .steps li::before {
+      counter-increment: step;
+      content: counter(step);
+      position: absolute;
+      top: 14px;
+      left: 16px;
+      display: grid;
+      width: 30px;
+      height: 30px;
+      place-items: center;
+      border-radius: 50%;
+      background: var(--gray-100);
+      color: var(--green);
+      font-weight: 800;
+    }
+
+    .checklist { padding-left: 1.3rem; }
+    .checklist li { margin: 8px 0; padding-left: 4px; }
+
+    .closing {
+      margin-top: var(--space-3xl);
+      padding-top: var(--space-xl);
+      border-top: 2px solid var(--slate);
+    }
+
+    .sources {
+      margin-top: var(--space-3xl);
+      padding-top: var(--space-xl);
+      border-top: 1px solid var(--oat);
+      color: var(--gray-700);
+      font-size: 0.875rem;
+    }
+
+    @media (max-width: 640px) {
+      body { font-size: 15px; }
+      main { padding: var(--space-xl); }
+      h1 { font-size: 1.65rem; }
+      .toc ol { columns: 1; }
+      .problem-solution { grid-template-columns: 1fr; }
+      pre code { font-size: 0.8125rem; line-height: 1.5; }
+      p code, li code, td code { font-size: 0.9em; }
+      table, .deck, .sources { font-size: 0.875rem; }
+      .flow-figure { padding: 12px; }
+      .flow-figure .flow-desktop { display: none; }
+      .flow-figure .flow-mobile { display: block; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>從 Git staged paths 到可信任的 Review Coverage</h1>
+    <p class="deck">一條正確的 Git 指令，不等於一個完整的 review 設計。本文從 staging area、NUL-separated output 和 Git change status 開始，逐步說明未解決的衝突為何不能當成普通 patch review、使用者遇到衝突時產品應如何回應，並參考 T3 Code 與 CodeRabbit 的責任切分提出修正方案。</p>
+
+    <section class="problem-solution" aria-label="問題與目標解法">
+      <article>
+        <h2>問題是什麼</h2>
+        <p>Git 回傳的是「status 加 path」，但 parser 最後只保留 path。<code>U</code> 代表檔案仍有未解決的 merge conflict；Git 此時可能只輸出一行 <code>* Unmerged path ...</code> 通知，而不是包含程式碼增刪的 patch。目前程式只檢查輸出是否為空，因此會誤把這行通知存進 <code>patch</code> 欄位，再將檔案標成 <code>reviewed</code>。</p>
+      </article>
+      <article>
+        <h2>我們想要的解法</h2>
+        <p>保留並驗證 Git status；review 開始前先偵測 unmerged paths，預設中止並列出衝突檔案，請使用者先解決或放棄衝突後再重跑。只有真正包含可 review 差異的 patch 才能進入 <code>reviewed</code>。若未來提供明確的 partial-review 模式，衝突檔也只能標成 <code>skipped: unmerged</code>，且 <code>coverage.complete</code> 必須是 <code>false</code>。</p>
+      </article>
+    </section>
+
+    <nav class="toc" aria-label="文章目錄">
+      <strong>閱讀路徑</strong>
+      <ol>
+        <li><a href="#command">指令真正回答什麼</a></li>
+        <li><a href="#loss">status 在哪裡遺失</a></li>
+        <li><a href="#unmerged">unmerged 誤判案例</a></li>
+        <li><a href="#conflict-behavior">衝突時的最佳實踐</a></li>
+        <li><a href="#t3">T3 Code 的責任切分</a></li>
+        <li><a href="#parser">parser 與計數問題</a></li>
+        <li><a href="#design">建議的完整模型</a></li>
+      </ol>
+    </nav>
+
+    <p class="decision-line"><strong>設計判斷：</strong>目前的 Git command 足以列出 staged changes；需要修改的是 parser、change model 與 coverage 判定，而不是重寫 discovery command。</p>
+
+    <section id="command">
+      <h2>1. 這條指令真正回答什麼</h2>
+      <p>Git 的 staging area（也稱 index）是一份準備提交的快照。<code>git diff --cached</code> 比較的是目前的 <code>HEAD</code> 與這份快照，而不是直接比較工作目錄中的檔案。</p>
+
+      <pre class="language-shell"><span class="label">Shell</span><code><span class="sh-command">git</span> diff \
+  <span class="sh-flag">--cached</span> <span class="sh-command">\</span>
+  <span class="sh-flag">--find-renames</span> <span class="sh-command">\</span>
+  <span class="sh-flag">--name-status</span> <span class="sh-command">\</span>
+  <span class="sh-flag">-z</span> <span class="sh-command">\</span>
+  <span class="sh-flag">--diff-filter=ACDMRTUXB</span> <span class="sh-command">\</span>
+  <span class="sh-command">--</span></code></pre>
+
+      <p><code>--name-status</code> 要求 Git 只列出狀態與路徑；<code>-z</code> 以 NUL 字元分隔欄位，因此檔名即使包含空格、tab 或換行也不會破壞紀錄。對一般修改、rename 與衝突，輸出概念上可能是：</p>
+
+      <pre><span class="label">Git output</span><code>M\0src/a.ts\0
+R100\0src/old.ts\0src/new.ts\0
+U\0src/conflict.ts\0</code></pre>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>status</th><th>意義</th><th>後續需要知道的資訊</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><code>M</code></td><td>檔案內容已修改</td><td>目前路徑</td></tr>
+            <tr><td><code>R100</code></td><td>100% 相似度的 rename</td><td>舊路徑、新路徑、相似度</td></tr>
+            <tr><td><code>U</code></td><td>index 中存在未解決衝突</td><td>不能當成普通 staged blob 處理</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p>因此，這條指令提供的不只是一串路徑，而是一串帶有語意的 change records。問題不在指令，而在這些語意是否被保存到下游。</p>
+    </section>
+
+    <section id="loss">
+      <h2>2. status 在資料流的哪裡遺失</h2>
+      <p>目前 <code>nulSeparatedChangedPaths</code> 會讀取 status 以判斷 rename 是否有兩個路徑，但輸出的 <code>GitChangedPath</code> 只保留 <code>path</code> 和 <code>pathspecs</code>。換句話說，status 只被暫時使用，隨後就消失了。</p>
+
+      <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">export</span> interface <span class="t">GitChangedPath</span> <span class="o">{</span>
+  readonly path<span class="o">:</span> string<span class="o">;</span>
+  readonly pathspecs<span class="o">:</span> <span class="t">ReadonlyArray</span><span class="o">&lt;</span>string<span class="o">&gt;</span><span class="o">;</span>
+<span class="o">}</span></code></pre>
+
+      <figure class="flow-figure">
+        <svg class="flow-desktop" role="img" aria-labelledby="flow-desktop-title flow-desktop-desc" viewBox="0 0 820 190">
+          <title id="flow-desktop-title">目前的 staged review 資料流</title>
+          <desc id="flow-desktop-desc">Git 輸出 status 和 path，parser 丟失 status，readPatch 將非空輸出視為 patch，最後 coverage 標記 reviewed。</desc>
+          <defs>
+            <marker id="flow-arrow-desktop" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+              <path d="M0 0 L10 5 L0 10 Z" fill="#D97757"></path>
+            </marker>
+          </defs>
+          <g class="flow-node">
+            <rect x="10" y="46" width="165" height="88" rx="10"></rect>
+            <text x="92" y="79" text-anchor="middle">Git name-status</text>
+            <text class="flow-note" x="92" y="105" text-anchor="middle">U + conflict.ts</text>
+          </g>
+          <path class="flow-arrow" d="M182 90 H222" marker-end="url(#flow-arrow-desktop)"></path>
+          <g class="flow-node problem">
+            <rect x="230" y="46" width="165" height="88" rx="10"></rect>
+            <text x="312" y="79" text-anchor="middle">parser</text>
+            <text class="flow-note" x="312" y="105" text-anchor="middle">只留下 path</text>
+          </g>
+          <path class="flow-arrow" d="M402 90 H442" marker-end="url(#flow-arrow-desktop)"></path>
+          <g class="flow-node problem">
+            <rect x="450" y="46" width="165" height="88" rx="10"></rect>
+            <text x="532" y="79" text-anchor="middle">readPatch</text>
+            <text class="flow-note" x="532" y="105" text-anchor="middle">stdout 非空即成功</text>
+          </g>
+          <path class="flow-arrow" d="M622 90 H662" marker-end="url(#flow-arrow-desktop)"></path>
+          <g class="flow-node result">
+            <rect x="670" y="46" width="140" height="88" rx="10"></rect>
+            <text x="740" y="79" text-anchor="middle">Coverage</text>
+            <text class="flow-note" x="740" y="105" text-anchor="middle">reviewed = true</text>
+          </g>
+        </svg>
+
+        <svg class="flow-mobile" role="img" aria-labelledby="flow-mobile-title flow-mobile-desc" viewBox="0 0 340 570">
+          <title id="flow-mobile-title">目前的 staged review 資料流</title>
+          <desc id="flow-mobile-desc">Git 輸出 status 和 path，parser 丟失 status，readPatch 將非空輸出視為 patch，最後 coverage 標記 reviewed。</desc>
+          <defs>
+            <marker id="flow-arrow-mobile" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+              <path d="M0 0 L10 5 L0 10 Z" fill="#D97757"></path>
+            </marker>
+          </defs>
+          <g class="flow-node">
+            <rect x="55" y="12" width="230" height="94" rx="10"></rect>
+            <text x="170" y="50" text-anchor="middle">Git name-status</text>
+            <text class="flow-note" x="170" y="77" text-anchor="middle">U + conflict.ts</text>
+          </g>
+          <path class="flow-arrow" d="M170 114 V145" marker-end="url(#flow-arrow-mobile)"></path>
+          <g class="flow-node problem">
+            <rect x="55" y="153" width="230" height="94" rx="10"></rect>
+            <text x="170" y="191" text-anchor="middle">parser</text>
+            <text class="flow-note" x="170" y="218" text-anchor="middle">只留下 path</text>
+          </g>
+          <path class="flow-arrow" d="M170 255 V286" marker-end="url(#flow-arrow-mobile)"></path>
+          <g class="flow-node problem">
+            <rect x="55" y="294" width="230" height="94" rx="10"></rect>
+            <text x="170" y="332" text-anchor="middle">readPatch</text>
+            <text class="flow-note" x="170" y="359" text-anchor="middle">stdout 非空即成功</text>
+          </g>
+          <path class="flow-arrow" d="M170 396 V427" marker-end="url(#flow-arrow-mobile)"></path>
+          <g class="flow-node result">
+            <rect x="55" y="435" width="230" height="94" rx="10"></rect>
+            <text x="170" y="473" text-anchor="middle">Coverage</text>
+            <text class="flow-note" x="170" y="500" text-anchor="middle">reviewed = true</text>
+          </g>
+        </svg>
+        <figcaption>錯誤不是發生在 Git command；它發生在 status 被移除後，下游已無法判斷輸出是否真的可 review。</figcaption>
+      </figure>
+    </section>
+
+    <section id="unmerged">
+      <h2>3. 一個會讓 coverage 說謊的案例</h2>
+      <p>假設 <code>src/conflict.ts</code> 尚未解決 merge conflict。第一個 Git command 會正確回傳：</p>
+
+      <pre><span class="label">Git output</span><code>U\0src/conflict.ts\0</code></pre>
+
+      <p>parser 丟掉 <code>U</code> 後，<code>collectPatches</code> 只拿著路徑執行：</p>
+
+      <pre class="language-shell"><span class="label">Shell</span><code><span class="sh-command">git</span> diff <span class="sh-flag">--cached</span> -- src/conflict.ts</code></pre>
+
+      <p>Git 可以成功退出，stdout 則是：</p>
+
+      <pre><span class="label">Git output</span><code>* Unmerged path src/conflict.ts</code></pre>
+
+      <p>正常 patch 會包含 <code>@@</code> hunk header，以及 <code>-old</code>、<code>+new</code> 這類實際程式碼差異。上面的輸出只有一行 Git 通知，意思是「這個 path 尚未完成合併」；它沒有提供任何可供 reviewer 判斷的程式碼增刪。</p>
+
+      <p>但目前的 <code>readPatch</code> 只做一件事：檢查 stdout 是否為空。因為這行通知不是空字串，程式便建立：</p>
+
+      <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="o">{</span>
+  path<span class="o">:</span> <span class="s">"src/conflict.ts"</span><span class="o">,</span>
+  patch<span class="o">:</span> <span class="s">"* Unmerged path src/conflict.ts"</span><span class="o">,</span>
+  source<span class="o">:</span> <span class="s">"staged"</span><span class="o">,</span>
+<span class="o">}</span></code></pre>
+
+      <p>這裡所謂「當成 patch」，不是指 Git 認為它是 patch，而是應用程式把通知文字放進自己的 <code>patch</code> 欄位。之後 <code>runReview</code> 看見 <code>GitFilePatch</code>，就把檔案標成 <code>reviewed</code>。因此系統最後 review 到的只有 Git 通知，沒有 review 到衝突內容。</p>
+
+      <div class="callout"><strong>這是 correctness 問題，不只是 edge case。</strong>系統沒有讀到衝突內容，卻可能輸出 <code>coverage.complete = true</code>。對一個提供 review coverage 的 CLI，誤報完整比直接失敗更危險。</div>
+    </section>
+
+    <section id="conflict-behavior">
+      <h2>4. 使用者執行 review 時有衝突，最佳實踐是什麼</h2>
+      <p>預設行為應該是<strong>停止 review，列出所有 unmerged paths，並用非零 exit code 告訴使用者先處理衝突</strong>。原因不是工具不願意提供部分結果，而是衝突中的 index 同時保存多個 stage，尚未形成一份可以被稱為「準備提交版本」的單一快照。此時對 staged scope 宣稱完整 review 沒有可靠語意。</p>
+
+      <pre><span class="label">Recommended CLI output</span><code>Review cannot start because unresolved merge conflicts exist:
+
+- src/conflict.ts
+- src/auth/session.ts
+
+Resolve and stage these files, or abort the merge/rebase, then run review again.</code></pre>
+
+      <h3>產品應採用的順序</h3>
+      <ol class="steps">
+        <li><strong>Review 前先偵測。</strong>保留 <code>U</code> status，或執行 <code>git diff --name-only --diff-filter=U -z</code>／<code>git ls-files -u -z</code>。</li>
+        <li><strong>預設 fail fast。</strong>回傳帶有 path 清單的 <code>GitUnmergedPathsError</code>，不要產生 <code>coverage.complete = true</code> 的 report。</li>
+        <li><strong>讓使用者決定衝突語意。</strong>Review command 必須維持 read-only，不應在背景自動選擇 ours、theirs 或改寫工作目錄。</li>
+        <li><strong>解決後再驗證。</strong>確認 unmerged index entries 已清空，再執行 typecheck、lint 或相關測試，最後重新執行 review。</li>
+      </ol>
+
+      <p>使用者若要保留這次 merge/rebase，就先用 <code>git status</code> 查看衝突、編輯檔案並以 <code>git add &lt;path&gt;</code> 標記已解決；若不想繼續這次操作，則依當前情境選擇 <code>git merge --abort</code>、<code>git rebase --abort</code> 或 <code>git cherry-pick --abort</code>。完成後可用以下命令確認沒有尚未解決的 path：</p>
+
+      <pre class="language-shell"><span class="label">Shell</span><code><span class="sh-command">git</span> diff <span class="sh-flag">--name-only</span> <span class="sh-flag">--diff-filter=U</span></code></pre>
+
+      <h3>是否可以 review 其他沒有衝突的檔案</h3>
+      <p>技術上可以，但不應是預設。若產品日後需要這個能力，應提供明確的 <code>--partial</code> 或 <code>--allow-conflicts</code> 模式：正常檔案照常 review，衝突檔標成 <code>skipped: unmerged</code>，整體 <code>coverage.complete</code> 固定為 <code>false</code>。這樣使用者知道結果只是部分 review，而不是完整品質閘門。</p>
+
+      <h3>CodeRabbit 官方如何處理</h3>
+      <p>CodeRabbit 官方有 merge-conflict 說明，但目前公開文件描述的是 GitHub／GitLab 的 PR 或 MR 流程，不是本機 CLI 遇到 unmerged working tree 時的既定行為。其設計原則仍可作為參考：review 階段先在 sandbox 中偵測並列出衝突；解衝突必須由使用者透過 comment 或 checkbox 另外明確觸發；解完後確認 conflict markers 與 unmerged index entries 都已清除，再執行 build 和 lint。</p>
+
+      <p>CodeRabbit 也明確表示，若衝突涉及安全關鍵程式碼，或兩邊的 business logic 根本不相容，它會拒絕猜測並交回人工處理；若 branch 在處理期間被更新，也會中止以避免覆蓋新變更。這支持了同一個產品原則：<strong>review 與 mutation 應分開，解衝突需要明確授權，高風險語意不能由 review command 自動決定。</strong></p>
+
+      <div class="callout"><strong>適用範圍提醒：</strong>CodeRabbit 官方文件證明的是 PR／MR conflict-resolution workflow。未找到它對本機 CLI review 遇到 unmerged files 時的明確公開規格，因此本文的 CLI fail-fast 建議是根據 Git index 語意與 coverage correctness 所作的設計判斷，不應冒充 CodeRabbit CLI 的官方行為。</div>
+    </section>
+
+    <section id="t3">
+      <h2>5. T3 Code 值得參考的責任切分</h2>
+      <p>T3 Code 的用途與此 CLI 不完全相同：它主要提供狀態 UI、commit context 和 diff preview，而不是逐檔 coverage。因此值得參考的是它如何區分「摘要」與「實際 review 內容」，不是逐行照抄。</p>
+
+      <h3><code>--name-status</code> 只當摘要</h3>
+      <p>在 <code>apps/server/src/vcs/GitVcsDriverCore.ts</code> 的 <code>prepareCommitContext</code> 中，T3 Code 先執行 <code>git diff --cached --name-status</code>，把結果命名為 <code>stagedSummary</code>；真正交給後續使用的內容，另由完整 patch command 取得：</p>
+
+      <pre class="language-shell"><span class="label">Shell</span><code><span class="sh-command">git</span> diff <span class="sh-flag">--no-ext-diff</span> <span class="sh-flag">--cached</span> <span class="sh-flag">--patch</span> <span class="sh-flag">--minimal</span></code></pre>
+
+      <p>它不會解析 summary 的 path，再假設每一個 path 都成功取得 patch。</p>
+
+      <h3>Review preview 直接使用 patch</h3>
+      <p>T3 Code 的 working-tree preview 直接讀取 <code>git diff --patch --minimal HEAD --</code>；untracked files 則使用 NUL-separated <code>git ls-files</code> 列出，再以 <code>git diff --no-index</code> 產生內容。</p>
+
+      <h3>不完整是一級資料</h3>
+      <p>它的 <code>ReviewDiffPreviewSource</code> contract 包含 <code>truncated: boolean</code>。也就是說，輸出若不完整，呼叫端能知道，而不是把部分內容當成完整內容。</p>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>問題</th><th>T3 Code</th><th>目前的 review CLI</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>changed files 顯示</td><td><code>status --porcelain=2</code> 與 <code>numstat</code></td><td><code>name-status -z</code></td></tr>
+            <tr><td>實際 review 內容</td><td>直接取得完整 patch</td><td>先列 path，再逐檔重新 diff</td></tr>
+            <tr><td>status 是否影響 coverage</td><td>沒有 per-file coverage 宣稱</td><td>status 被丟掉，卻宣稱 per-file reviewed</td></tr>
+            <tr><td>輸出不完整</td><td>顯式 <code>truncated</code></td><td>output limit 直接失敗</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p>目前 CLI 在 output limit 時直接失敗，其實比 preview 的截斷策略更嚴格，這部分不必改成 T3 Code。真正應採用的原則是：<strong>摘要不能代替 patch；不完整不能標成 reviewed。</strong></p>
+
+      <p>T3 Code 也不是所有地方都更嚴謹。它的 status UI 有以換行與空白拆解 path 的程式，對特殊檔名不如 <code>-z</code> 安全；某些 preview error 也會 fallback 成空 diff。這些取捨適合 UI preview，卻不適合宣稱可信 coverage 的工具。</p>
+    </section>
+
+    <section id="parser">
+      <h2>6. 另外兩個會影響完整性的問題</h2>
+
+      <h3>Parser 遇到壞資料時靜默停止</h3>
+      <p><code>nulSeparatedChangedPaths</code> 遇到缺少 path 或 rename target 時會 <code>break</code>，然後回傳前面已解析的部分。例如：</p>
+
+      <pre><span class="label">Malformed output</span><code>A\0good.ts\0R100\0old.ts</code></pre>
+
+      <p>最後一筆 rename 不完整，但 parser 可能只回傳 <code>good.ts</code>，讓呼叫端無法知道有紀錄被丟棄。現有 command runner 遇到 output limit 會直接失敗，因此正常 Git 執行不太會提供截斷 stdout；即使如此，parser 的契約仍應是「完整解析或明確失敗」，而不是回傳半份結果。</p>
+
+      <h3>同一路徑可能被計成兩個 changed files</h3>
+      <p>在 working-tree scope，如果一個 tracked <code>f.txt</code> 已 staged delete，使用者又建立新的 untracked <code>f.txt</code>，Git 會同時呈現一筆 deletion 和一筆 untracked addition。現有流程會產生兩個 coverage entries，而 summary 使用陣列長度作為 <code>changedFiles</code>，因此同一 pathname 會被計數兩次。</p>
+
+      <p>這不一定漏掉內容，但它暴露了資料模型尚未決定「file identity」到底是 pathname、Git change record，還是 <code>(path, source)</code>。若欄位名稱是 <code>changedFiles</code>，就應該定義並測試這個語意。</p>
+    </section>
+
+    <section id="design">
+      <h2>7. 建議的完整設計</h2>
+      <p>不必放棄現有逐檔處理。逐檔處理有實際優點：可以對 binary 和大型檔案分別記錄 coverage，也能控制每個 patch 的資源使用。需要改的是 change model 與錯誤語意。</p>
+
+      <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">type</span> <span class="t">GitChangeStatus</span> <span class="o">=</span>
+  <span class="o">|</span> <span class="s">"A"</span>
+  <span class="o">|</span> <span class="s">"M"</span>
+  <span class="o">|</span> <span class="s">"D"</span>
+  <span class="o">|</span> <span class="s">"T"</span>
+  <span class="o">|</span> <span class="s">"R"</span>
+  <span class="o">|</span> <span class="s">"C"</span>
+  <span class="o">|</span> <span class="s">"U"</span><span class="o">;</span>
+
+interface <span class="t">GitChangedPath</span> <span class="o">{</span>
+  readonly status<span class="o">:</span> <span class="t">GitChangeStatus</span><span class="o">;</span>
+  readonly path<span class="o">:</span> string<span class="o">;</span>
+  readonly sourcePath<span class="o">?</span><span class="o">:</span> string<span class="o">;</span>
+  readonly similarity<span class="o">?</span><span class="o">:</span> number<span class="o">;</span>
+  readonly pathspecs<span class="o">:</span> <span class="t">ReadonlyArray</span><span class="o">&lt;</span>string<span class="o">&gt;</span><span class="o">;</span>
+<span class="o">}</span></code></pre>
+
+      <ol class="steps">
+        <li><strong>完整解析 record。</strong>驗證 status、欄位數量、空 path，以及 rename/copy 的 source 與 target。</li>
+        <li><strong>保存 Git status。</strong>讓下游能區分 ordinary change、rename 與 unmerged。</li>
+        <li><strong>把 <code>U</code> 當成阻擋狀態。</strong>預設不要送入一般 <code>readPatch</code>；回傳包含所有衝突路徑的 typed error。</li>
+        <li><strong>只有有效 patch 才能 reviewed。</strong>非空 stdout 只是必要條件，不是充分條件。</li>
+        <li><strong>定義 coverage identity。</strong>決定同一路徑的 staged deletion 與 untracked addition，是一個 file 還是兩個 change entries。</li>
+      </ol>
+
+      <p>預設路徑建議使用：</p>
+
+      <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">class</span> <span class="t">GitUnmergedPathsError</span> <span class="o">{</span>
+  readonly paths<span class="o">:</span> <span class="t">ReadonlyArray</span><span class="o">&lt;</span>string<span class="o">&gt;</span><span class="o">;</span>
+<span class="o">}</span></code></pre>
+
+      <p>這會讓 review 在讀取任何 patch 前停止，並讓 terminal、JSON 或 agent output 都能明確告訴使用者哪些路徑需要處理。若未來另外提供 partial-review 模式，才新增：</p>
+
+      <pre class="language-typescript"><span class="label">TypeScript</span><code>interface <span class="t">UnmergedSkippedFile</span> <span class="o">{</span>
+  readonly path<span class="o">:</span> string<span class="o">;</span>
+  readonly source<span class="o">:</span> <span class="t">ReviewFileSource</span><span class="o">;</span>
+  readonly reason<span class="o">:</span> <span class="s">"unmerged"</span><span class="o">;</span>
+<span class="o">}</span></code></pre>
+
+      <p>partial mode 可以繼續 review 其他正常檔案，但結果必定是 <code>coverage.complete = false</code>。兩種模式都不可把 unmerged path 轉成 <code>reviewed</code>。</p>
+
+      <h3>必須補上的測試</h3>
+      <ul class="checklist">
+        <li>一般 <code>A</code>、<code>M</code>、<code>D</code>、<code>T</code> records。</li>
+        <li><code>R100</code> 與雙路徑解析。</li>
+        <li>含空白、tab、換行的檔名。</li>
+        <li>缺少 path、缺少 rename target、非法 status。</li>
+        <li>真實 merge conflict：不得產生 reviewed coverage。</li>
+        <li>staged delete 後以同一路徑建立 untracked file。</li>
+        <li>binary、large file 與 unmerged 同時存在時，<code>coverage.complete</code> 的結果。</li>
+      </ul>
+    </section>
+
+    <section class="closing">
+      <h2>結論</h2>
+      <p><code>git diff --cached --find-renames --name-status -z</code> 是合理的 discovery command，對 rename 與特殊檔名也有良好基礎。現在不夠完整的原因，是系統把一份帶有狀態的 change record 降級成單純 path，之後又以「stdout 非空」代替「取得有效 patch」。</p>
+      <p>最優先的修正是保存 status 並處理 <code>U</code>。完成這一步後，<code>coverage.complete</code> 才能開始代表一個可驗證的事實，而不只是「每個 path 都曾執行過一次 Git command」。</p>
+    </section>
+
+    <section class="sources" aria-labelledby="sources-title">
+      <h2 id="sources-title">參考來源</h2>
+      <ul>
+        <li><a href="https://github.com/pingdotgg/t3code/blob/main/apps/server/src/vcs/GitVcsDriverCore.ts">T3 Code：GitVcsDriverCore.ts</a>—status、commit context、untracked diff 與 review preview 的實作。</li>
+        <li><a href="https://github.com/pingdotgg/t3code/blob/main/packages/contracts/src/review.ts">T3 Code：review.ts</a>—包含 <code>truncated</code> 的 review diff contract。</li>
+        <li><a href="https://docs.coderabbit.ai/finishing-touches/resolve-merge-conflict">CodeRabbit：Resolve Merge Conflicts</a>—PR／MR 衝突偵測、明確觸發、驗證與拒絕高風險自動解法的官方流程。</li>
+        <li><a href="https://docs.coderabbit.ai/reference/review-commands">CodeRabbit：Review commands</a>—Autofix 遇到 merge conflict 時會停止，並引導使用者先處理衝突。</li>
+        <li><a href="https://docs.coderabbit.ai/cli/index">CodeRabbit：Command-Line Review Tool</a>—本機 CLI review 的公開功能與範圍；目前未載明 unmerged working tree 的專門處理規格。</li>
+      </ul>
+    </section>
+  </main>
+  <script>
+    (() => {
+      const copyIcon = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="11" height="11" rx="2"></rect><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"></path></svg>';
+      const checkIcon = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"></path></svg>';
+
+      const copyText = async (text) => {
+        if (navigator.clipboard?.writeText) {
+          await navigator.clipboard.writeText(text);
+          return;
+        }
+        const area = document.createElement('textarea');
+        area.value = text;
+        area.style.position = 'fixed';
+        area.style.opacity = '0';
+        document.body.append(area);
+        area.select();
+        document.execCommand('copy');
+        area.remove();
+      };
+
+      document.querySelectorAll('pre').forEach((pre) => {
+        const code = pre.querySelector('code');
+        if (!code) return;
+
+        const button = document.createElement('button');
+        button.className = 'copy-code';
+        button.type = 'button';
+        button.setAttribute('aria-label', '複製程式碼');
+        button.innerHTML = copyIcon;
+        button.addEventListener('click', async () => {
+          try {
+            await copyText(code.textContent ?? '');
+            button.classList.add('copied');
+            button.innerHTML = checkIcon;
+            window.setTimeout(() => {
+              button.classList.remove('copied');
+              button.innerHTML = copyIcon;
+            }, 1400);
+          } catch {
+            button.setAttribute('aria-label', '複製失敗');
+          }
+        });
+        pre.append(button);
+
+        const track = document.createElement('div');
+        const thumb = document.createElement('div');
+        track.className = 'code-scrollbar';
+        thumb.className = 'code-scrollbar-thumb';
+        track.append(thumb);
+        pre.append(track);
+
+        const sync = () => {
+          const ratio = Math.min(1, code.clientWidth / code.scrollWidth);
+          track.classList.toggle('hidden', ratio >= 1);
+          thumb.style.width = `${ratio * 100}%`;
+          const max = track.clientWidth - thumb.clientWidth;
+          const position = code.scrollWidth === code.clientWidth
+            ? 0
+            : (code.scrollLeft / (code.scrollWidth - code.clientWidth)) * max;
+          thumb.style.transform = `translateX(${position}px)`;
+        };
+
+        code.addEventListener('scroll', sync, { passive: true });
+        window.addEventListener('resize', sync, { passive: true });
+        sync();
+      });
+    })();
+  </script>
+</body>
+</html>
