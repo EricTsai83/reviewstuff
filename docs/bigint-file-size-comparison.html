@@ -1,0 +1,400 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="理解為什麼 JavaScript 在比較檔案大小時會使用 bigint，以及如何避免整數精度與型別錯誤。">
+  <title>為什麼檔案大小比較會使用 bigint？</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --clay: #d97757;
+      --slate: #141413;
+      --ivory: #faf9f5;
+      --oat: #e3dacc;
+      --gray-100: #f0eee6;
+      --gray-500: #87867f;
+      --gray-700: #3d3d3a;
+      --warning: #c78e3f;
+      --space-sm: 8px;
+      --space-md: 12px;
+      --space-lg: 16px;
+      --space-xl: 24px;
+      --space-2xl: 32px;
+      --space-3xl: 48px;
+      --radius-sm: 4px;
+      --radius-md: 8px;
+      --content-width: 68ch;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      background: var(--ivory);
+      color: var(--slate);
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 16px;
+      font-weight: 430;
+      line-height: 1.55;
+      letter-spacing: 0;
+    }
+
+    main {
+      max-width: var(--content-width);
+      margin: 0 auto;
+      padding: var(--space-3xl) var(--space-xl);
+    }
+
+    article {
+      padding: 0;
+      border: 0;
+      border-radius: 0;
+      background: transparent;
+      box-shadow: none;
+    }
+
+    h1,
+    h2 {
+      text-wrap: balance;
+    }
+
+    h1 {
+      max-width: none;
+      margin: 0 0 var(--space-lg);
+      font-size: 1.8rem;
+      line-height: 1.18;
+      overflow-wrap: normal;
+    }
+
+    h2 {
+      margin: var(--space-3xl) 0 var(--space-md);
+      font-size: 1.22rem;
+      line-height: 1.25;
+    }
+
+    p,
+    ul,
+    .deck,
+    .callout,
+    pre {
+      max-width: var(--content-width);
+    }
+
+    p { margin: 0 0 var(--space-lg); }
+
+    .deck {
+      margin-bottom: var(--space-2xl);
+      color: var(--gray-700);
+      font-size: 1.05rem;
+    }
+
+    code {
+      padding: 0.08em 0.28em;
+      border: 1px solid var(--oat);
+      border-radius: var(--radius-sm);
+      background: var(--gray-100);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 0.9em;
+      overflow-wrap: anywhere;
+    }
+
+    pre {
+      position: relative;
+      width: 100%;
+      margin: var(--space-lg) 0 var(--space-xl);
+      overflow: hidden;
+      border: 1px solid #26241f;
+      border-radius: var(--radius-md);
+      background: #11110f;
+      color: #d8d4ca;
+    }
+
+    pre code {
+      display: block;
+      padding: 0;
+      border: 0;
+      background: transparent;
+      color: inherit;
+      overflow-x: auto;
+      padding: 18px 64px 18px 22px;
+      white-space: pre;
+      font-size: 0.875rem;
+      font-weight: 400;
+      line-height: 1.62;
+      scrollbar-width: none;
+      tab-size: 2;
+    }
+
+    pre code::-webkit-scrollbar {
+      width: 0;
+      height: 0;
+    }
+
+    pre .label { display: none; }
+
+    .copy-code {
+      position: absolute;
+      top: 9px;
+      right: 9px;
+      z-index: 1;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 30px;
+      height: 30px;
+      padding: 0;
+      border: 1px solid rgba(250, 249, 245, 0.14);
+      border-radius: var(--radius-sm);
+      background: rgba(250, 249, 245, 0.06);
+      color: rgba(250, 249, 245, 0.72);
+      cursor: pointer;
+    }
+
+    .copy-code:hover,
+    .copy-code:focus-visible {
+      border-color: rgba(250, 249, 245, 0.28);
+      background: rgba(250, 249, 245, 0.12);
+      color: var(--ivory);
+      outline: none;
+    }
+
+    .copy-code.copied {
+      border-color: rgba(143, 184, 106, 0.42);
+      background: rgba(143, 184, 106, 0.14);
+      color: #b8d99a;
+    }
+
+    .copy-code svg {
+      width: 13px;
+      height: 13px;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 1.8;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      pointer-events: none;
+    }
+
+    .code-scrollbar {
+      position: absolute;
+      right: 0;
+      bottom: 0;
+      left: 0;
+      height: 3px;
+      border-radius: 999px;
+      background: rgba(250, 249, 245, 0.1);
+      cursor: pointer;
+    }
+
+    .code-scrollbar.hidden { display: none; }
+
+    .code-scrollbar-thumb {
+      height: 100%;
+      border-radius: inherit;
+      background: rgba(255, 148, 110, 0.82);
+      transform: translateX(0);
+      cursor: grab;
+    }
+
+    .code-scrollbar-thumb:active { cursor: grabbing; }
+
+    pre code .k { color: #ff946e; font-weight: 400; }
+    pre code .s { color: #8fb86a; }
+    pre code .n,
+    pre code .p { color: #d8d4ca; }
+    pre code .c { color: #858177; font-style: italic; }
+    pre code .f,
+    pre code .t { color: #cfc6a2; font-weight: 400; }
+    pre code .o { color: #ff946e; }
+
+    .callout {
+      margin: var(--space-xl) 0;
+      padding: var(--space-lg);
+      border: 1px solid var(--oat);
+      border-left: 4px solid var(--warning);
+      border-radius: var(--radius-sm);
+      background: var(--gray-100);
+    }
+
+    .callout p:last-child { margin-bottom: 0; }
+
+    ul {
+      margin: var(--space-sm) 0 var(--space-xl);
+      padding-left: 1.35em;
+    }
+
+    li { margin-bottom: var(--space-sm); }
+
+    .conclusion {
+      margin-top: var(--space-3xl);
+      padding-top: var(--space-xl);
+      border-top: 1px solid var(--oat);
+    }
+
+    .conclusion p:last-child { margin-bottom: 0; }
+
+    .conclusion h2 {
+      margin-top: 0;
+      padding-top: 0;
+      border-top: 0;
+    }
+
+    @media (max-width: 640px) {
+      body { font-size: 15px; }
+      h1 { font-size: 1.65rem; }
+      main { padding: var(--space-xl); }
+      pre code { font-size: 0.8125rem; line-height: 1.5; }
+      p code,
+      li code { font-size: 0.9em; }
+      .deck { font-size: 0.875rem; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <article>
+      <h1>為什麼檔案大小比較會使用 <code>bigint</code>？</h1>
+      <p class="deck">「<code>bigint</code> 是為了與檔案大小結果安全比較」的意思是：用可以精確表示任意大整數的型別，避免大型檔案的位元組數在比較時因數值精度不足而得到錯誤結果。</p>
+
+      <h2>問題從 JavaScript 的 <code>number</code> 開始</h2>
+      <p>JavaScript 的 <code>number</code> 使用浮點數格式。它能表示非常大的數值，但不代表每個大整數都能被精確保存。只有落在「安全整數」範圍內的整數，才能保證運算與比較可靠。</p>
+
+      <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="t">Number</span><span class="o">.</span><span class="p">MAX_SAFE_INTEGER</span>
+<span class="c">// 9007199254740991，也就是 2^53 - 1</span></code></pre>
+
+      <p>超出這個範圍後，相鄰的兩個整數可能會被表示成同一個值：</p>
+
+      <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="n">9007199254740992</span> <span class="o">=</span><span class="o">=</span><span class="o">=</span> <span class="n">9007199254740993</span>
+<span class="c">// true</span></code></pre>
+
+      <p>這個結果看起來不合理，但原因不是比較運算子壞掉，而是右邊的整數在進入比較之前就已經失去精度。</p>
+
+      <h2><code>bigint</code> 如何解決精度問題</h2>
+      <p><code>bigint</code> 專門用來表示整數，而且不受 <code>number</code> 的安全整數上限限制。整數常值後方的 <code>n</code> 表示它是 <code>bigint</code>：</p>
+
+      <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="n">9007199254740992</span>n <span class="o">=</span><span class="o">=</span><span class="o">=</span> <span class="n">9007199254740993</span>n
+<span class="c">// false</span></code></pre>
+
+      <p>檔案大小通常以位元組表示，本質上是非負整數。當檔案系統 API 能直接回傳 <code>bigint</code>，或數值可能超過安全整數範圍時，使用 <code>bigint</code> 可以保留完整的位元組數。</p>
+
+      <h2>安全比較檔案大小</h2>
+      <p>假設程式要限制檔案不能超過 10 MiB，可以要求檔案系統直接提供 <code>bigint</code>，並讓容量上限也使用相同型別：</p>
+
+      <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">import</span> <span class="o">{</span> stat <span class="o">}</span> <span class="k">from</span> <span class="s">"node:fs/promises"</span><span class="o">;</span>
+
+<span class="k">const</span> file <span class="o">=</span> <span class="k">await</span> <span class="f">stat</span><span class="o">(</span><span class="s">"video.mp4"</span><span class="o">,</span> <span class="o">{</span> bigint<span class="o">:</span> <span class="n">true</span> <span class="o">}</span><span class="o">)</span><span class="o">;</span>
+<span class="k">const</span> maxSize <span class="o">=</span> <span class="n">10</span>n <span class="o">*</span> <span class="n">1024</span>n <span class="o">*</span> <span class="n">1024</span>n<span class="o">;</span>
+
+<span class="k">if</span> <span class="o">(</span>file<span class="o">.</span><span class="p">size</span> <span class="o">&gt;</span> maxSize<span class="o">)</span> <span class="o">{</span>
+  <span class="k">throw</span> <span class="k">new</span> <span class="f">Error</span><span class="o">(</span><span class="s">"檔案超過 10 MiB"</span><span class="o">)</span><span class="o">;</span>
+<span class="o">}</span></code></pre>
+
+      <p><code>bigint: true</code> 讓 <code>file.size</code> 從來源開始就是 <code>bigint</code>。因此比較的兩側都是精確整數，不會先把檔案大小壓進可能失真的 <code>number</code>。</p>
+
+      <aside class="callout" aria-label="型別注意事項">
+        <p><strong>讓兩側維持相同型別。</strong> 關係比較運算子可以比較 <code>number</code> 與 <code>bigint</code>，但兩者不能直接進行算術運算，例如 <code>1n + 1</code> 會拋出 <code>TypeError</code>。容量計算全部採用 <code>bigint</code>，規則會更一致，也較不容易在後續修改時混入精度問題。</p>
+      </aside>
+
+      <h2>什麼時候真的需要它？</h2>
+      <p>一般使用者裝置上的單一檔案，通常遠小於 <code>Number.MAX_SAFE_INTEGER</code> 位元組，所以 <code>number</code> 在許多應用中已經足夠。使用 <code>bigint</code> 的主要價值在於：</p>
+
+      <ul>
+        <li>檔案系統 API 本身回傳 <code>bigint</code>，比較時維持相同型別最直接。</li>
+        <li>程式可能處理非常大的檔案、虛擬檔案或累計容量。</li>
+        <li>希望型別層級明確保證整數不會因浮點表示而失真。</li>
+      </ul>
+
+      <p>反過來說，如果來源本來就是已經失去精度的 <code>number</code>，事後再呼叫 <code>BigInt(value)</code> 無法找回遺失的位元。最理想的作法，是從資料來源開始就以 <code>bigint</code> 取得大小。</p>
+
+      <section class="conclusion" aria-labelledby="conclusion-title">
+        <h2 id="conclusion-title">這句話可以怎麼理解</h2>
+        <p>更完整的說法是：「使用 <code>bigint</code>，是為了讓檔案大小與容量上限在同一種精確整數型別中比較，避免超大整數因 <code>number</code> 精度不足而產生錯誤結果。」</p>
+      </section>
+    </article>
+  </main>
+  <script>
+    const copyIcon = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="11" height="11" rx="2"></rect><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"></path></svg>';
+    const checkIcon = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"></path></svg>';
+
+    function copyText(text) {
+      if (navigator.clipboard && window.isSecureContext) {
+        return navigator.clipboard.writeText(text);
+      }
+
+      const textarea = document.createElement("textarea");
+      textarea.value = text;
+      textarea.style.position = "fixed";
+      textarea.style.opacity = "0";
+      document.body.append(textarea);
+      textarea.select();
+      document.execCommand("copy");
+      textarea.remove();
+      return Promise.resolve();
+    }
+
+    document.querySelectorAll("pre").forEach((pre) => {
+      const code = pre.querySelector("code");
+      if (!code) return;
+
+      const button = document.createElement("button");
+      button.className = "copy-code";
+      button.type = "button";
+      button.setAttribute("aria-label", "複製程式碼");
+      button.innerHTML = copyIcon;
+      button.addEventListener("click", async () => {
+        await copyText(code.textContent || "");
+        button.classList.add("copied");
+        button.setAttribute("aria-label", "已複製");
+        button.innerHTML = checkIcon;
+        window.setTimeout(() => {
+          button.classList.remove("copied");
+          button.setAttribute("aria-label", "複製程式碼");
+          button.innerHTML = copyIcon;
+        }, 1400);
+      });
+      pre.append(button);
+
+      const track = document.createElement("div");
+      track.className = "code-scrollbar";
+      const thumb = document.createElement("div");
+      thumb.className = "code-scrollbar-thumb";
+      track.append(thumb);
+      pre.append(track);
+
+      const sync = () => {
+        const visibleRatio = code.clientWidth / code.scrollWidth;
+        track.classList.toggle("hidden", visibleRatio >= 1);
+        const thumbWidth = Math.max(visibleRatio * track.clientWidth, 24);
+        const maxThumbLeft = track.clientWidth - thumbWidth;
+        const scrollRatio = code.scrollLeft / Math.max(code.scrollWidth - code.clientWidth, 1);
+        thumb.style.width = `${thumbWidth}px`;
+        thumb.style.transform = `translateX(${scrollRatio * maxThumbLeft}px)`;
+      };
+
+      code.addEventListener("scroll", sync, { passive: true });
+      window.addEventListener("resize", sync);
+      track.addEventListener("click", (event) => {
+        const ratio = event.offsetX / track.clientWidth;
+        code.scrollLeft = ratio * (code.scrollWidth - code.clientWidth);
+      });
+
+      let dragStartX = 0;
+      let dragStartScroll = 0;
+      thumb.addEventListener("pointerdown", (event) => {
+        event.stopPropagation();
+        dragStartX = event.clientX;
+        dragStartScroll = code.scrollLeft;
+        thumb.setPointerCapture(event.pointerId);
+      });
+      thumb.addEventListener("pointermove", (event) => {
+        if (!thumb.hasPointerCapture(event.pointerId)) return;
+        const movableWidth = track.clientWidth - thumb.clientWidth;
+        const scrollableWidth = code.scrollWidth - code.clientWidth;
+        code.scrollLeft = dragStartScroll + (event.clientX - dragStartX) * scrollableWidth / Math.max(movableWidth, 1);
+      });
+      sync();
+    });
+  </script>
+</body>
+</html>
