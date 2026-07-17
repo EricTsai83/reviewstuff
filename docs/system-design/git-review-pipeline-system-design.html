@@ -1,0 +1,613 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Git Review Pipeline System Design</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --clay: #D97757;
+      --slate: #141413;
+      --ivory: #FAF9F5;
+      --oat: #E3DACC;
+      --white: #FFFFFF;
+      --gray-100: #F0EEE6;
+      --gray-300: #D1CFC5;
+      --gray-500: #87867F;
+      --gray-700: #3D3D3A;
+      --warning: #C78E3F;
+      --space-sm: 8px;
+      --space-md: 12px;
+      --space-lg: 16px;
+      --space-xl: 24px;
+      --space-2xl: 32px;
+      --space-3xl: 48px;
+      --radius-sm: 4px;
+      --radius-md: 8px;
+      --content-width: 68ch;
+    }
+
+    * { box-sizing: border-box; }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      margin: 0;
+      background: var(--ivory);
+      color: var(--slate);
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 16px;
+      font-weight: 430;
+      line-height: 1.55;
+    }
+
+    main {
+      max-width: var(--content-width);
+      margin: 0 auto;
+      padding: var(--space-3xl) var(--space-xl);
+    }
+
+    article {
+      background: transparent;
+      border: 0;
+      border-radius: 0;
+      box-shadow: none;
+      padding: 0;
+    }
+
+    h1 {
+      margin: 0 0 var(--space-lg);
+      font-size: 1.8rem;
+      line-height: 1.18;
+      letter-spacing: -0.02em;
+      text-wrap: balance;
+    }
+
+    h2 {
+      margin: var(--space-3xl) 0 var(--space-lg);
+      padding-top: var(--space-sm);
+      font-size: 1.22rem;
+      line-height: 1.25;
+    }
+
+    h3 {
+      margin: var(--space-2xl) 0 var(--space-md);
+      font-size: 1rem;
+      line-height: 1.35;
+    }
+
+    p { margin: 0 0 var(--space-lg); }
+
+    p, ul, ol, .deck, .callout, table, pre { max-width: var(--content-width); }
+
+    .deck {
+      margin-bottom: var(--space-2xl);
+      color: var(--gray-700);
+      font-size: 1.05rem;
+    }
+
+    a {
+      color: var(--clay);
+      text-decoration: underline;
+      text-underline-offset: 0.18em;
+    }
+
+    nav {
+      margin: var(--space-2xl) 0;
+      padding: var(--space-lg) var(--space-xl);
+      border: 1px solid var(--oat);
+      border-radius: var(--radius-md);
+      background: rgba(255, 255, 255, 0.48);
+    }
+
+    nav strong { display: block; margin-bottom: var(--space-sm); }
+    nav ol { margin: 0; padding-left: 1.25rem; columns: 2; column-gap: var(--space-2xl); }
+    nav li { break-inside: avoid; margin: 4px 0; }
+
+    code {
+      border: 1px solid var(--oat);
+      border-radius: var(--radius-sm);
+      background: var(--gray-100);
+      padding: 0.08em 0.3em;
+      overflow-wrap: anywhere;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.92em;
+    }
+
+    pre {
+      position: relative;
+      width: 100%;
+      margin: var(--space-lg) 0 var(--space-xl);
+      border: 1px solid #26241f;
+      border-radius: var(--radius-md);
+      background: #11110f;
+      color: #d8d4ca;
+      overflow: hidden;
+    }
+
+    pre code {
+      display: block;
+      border: 0;
+      background: transparent;
+      padding: 18px 64px 18px 22px;
+      color: inherit;
+      overflow-x: auto;
+      white-space: pre;
+      font-size: 0.875rem;
+      font-weight: 400;
+      line-height: 1.62;
+      scrollbar-width: none;
+    }
+
+    pre code::-webkit-scrollbar { width: 0; height: 0; }
+    pre .label { display: none; }
+    pre code .k { color: #ff946e; font-weight: 400; }
+    pre code .s { color: #8fb86a; }
+    pre code .n, pre code .p { color: #d8d4ca; }
+    pre code .c { color: #858177; font-style: italic; }
+    pre code .f, pre code .t { color: #cfc6a2; font-weight: 400; }
+    pre code .o { color: #ff946e; }
+
+    .copy-code {
+      position: absolute;
+      top: 9px;
+      right: 9px;
+      z-index: 1;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 30px;
+      height: 30px;
+      padding: 0;
+      border: 1px solid rgba(250, 249, 245, 0.14);
+      border-radius: var(--radius-sm);
+      background: rgba(250, 249, 245, 0.06);
+      color: rgba(250, 249, 245, 0.72);
+      cursor: pointer;
+    }
+
+    .copy-code:hover, .copy-code:focus-visible {
+      border-color: rgba(250, 249, 245, 0.28);
+      background: rgba(250, 249, 245, 0.12);
+      color: var(--ivory);
+      outline: none;
+    }
+
+    .copy-code.copied {
+      border-color: rgba(143, 184, 106, 0.42);
+      background: rgba(143, 184, 106, 0.14);
+      color: #b8d99a;
+    }
+
+    .copy-code svg {
+      width: 13px;
+      height: 13px;
+      stroke: currentColor;
+      stroke-width: 1.8;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      fill: none;
+      pointer-events: none;
+    }
+
+    .code-scrollbar {
+      position: absolute;
+      right: 0;
+      bottom: 0;
+      left: 0;
+      height: 3px;
+      border-radius: 999px;
+      background: rgba(250, 249, 245, 0.1);
+      cursor: pointer;
+    }
+
+    .code-scrollbar.hidden { display: none; }
+    .code-scrollbar-thumb { height: 100%; border-radius: inherit; background: rgba(255, 148, 110, 0.82); }
+
+    .table-wrap {
+      width: 100%;
+      margin: var(--space-lg) 0 var(--space-xl);
+      overflow-x: auto;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: rgba(255, 255, 255, 0.38);
+      font-size: 0.94rem;
+    }
+
+    th, td {
+      border: 1px solid var(--oat);
+      padding: 10px 12px;
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th { background: var(--gray-100); font-weight: 650; }
+    td:first-child code { white-space: nowrap; }
+
+    ul, ol { margin: 0 0 var(--space-xl); padding-left: 1.35rem; }
+    li { margin: var(--space-sm) 0; }
+
+    .callout {
+      margin: var(--space-xl) 0;
+      padding: var(--space-lg) var(--space-xl);
+      border: 1px solid var(--oat);
+      border-left: 4px solid var(--clay);
+      border-radius: var(--radius-sm);
+      background: var(--gray-100);
+    }
+
+    .callout p:last-child { margin-bottom: 0; }
+    .callout.warning { border-left-color: var(--warning); }
+
+    .flow-figure {
+      margin: var(--space-2xl) 0;
+      text-align: center;
+    }
+
+    .flow-figure svg {
+      display: block;
+      width: min(100%, 360px);
+      height: auto;
+      margin: 0 auto;
+    }
+
+    .flow-figure figcaption {
+      max-width: 52ch;
+      margin: var(--space-lg) auto 0;
+      color: var(--gray-700);
+      font-size: 0.9rem;
+      text-align: left;
+    }
+
+    .flow-node rect { fill: var(--white); stroke: var(--oat); stroke-width: 1.5; }
+    .flow-node text { fill: var(--slate); font-size: 14px; font-weight: 650; }
+    .flow-note { fill: var(--gray-700); font-size: 12px; font-weight: 500; }
+    .flow-arrow { fill: none; stroke: var(--clay); stroke-width: 2; }
+
+    .sources {
+      margin-top: var(--space-3xl);
+      padding-top: var(--space-xl);
+      border-top: 1px solid var(--oat);
+      color: var(--gray-700);
+      font-size: 0.9rem;
+    }
+
+    @media (max-width: 640px) {
+      body { font-size: 15px; }
+      h1 { font-size: 1.65rem; }
+      main { padding: var(--space-xl); }
+      nav ol { columns: 1; }
+      pre code { font-size: 0.8125rem; line-height: 1.5; }
+      p code, li code, td code { font-size: 0.9em; }
+      table, .deck, .sources { font-size: 0.875rem; }
+      .flow-figure svg { width: min(100%, 300px); }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <article>
+      <h1>Git Review Pipeline System Design</h1>
+      <p class="deck">本文說明 <code>src/git</code> 如何把本機 Git 狀態轉換成穩定、可限制資源用量、可交給 review use case 消費的文字 patches。內容涵蓋模組邊界、兩種 review scope、資料流、錯誤模型，以及設計上的保證與取捨。</p>
+
+      <nav aria-label="文章目錄">
+        <strong>閱讀路徑</strong>
+        <ol>
+          <li><a href="#purpose">目的與邊界</a></li>
+          <li><a href="#architecture">架構與資料契約</a></li>
+          <li><a href="#scopes">兩種 review scope</a></li>
+          <li><a href="#patch-policy">Patch 收集政策</a></li>
+          <li><a href="#errors">錯誤模型</a></li>
+          <li><a href="#runtime">Runtime 與依賴注入</a></li>
+          <li><a href="#tradeoffs">保證與取捨</a></li>
+        </ol>
+      </nav>
+
+      <section id="purpose">
+        <h2>1. 目的與系統邊界</h2>
+        <p>這個模組是 reviewstuff 的 Git adapter。它不判斷程式碼是否正確，也不產生 finding；它負責把 repository 裡尚未 commit 的狀態轉成一份標準化的 <code>GitDiff</code>。上層 use case 再讀取其中的 patch，執行規則並建立 review report。</p>
+
+        <div class="callout">
+          <p><strong>核心邊界：</strong><code>src/git</code> 擁有 Git process、Git 輸出格式與 patch 可讀性政策；domain/use-case 層只需要理解「可 review 的檔案」與「被跳過的檔案」。</p>
+        </div>
+
+        <p>設計目標有四個：正確處理特殊檔名與 rename、避免無限制的 process 輸出、用 typed errors 保留失敗語意，以及讓底層 I/O 能在測試中替換。</p>
+      </section>
+
+      <section id="architecture">
+        <h2>2. 架構與資料契約</h2>
+        <p>唯一的公開 service 操作是 <code>GitService.readDiff(scope)</code>。它協調 repository 檢查、變更列舉、輸出解析與 patch 收集，最後只回傳一種穩定資料結構。</p>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">export</span> interface <span class="t">GitDiff</span> <span class="o">{</span>
+  readonly files<span class="o">:</span> <span class="t">ReadonlyArray</span><span class="o">&lt;</span><span class="t">GitFilePatch</span><span class="o">&gt;</span><span class="o">;</span>
+  readonly skippedFiles<span class="o">:</span> <span class="t">ReadonlyArray</span><span class="o">&lt;</span><span class="t">GitSkippedFile</span><span class="o">&gt;</span><span class="o">;</span>
+<span class="o">}</span>
+
+<span class="k">export</span> interface <span class="t">GitFilePatch</span> <span class="o">{</span>
+  readonly path<span class="o">:</span> string<span class="o">;</span>
+  readonly patch<span class="o">:</span> string<span class="o">;</span>
+  readonly source<span class="o">:</span> <span class="s">"staged"</span> <span class="o">|</span> <span class="s">"working-tree"</span> <span class="o">|</span> <span class="s">"untracked"</span><span class="o">;</span>
+<span class="o">}</span></code></pre>
+
+        <figure class="flow-figure">
+          <svg role="img" aria-labelledby="git-flow-title git-flow-desc" viewBox="0 0 320 610">
+            <title id="git-flow-title">Git review 資料管線</title>
+            <desc id="git-flow-desc">readDiff 請求依序通過 repository 檢查、變更解析、patch 收集，最後產生標準化的 GitDiff。</desc>
+            <defs>
+              <marker id="git-flow-arrowhead" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+                <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--clay)"></path>
+              </marker>
+            </defs>
+            <g class="flow-node">
+              <rect x="55" y="16" width="210" height="78" rx="8"></rect>
+              <text x="160" y="49" text-anchor="middle">readDiff(scope)</text>
+              <text class="flow-note" x="160" y="70" text-anchor="middle">接收 review 範圍</text>
+            </g>
+            <path class="flow-arrow" d="M160 94 V132" marker-end="url(#git-flow-arrowhead)"></path>
+            <g class="flow-node">
+              <rect x="55" y="140" width="210" height="78" rx="8"></rect>
+              <text x="160" y="173" text-anchor="middle">檢查 repository</text>
+              <text class="flow-note" x="160" y="194" text-anchor="middle">定位 root 並列出變更</text>
+            </g>
+            <path class="flow-arrow" d="M160 218 V256" marker-end="url(#git-flow-arrowhead)"></path>
+            <g class="flow-node">
+              <rect x="55" y="264" width="210" height="78" rx="8"></rect>
+              <text x="160" y="297" text-anchor="middle">解析 Git 輸出</text>
+              <text class="flow-note" x="160" y="318" text-anchor="middle">建立 patch targets</text>
+            </g>
+            <path class="flow-arrow" d="M160 342 V380" marker-end="url(#git-flow-arrowhead)"></path>
+            <g class="flow-node">
+              <rect x="55" y="388" width="210" height="78" rx="8"></rect>
+              <text x="160" y="421" text-anchor="middle">收集逐檔 patch</text>
+              <text class="flow-note" x="160" y="442" text-anchor="middle">大小、binary、並行限制</text>
+            </g>
+            <path class="flow-arrow" d="M160 466 V504" marker-end="url(#git-flow-arrowhead)"></path>
+            <g class="flow-node">
+              <rect x="55" y="512" width="210" height="78" rx="8"></rect>
+              <text x="160" y="545" text-anchor="middle">GitDiff</text>
+              <text class="flow-note" x="160" y="566" text-anchor="middle">files + skippedFiles</text>
+            </g>
+          </svg>
+          <figcaption><code>GitService</code> 負責協調；其餘模組分別封裝命令執行、輸出解析、patch 政策與錯誤模型。</figcaption>
+        </figure>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>模組</th><th>主要責任</th><th>不負責的事</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><code>git-service.ts</code></td><td>對外 service、scope 分流、完整流程協調</td><td>直接操作 child process</td></tr>
+              <tr><td><code>git-command.ts</code></td><td>Git command 共通設定、object metadata 查詢</td><td>決定哪些檔案需要 review</td></tr>
+              <tr><td><code>git-change-parser.ts</code></td><td>解析 NUL-separated paths、status、rename/copy</td><td>讀取 filesystem 或執行 Git</td></tr>
+              <tr><td><code>git-diff.ts</code></td><td>檔案大小政策、產生 patch、分類 skipped files</td><td>repository scope orchestration</td></tr>
+              <tr><td><code>git-errors.ts</code></td><td>Git domain 的 tagged error taxonomy</td><td>顯示 CLI 錯誤訊息</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="scopes">
+        <h2>3. 兩種 review scope</h2>
+        <p><code>readDiff</code> 一開始都會確認目前位於可用的 working tree、解析 repository root，並列出 staged changes。之後才依 scope 分流。</p>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Scope</th><th>納入的變更</th><th>主要比較方式</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><code>staged</code></td><td>只有 index 中已 staged 的變更</td><td><code>git diff --cached</code></td></tr>
+              <tr><td><code>working-tree</code></td><td>staged + unstaged tracked + untracked</td><td>tracked 相對 <code>HEAD</code>；untracked 相對 <code>/dev/null</code></td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>Staged flow</h3>
+        <ol>
+          <li>以 <code>git diff --cached --name-status -z</code> 列出 index 變更。</li>
+          <li>若狀態包含 <code>U</code>，在讀取任何 patch 前失敗。</li>
+          <li>逐檔以 <code>git diff --cached</code> 取得 patch。</li>
+        </ol>
+
+        <h3>Working-tree flow</h3>
+        <ol>
+          <li>取得 unstaged tracked changes，再和 staged changes 合併。</li>
+          <li>同一路徑若同時 staged 與 unstaged，只建立一個 target；rename/copy 則保留來源與目標 pathspec。</li>
+          <li>用 <code>git ls-files --others --exclude-standard -z</code> 列出 untracked files。</li>
+          <li>tracked 與 untracked 兩組工作並行收集，最後合併結果。</li>
+        </ol>
+
+        <div class="callout warning">
+          <p><strong>容易誤解的命名：</strong><code>working-tree</code> 不是「只看 unstaged」。它代表目前工作目錄的完整未提交狀態，所以也包含 staged 與 untracked。</p>
+        </div>
+
+        <h3>尚未有第一個 commit</h3>
+        <p>如果 <code>HEAD^{commit}</code> 不存在，系統會執行 <code>git hash-object -t tree /dev/null</code> 取得該 repository 格式對應的 empty-tree object ID，再以它作為 tracked files 的比較基準。這避免 hardcode SHA-1 hash，也讓 SHA-256 repository 保持相容。</p>
+      </section>
+
+      <section id="patch-policy">
+        <h2>4. 解析與 Patch 收集政策</h2>
+        <h3>特殊檔名與 pathspec 安全</h3>
+        <p>所有清單型命令使用 <code>-z</code>，parser 要求每個欄位非空且輸出以 NUL 結尾。因此檔名即使包含空白、tab 或換行，也不會被錯誤切割。每次 Git 執行還會自動加入 <code>--literal-pathspecs</code>，避免檔名被當成 glob 或 pathspec magic。</p>
+
+        <p>一般 change 會形成一個 pathspec；rename/copy 則以新路徑當 canonical <code>path</code>，同時保留舊、新路徑：</p>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="o">{</span>
+  status<span class="o">:</span> <span class="s">"R"</span><span class="o">,</span>
+  score<span class="o">:</span> <span class="n">100</span><span class="o">,</span>
+  path<span class="o">:</span> <span class="s">"src/new-name.ts"</span><span class="o">,</span>
+  pathspecs<span class="o">:</span> <span class="o">[</span><span class="s">"src/old-name.ts"</span><span class="o">,</span> <span class="s">"src/new-name.ts"</span><span class="o">]</span>
+<span class="o">}</span></code></pre>
+
+        <h3>資源與可 review 性限制</h3>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>政策</th><th>行為</th><th>理由</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>Git timeout</td><td>每個 command 最多 10 秒</td><td>避免 review 卡在 child process</td></tr>
+              <tr><td>Patch 上限</td><td>512 KiB</td><td>限制記憶體與下游處理成本</td></tr>
+              <tr><td>過大檔案</td><td>標記 <code>file-too-large</code></td><td>不把可預期限制視為整體失敗</td></tr>
+              <tr><td>Binary patch</td><td>標記 <code>binary</code></td><td>文字 reviewer 無法可靠理解 binary diff</td></tr>
+              <tr><td>逐檔並行</td><td>每組最多四個 target</td><td>兼顧吞吐與 process 壓力</td></tr>
+              <tr><td>輸出格式</td><td>關閉 color 與 external diff</td><td>保持 parser 與 review 結果穩定</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p>讀取大小時會依來源選擇正確資料：staged 優先查 index object；working-tree 優先查實體檔案；如果檔案已刪除，再回退到 <code>HEAD:path</code> 或 index。這讓刪除檔案也能套用大小政策。</p>
+
+        <p>Untracked files 沒有正常的 Git tree base，因此使用 <code>git diff --no-index /dev/null &lt;path&gt;</code>。這個命令在「有差異」時會回傳 exit code 1，所以該路徑明確接受 0 與 1；其他 tracked diff 仍要求 exit code 0。</p>
+
+        <div class="callout">
+          <p><strong>成功與失敗的分界：</strong>binary 或過大檔案仍會產生成功的 <code>GitDiff</code>，只是列在 <code>skippedFiles</code>，讓 coverage 明確顯示不完整。相反地，檔案在列舉後消失、Git 輸出不合法或存在 conflict，代表 snapshot 已不可信，因此整個 Effect 會失敗。</p>
+        </div>
+      </section>
+
+      <section id="errors">
+        <h2>5. Typed Error Model</h2>
+        <p>模組不依賴 thrown string message。所有可預期失敗都被轉成 Effect 的 tagged errors，呼叫端可以依 <code>_tag</code> 做完整分流。錯誤大致分成四層：</p>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>類別</th><th>代表錯誤</th><th>語意</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>環境前提</td><td><code>GitNotRepositoryError</code>、<code>GitWorkingTreeUnavailableError</code></td><td>目前位置不是可 review 的 working tree</td></tr>
+              <tr><td>Process 基礎設施</td><td><code>GitCommandTimeoutError</code>、<code>GitCommandProcessError</code>、<code>GitExecutionError</code></td><td>Git 無法正常啟動、執行、讀取或終止</td></tr>
+              <tr><td>Git command</td><td><code>GitCommandError</code></td><td>Git 執行完成但 exit code 非預期，並分類 lock、權限、損毀或 unsafe repository</td></tr>
+              <tr><td>資料一致性</td><td><code>GitInvalidOutputError</code>、<code>GitChangedFileUnavailableError</code>、<code>GitUnmergedPathsError</code></td><td>輸出不符契約、檔案競態消失，或 repository 尚有 conflict</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p><code>CommandRunner</code> 的底層錯誤會先被包裝成帶有 operation context 的 Git error；Git 自己的非零結果則根據英文 stderr 分類。為了讓分類穩定，所有 Git command 都設定 <code>LC_ALL=C</code>。</p>
+      </section>
+
+      <section id="runtime">
+        <h2>6. Runtime 與依賴注入</h2>
+        <p><code>GitService</code> 是 Effect <code>Context.Service</code>，實作 layer 依賴兩個 platform capability：</p>
+        <ul>
+          <li><code>CommandRunner</code>：啟動 process、同時 drain stdout/stderr、套用 timeout 與 combined output budget。</li>
+          <li><code>FileInspector</code>：查詢 working-tree 實體檔案大小，檔案不存在時回傳 <code>undefined</code>。</li>
+        </ul>
+
+        <p>CLI composition root 將 <code>CommandRunner.layer</code> 與 <code>FileInspector.layer</code> 提供給 <code>GitService.layer</code>。測試則可提供 fixture service，不需真的呼叫 Git；integration tests 再用 temporary repository 驗證真實行為。這種分層讓 orchestration、parser 和 I/O failure 可以獨立測試。</p>
+      </section>
+
+      <section id="tradeoffs">
+        <h2>7. 系統保證與設計取捨</h2>
+        <h3>目前提供的保證</h3>
+        <ul>
+          <li>輸入順序會被排序或由 ordered collection 保留，使輸出具決定性。</li>
+          <li>rename/copy、特殊檔名、deleted files 與 unborn repository 有明確處理方式。</li>
+          <li>binary 與過大檔案會進入 coverage，而不是悄悄消失。</li>
+          <li>conflict 會在 patch collection 前阻止 review，避免對不完整 merge state 做出誤導結論。</li>
+          <li>process timeout、metadata budget、patch budget 與 bounded concurrency 限制資源風險。</li>
+        </ul>
+
+        <h3>刻意接受的取捨</h3>
+        <ul>
+          <li><strong>逐檔執行 Git：</strong>process 數量較多，但每個檔案能獨立套用大小、binary 與 unavailable 政策。</li>
+          <li><strong>512 KiB 單一門檻：</strong>簡單且可預測，但大型文字檔即使 diff 很小也可能被跳過。</li>
+          <li><strong>依賴 stderr 關鍵字分類：</strong>能提供實用錯誤類別，但仍需以 <code>LC_ALL=C</code> 固定語系，未知訊息會退回 <code>unknown</code>。</li>
+          <li><strong>conflict 採 fail-fast：</strong>結果較可信，但不能針對無衝突檔案產生部分 review。</li>
+        </ul>
+
+        <p>如果未來要支援 commit range、remote branch 或 pull request diff，較穩定的擴充點是新增 review-base/scope resolution，再重用既有的 parser、patch collection 與 error boundary。不要讓上層 use case 直接組 Git arguments，否則 path safety、資源限制與錯誤語意會分散。</p>
+      </section>
+
+      <section class="sources" aria-label="程式碼索引">
+        <h2>程式碼索引</h2>
+        <ul>
+          <li><code>src/git/git-service.ts</code>：公開 service 與 orchestration。</li>
+          <li><code>src/git/git-change-parser.ts</code>：Git machine output parser。</li>
+          <li><code>src/git/git-command.ts</code>：Git command gateway 與 object metadata。</li>
+          <li><code>src/git/git-diff.ts</code>：逐檔 patch collection 與 skip policy。</li>
+          <li><code>src/git/git-errors.ts</code>：typed error taxonomy。</li>
+          <li><code>src/use-cases/run-review.ts</code>：消費 <code>GitDiff</code> 並建立 review report。</li>
+        </ul>
+      </section>
+    </article>
+  </main>
+
+  <script>
+    (() => {
+      const copyIcon = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"></rect><path d="M15 9V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h3"></path></svg>';
+      const checkIcon = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"></path></svg>';
+
+      const copyText = async (text) => {
+        if (navigator.clipboard && window.isSecureContext) {
+          await navigator.clipboard.writeText(text);
+          return;
+        }
+        const textarea = document.createElement('textarea');
+        textarea.value = text;
+        textarea.style.position = 'fixed';
+        textarea.style.opacity = '0';
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand('copy');
+        textarea.remove();
+      };
+
+      document.querySelectorAll('pre').forEach((pre) => {
+        const code = pre.querySelector('code');
+        if (!code) return;
+
+        const button = document.createElement('button');
+        button.className = 'copy-code';
+        button.type = 'button';
+        button.setAttribute('aria-label', '複製程式碼');
+        button.innerHTML = copyIcon;
+        button.addEventListener('click', async () => {
+          await copyText(code.textContent || '');
+          button.classList.add('copied');
+          button.innerHTML = checkIcon;
+          window.setTimeout(() => {
+            button.classList.remove('copied');
+            button.innerHTML = copyIcon;
+          }, 1400);
+        });
+        pre.appendChild(button);
+
+        const track = document.createElement('div');
+        const thumb = document.createElement('div');
+        track.className = 'code-scrollbar hidden';
+        thumb.className = 'code-scrollbar-thumb';
+        track.appendChild(thumb);
+        pre.appendChild(track);
+
+        const sync = () => {
+          const maxScroll = code.scrollWidth - code.clientWidth;
+          if (maxScroll <= 0) {
+            track.classList.add('hidden');
+            return;
+          }
+          track.classList.remove('hidden');
+          const ratio = code.clientWidth / code.scrollWidth;
+          const thumbWidth = Math.max(24, track.clientWidth * ratio);
+          const maxLeft = track.clientWidth - thumbWidth;
+          thumb.style.width = `${thumbWidth}px`;
+          thumb.style.transform = `translateX(${maxLeft * (code.scrollLeft / maxScroll)}px)`;
+        };
+
+        code.addEventListener('scroll', sync, { passive: true });
+        window.addEventListener('resize', sync);
+        requestAnimationFrame(sync);
+      });
+    })();
+  </script>
+</body>
+</html>
