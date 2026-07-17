@@ -1,10 +1,13 @@
 import { expect, test } from "bun:test";
 import type { ReviewReport } from "../../src/domain/report";
-import { renderTerminalReport } from "../../src/output/report-renderer";
+import {
+  renderJsonReport,
+  renderTerminalReport,
+} from "../../src/output/report-renderer";
 
 test("terminal reports escape control characters in untrusted fields", () => {
   const report: ReviewReport = {
-    schemaVersion: 2,
+    schemaVersion: 3,
     scope: "working-tree",
     summary: {
       changedFiles: 1,
@@ -27,7 +30,9 @@ test("terminal reports escape control characters in untrusted fields", () => {
       {
         id: "finding-1",
         ruleId: "fake-marker",
-        severity: "warning",
+        severity: "medium",
+        category: "correctness",
+        confidence: 1,
         message: "unsafe\nmessage\u001b]52;c;clipboard\u0007",
         file: "src/unsafe\u001b[31m.ts",
         line: 1,
@@ -38,14 +43,28 @@ test("terminal reports escape control characters in untrusted fields", () => {
   const output = renderTerminalReport(report);
 
   expect(output).toContain("src/unsafe\\u001b[31m.ts:1");
+  expect(output).toContain("[medium/correctness confidence=1]");
   expect(output).toContain("unsafe\\u000amessage\\u001b]52;c;clipboard\\u0007");
   expect(output).not.toContain("\u001b");
   expect(output).not.toContain("\u0007");
+
+  const jsonFinding = JSON.parse(renderJsonReport(report)) as {
+    findings: ReadonlyArray<{
+      severity: string;
+      category: string;
+      confidence: number;
+    }>;
+  };
+  expect(jsonFinding.findings[0]).toMatchObject({
+    severity: "medium",
+    category: "correctness",
+    confidence: 1,
+  });
 });
 
 test("terminal reports incomplete coverage and skip reasons", () => {
   const report: ReviewReport = {
-    schemaVersion: 2,
+    schemaVersion: 3,
     scope: "working-tree",
     summary: {
       changedFiles: 2,

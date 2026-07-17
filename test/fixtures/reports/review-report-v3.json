@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 3,
+  "scope": "working-tree",
+  "summary": {
+    "changedFiles": 1,
+    "reviewedFiles": 1,
+    "skippedFiles": 0,
+    "findings": 1
+  },
+  "coverage": {
+    "schemaVersion": 1,
+    "complete": true,
+    "files": [
+      {
+        "path": "src/current.ts",
+        "source": "working-tree",
+        "status": "reviewed"
+      }
+    ]
+  },
+  "findings": [
+    {
+      "id": "fake-marker:src/current.ts:8:87654321",
+      "ruleId": "fake-marker",
+      "severity": "medium",
+      "category": "correctness",
+      "confidence": 1,
+      "message": "Deterministic fake finding marker detected.",
+      "file": "src/current.ts",
+      "line": 8
+    }
+  ]
+}

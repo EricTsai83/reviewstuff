@@ -1,5 +1,8 @@
 import type { ReviewFileCoverage } from "../domain/review-file";
-import type { ReviewReport } from "../domain/report";
+import {
+  decodeReviewReportV3,
+  type ReviewReportV3,
+} from "../domain/report";
 
 const terminalControlCharacter = /[\u0000-\u001f\u007f-\u009f\u2028\u2029]/gu;
 
@@ -19,17 +22,19 @@ const renderSkippedFile = (
     : `- ${path} [${source}] — ${file.sizeBytes} bytes exceeds the ${file.limitBytes} byte file limit`;
 };
 
-export const renderJsonReport = (report: ReviewReport): string =>
-  JSON.stringify(report, undefined, 2);
+export const renderJsonReport = (report: ReviewReportV3): string =>
+  JSON.stringify(decodeReviewReportV3(report), undefined, 2);
 
-export const renderTerminalReport = (report: ReviewReport): string => {
+export const renderTerminalReport = (input: ReviewReportV3): string => {
+  const report = decodeReviewReportV3(input);
+
   if (report.summary.changedFiles === 0) {
     return "No changes to review.";
   }
 
   const findings = report.findings.map(
     (finding) =>
-      `${escapeTerminalText(finding.file)}:${finding.line} [${escapeTerminalText(finding.severity)}] ${escapeTerminalText(finding.message)} (${escapeTerminalText(finding.ruleId)})`,
+      `${escapeTerminalText(finding.file)}:${finding.line} [${escapeTerminalText(finding.severity)}/${escapeTerminalText(finding.category)} confidence=${finding.confidence}] ${escapeTerminalText(finding.message)} (${escapeTerminalText(finding.ruleId)})`,
   );
 
   const reviewSummaryText = report.findings.length === 0

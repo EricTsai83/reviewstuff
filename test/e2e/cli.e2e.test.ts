@@ -206,7 +206,7 @@ describe("reviewstuff binary", () => {
     expect(
       JSON.parse(await runCli(["review", "--json"], { cwd })),
     ).toEqual({
-      schemaVersion: 2,
+      schemaVersion: 3,
       scope: "working-tree",
       summary: {
         changedFiles: 0,
@@ -258,7 +258,7 @@ describe("reviewstuff binary", () => {
       ),
     ) as { schemaVersion: number };
 
-    expect(report.schemaVersion).toBe(2);
+    expect(report.schemaVersion).toBe(3);
   });
 
   test("invalid config is rendered as a usage error without a stack trace", async () => {

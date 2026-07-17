@@ -7,9 +7,15 @@ import {
   type ResolvedReviewConfig,
   UnsupportedReviewSelectionError,
 } from "../config/config-service";
-import type { Finding } from "../domain/finding";
+import {
+  decodeReviewFindingV1,
+  type ReviewFindingV1,
+} from "../domain/finding";
 import type { ReviewFileCoverage } from "../domain/review-file";
-import type { ReviewReport } from "../domain/report";
+import {
+  decodeReviewReportV3,
+  type ReviewReportV3,
+} from "../domain/report";
 import type { ReviewScope } from "../domain/scope";
 import {
   type GitError,
@@ -56,8 +62,10 @@ const stableFindingFingerprint = (value: string): string => {
   return (hash >>> 0).toString(16).padStart(8, "0");
 };
 
-const findingsForPatch = (file: GitFilePatch): ReadonlyArray<Finding> => {
-  const findings: Array<Finding> = [];
+const findingsForPatch = (
+  file: GitFilePatch,
+): ReadonlyArray<ReviewFindingV1> => {
+  const findings: Array<ReviewFindingV1> = [];
   let targetLineNumber = 0;
 
   for (const line of file.patch.split("\n")) {
@@ -72,14 +80,16 @@ const findingsForPatch = (file: GitFilePatch): ReadonlyArray<Finding> => {
 
     if (line.startsWith("+") && !line.startsWith("+++")) {
       if (line.includes(fakeFindingMarker)) {
-        findings.push({
+        findings.push(decodeReviewFindingV1({
           id: `fake-marker:${file.path}:${targetLineNumber}:${stableFindingFingerprint(line.slice(1))}`,
           ruleId: "fake-marker",
-          severity: "warning",
+          severity: "medium",
+          category: "correctness",
+          confidence: 1,
           message: "Deterministic fake finding marker detected.",
           file: file.path,
           line: targetLineNumber,
-        });
+        }));
       }
 
       targetLineNumber += 1;
@@ -114,12 +124,12 @@ const buildCoverageFiles = (
 const buildReviewReport = (
   scope: ReviewScope,
   diff: GitDiff,
-  findings: ReadonlyArray<Finding>,
-): ReviewReport => {
+  findings: ReadonlyArray<ReviewFindingV1>,
+): ReviewReportV3 => {
   const coverageFiles = buildCoverageFiles(diff);
 
-  return {
-    schemaVersion: 2,
+  return decodeReviewReportV3({
+    schemaVersion: 3,
     scope,
     summary: {
       changedFiles: coverageFiles.length,
@@ -133,14 +143,14 @@ const buildReviewReport = (
       files: coverageFiles,
     },
     findings,
-  };
+  });
 };
 
 export const runReview = (
   scope: ReviewScope,
   overrides: ReviewConfigOverrides = {},
 ): Effect.Effect<
-  ReviewReport,
+  ReviewReportV3,
   RunReviewError,
   GitService | ConfigService
 > =>

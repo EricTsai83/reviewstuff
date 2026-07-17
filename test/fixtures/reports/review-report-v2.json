@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 2,
+  "scope": "working-tree",
+  "summary": {
+    "changedFiles": 1,
+    "reviewedFiles": 1,
+    "skippedFiles": 0,
+    "findings": 1
+  },
+  "coverage": {
+    "schemaVersion": 1,
+    "complete": true,
+    "files": [
+      {
+        "path": "src/legacy.ts",
+        "source": "working-tree",
+        "status": "reviewed"
+      }
+    ]
+  },
+  "findings": [
+    {
+      "id": "fake-marker:src/legacy.ts:4:12345678",
+      "ruleId": "fake-marker",
+      "severity": "warning",
+      "message": "Deterministic fake finding marker detected.",
+      "file": "src/legacy.ts",
+      "line": 4
+    }
+  ]
+}

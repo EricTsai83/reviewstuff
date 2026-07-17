@@ -82,7 +82,7 @@ test("runReview produces deterministic findings from added marker lines", async 
   );
 
   expect(report).toEqual({
-    schemaVersion: 2,
+    schemaVersion: 3,
     scope: "working-tree",
     summary: {
       changedFiles: 1,
@@ -105,7 +105,9 @@ test("runReview produces deterministic findings from added marker lines", async 
       {
         id: "fake-marker:src/example.ts:3:2c4700fe",
         ruleId: "fake-marker",
-        severity: "warning",
+        severity: "medium",
+        category: "correctness",
+        confidence: 1,
         message: "Deterministic fake finding marker detected.",
         file: "src/example.ts",
         line: 3,
