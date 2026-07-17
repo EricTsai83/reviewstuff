@@ -45,8 +45,8 @@ reviewstuff review --engine codex-cli --model <model-id> --json
 
 ```bash
 bun run test
-AI_REVIEW_ENGINE=anthropic AI_REVIEW_MODEL=<model-id> ./dist/reviewstuff review --json
-AI_REVIEW_ENGINE=codex-cli AI_REVIEW_MODEL=<model-id> ./dist/reviewstuff review --json
+ANTHROPIC_API_KEY=<key> ./dist/reviewstuff review --engine anthropic --model <model-id> --json
+./dist/reviewstuff review --engine codex-cli --model <model-id> --json
 ./dist/reviewstuff doctor --json
 ```
 

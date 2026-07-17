@@ -21,6 +21,7 @@ npm install -g reviewstuff
 - npm meta package
 - first platform package：`@reviewstuff/darwin-arm64`
 - install type detection
+- deterministic `test:package:npm` temporary-project install harness
 
 不包含：
 
@@ -40,6 +41,12 @@ reviewstuff
 ```
 
 主 package 只做 platform selection；實際執行 release binary。
+platform package 使用 `os` / `cpu` metadata，meta package 以 optional dependency 指向平台
+package；wrapper 只解析 allowlisted package name，不執行 install script、不在安裝時下載或 build。
+
+test harness 使用 temporary project 與 isolated cache/install directory，以 Bun 安裝本機打包的
+meta + platform tarballs，直接執行該 project 的 `node_modules/.bin/reviewstuff`，最後清理；
+不得修改 global package state。
 
 ## Update Policy
 
@@ -52,8 +59,9 @@ reviewstuff
 
 ```bash
 bun run package:release
-npm install -g ./packages/npm/reviewstuff/*.tgz
-reviewstuff --version
+bun --cwd packages/npm/reviewstuff pm pack --ignore-scripts
+bun --cwd packages/npm/darwin-arm64 pm pack --ignore-scripts
+bun run test:package:npm
 ```
 
 ## Acceptance Criteria
@@ -61,6 +69,7 @@ reviewstuff --version
 - npm 執行同一份 standalone binary。
 - unsupported platform 有清楚錯誤。
 - npm wrapper 不從 source rebuild。
+- package tarball contents、`os`/`cpu`、optional dependency version 與 bundled binary checksum 有測試。
 
 ## Learning Focus
 

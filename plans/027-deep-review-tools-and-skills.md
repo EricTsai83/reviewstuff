@@ -21,7 +21,7 @@ deep review 可載入 skills、執行 analyzers/gates，並輸出 structured fin
 - `runAnalyzer`
 - `runGate`
 - `loadSkill`
-- skill discovery from `.reviewstuff/skills` and built-in skills
+- built-in skill discovery；repo-local `.reviewstuff/skills` 需 explicit trust opt-in
 - tool output truncation
 - max steps / token budget / cost budget
 - deep review tool events in NDJSON
@@ -40,6 +40,9 @@ deep review 可載入 skills、執行 analyzers/gates，並輸出 structured fin
    allowlisted operation，不接受 executable 或 shell string。只有 concrete adapter 可透過
    `CommandRunner` 執行已註冊的 program。
 3. 實作 skill frontmatter parser 與 `loadSkill`。
+   built-in skills 可預設載入 metadata；repo-local skills 視為 untrusted repository content，
+   只有明確 flag/config opt-in 才能被發現，並記錄 canonical path + content hash。frontmatter、
+   instruction size、symlink/path containment 與允許 tool/capability 都要驗證。
 4. 將 tool output truncation 套到所有 tool results。
 5. deep review findings 走正常 session storage。
 
@@ -47,7 +50,7 @@ deep review 可載入 skills、執行 analyzers/gates，並輸出 structured fin
 
 ```bash
 bun run test
-AI_REVIEW_ENGINE=openai ./dist/reviewstuff review --deep --agent | jq -c .
+OPENAI_API_KEY=<key> ./dist/reviewstuff review --engine openai --model <model-id> --deep --agent | jq -c .
 ```
 
 ## Acceptance Criteria
@@ -56,6 +59,7 @@ AI_REVIEW_ENGINE=openai ./dist/reviewstuff review --deep --agent | jq -c .
 - agent/use-case dependency graph 不包含 `CommandRunner` 或 platform services。
 - tool calls 有 timeout/output cap/path containment。
 - skills 只按需載入完整內容。
+- repo-local skill 未 opt-in 時完全不可載入；skill 內容不能擴張 tool allowlist、path boundary 或 budget。
 - budget 用完時回 partial result。
 
 ## Learning Focus

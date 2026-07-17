@@ -12,8 +12,8 @@
 
 包含：
 
-- Go adapters：`go test ./...`、`go vet ./...`
-- Rust adapters：`cargo test`、`cargo clippy`
+- Go analyzer：`go vet ./...`；Go gate：`go test ./...`
+- Rust analyzer：`cargo clippy`；Rust gate：`cargo test`
 - optional Semgrep adapter
 - analyzer selection by detected language/files
 - analyzer diagnostics in doctor
@@ -28,9 +28,12 @@
 ## Implementation Steps
 
 1. 擴充 analyzer registry 的 language selection。
-2. 透過 017 的 analyzer concrete adapter 與 `CommandRunner` 實作 Go adapters 和 fixture
-   tests；registry 只暴露 typed operations，不接受 shell string。
-3. 以相同 boundary 實作 Rust adapters 與 fixture tests。
+2. 透過 017 的 analyzer concrete adapter 與 `CommandRunner` 實作 `go vet` 與 fixture
+   tests；registry 只暴露 typed operations，不接受 shell string。`go test` 走 allowlisted
+   `GateRunner`，只在明確啟用且 isolated 的 flow 執行。
+3. 以相同 boundary 實作 `cargo clippy` analyzer 與 `cargo test` gate；優先使用 tool 的
+   machine-readable output，parser 需綁 tool/version fixture。Cargo target、Semgrep cache 與其他
+   tool output 必須導向 temp/cache service 或在 isolated workspace 執行。
 4. 以相同 boundary 實作 optional Semgrep adapter，預設保守啟用策略。
 5. doctor 顯示每個 analyzer 的 available/configured/skipped 狀態。
 
@@ -39,17 +42,19 @@
 ```bash
 bun run test
 ./dist/reviewstuff doctor --json
-AI_REVIEW_FAKE_ENGINE=1 ./dist/reviewstuff review --json
+./dist/reviewstuff review --engine fake --json
 ```
 
 ## Acceptance Criteria
 
-- Go/Rust/Semgrep analyzer 各有 fixture test。
+- Go/Rust analyzer、Go/Rust gate 與 Semgrep 各有 fixture test。
 - missing optional tool 不 crash。
 - analyzer timeout/output cap 可測。
 - unrelated language changes 不觸發昂貴 analyzer。
 - diagnostics 在 session/report 中可追蹤。
 - analyzers 不直接使用 `@effect/platform/Command`、`Bun.spawn` 或 shell。
+- test gates 不會在一般 review 因語言偵測而自動執行，且不寫使用者工作樹。
+- analyzers 的 target/cache/output 不寫 reviewed worktree。
 
 ## Learning Focus
 

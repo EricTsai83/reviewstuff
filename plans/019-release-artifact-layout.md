@@ -34,6 +34,7 @@ dist/release/manifest.json
 
 ```ts
 interface ReleaseManifestV1 {
+  schemaVersion: 1
   version: string
   runtime: "bun-standalone"
   artifacts: Array<{
@@ -60,7 +61,9 @@ tar -tzf dist/release/*.tar.gz
 
 - tarball 裡有 executable。
 - checksum 可驗。
-- manifest 可供後續 install channels 使用。
+- manifest 有 schema version，artifact filename/size/checksum/target 與實際產物逐一一致。
+- manifest 可供後續 install channels 使用；這一階段的 checksum 是完整性資料，不宣稱能取代
+  033 self-update 所需的 manifest authenticity 驗證。
 
 ## Learning Focus
 

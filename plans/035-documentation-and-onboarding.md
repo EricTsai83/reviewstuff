@@ -35,7 +35,7 @@
 3. 新增 `docs/configuration.md`。
 4. 新增 `docs/privacy.md`。
 5. 新增 `docs/troubleshooting.md`。
-6. 新增 `docs/agent-workflows.md`，示範 `review --agent`、修 major/critical、二次 review、iteration limit。
+6. 新增 `docs/agent-workflows.md`，示範 `review --agent`、修 high/critical、二次 review、iteration limit。
 7. 確保所有 docs commands 在 smoke test 中可跑或明確標示需要 credentials。
 
 ## Verification
@@ -52,7 +52,9 @@ bun run test
 - provider setup 失敗有對應 troubleshooting。
 - privacy docs 與實際資料流一致。
 - agent workflow docs 不要求解析 human output，只使用 NDJSON events。
-- docs 明確說明 `--fast` / `--light`、`review findings`、`review --show-prompts`。
+- docs 明確說明 `--fast` / `--light`、`review findings`、`review prompts --finding`。
+- docs 中所有無 credentials commands 都由 doctest/smoke harness 執行；需要 cloud credentials、
+  Apple signing 或 release 權限的命令明確標示 prerequisites 與可能成本/副作用。
 
 ## Learning Focus
 

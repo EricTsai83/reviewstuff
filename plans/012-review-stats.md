@@ -44,7 +44,7 @@ reviewstuff stats --json
 ## Verification
 
 ```bash
-AI_REVIEW_FAKE_ENGINE=1 ./dist/reviewstuff review --json
+./dist/reviewstuff review --engine fake --json
 ./dist/reviewstuff stats
 ./dist/reviewstuff stats --json | jq .
 ./dist/reviewstuff stats --rebuild --json | jq .

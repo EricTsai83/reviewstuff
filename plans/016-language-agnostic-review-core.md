@@ -30,7 +30,8 @@
 
 1. 用 extension/config/shebang 偵測語言。
 2. 定義 `ReviewFileContextV1`。
-3. finding 加上 `language`。
+3. finding 加上 `language`。這是 persisted/public schema 的 additive version bump；補前一版
+   fixture 的 decode/migration test。
 4. prompt context 由 adapter 貢獻，不硬寫 TypeScript。
 5. unknown language 仍可用 diff/context review。
 
@@ -38,7 +39,7 @@
 
 ```bash
 bun run test
-AI_REVIEW_FAKE_ENGINE=1 ./dist/reviewstuff review --json
+./dist/reviewstuff review --engine fake --json
 ```
 
 fixture:
@@ -54,6 +55,7 @@ unknown-basic
 - TypeScript review 不回歸。
 - non-TypeScript file 不 crash。
 - stored findings 有 language metadata。
+- 010 保存的前一版 finding/session fixture 仍可讀取或得到明確 migration error。
 
 ## Learning Focus
 

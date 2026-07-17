@@ -20,6 +20,7 @@ reviewstuff --version
 - Homebrew formula
 - formula test
 - checksum pinning
+- deterministic `test:package:homebrew` harness（建立/清理 test-only tap）
 
 不包含：
 
@@ -34,13 +35,16 @@ reviewstuff --version
 1. Formula 下載 019 的 release tarball。
 2. Formula 驗 sha256。
 3. Formula 使用 `bin.install "reviewstuff"`。
-4. `brew test` 跑 `reviewstuff --version`。
+4. 在 test-only tap 安裝 formula，`test do` 至少驗證 `reviewstuff --version` 與一個不需
+   credentials 的 fake/no-change CLI path，再執行 `brew test <tap>/reviewstuff`。
 5. 文件說明 unsigned binary 的 macOS Gatekeeper 注意事項。
+6. package script `test:package:homebrew` 建立唯一 test tap、安裝/audit/test formula，並在
+   finally 清理 tap；不依賴或覆蓋使用者既有同名 formula。
 
 ## Verification
 
 ```bash
-brew test reviewstuff
+bun run test:package:homebrew
 ```
 
 ## Acceptance Criteria
@@ -48,6 +52,7 @@ brew test reviewstuff
 - unsigned local dev build 仍可用。
 - Homebrew 不重新 build source。
 - Formula 使用 release tarball 與 checksum。
+- local/CI verification 明確建立 test tap，不依賴機器上碰巧存在的同名 formula。
 
 ## Learning Focus
 

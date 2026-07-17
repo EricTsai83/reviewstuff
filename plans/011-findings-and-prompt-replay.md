@@ -9,23 +9,19 @@
 完成後可用：
 
 ```bash
-reviewstuff findings
 reviewstuff review findings
-reviewstuff prompts --finding <id>
-reviewstuff review --show-prompts
+reviewstuff review prompts --finding <id>
 ```
 
 ## Scope
 
 包含：
 
-- `reviewstuff findings`
 - `reviewstuff review findings`
-- `reviewstuff prompts`
-- `reviewstuff review --show-prompts`
+- `reviewstuff review prompts`
 - status/severity filters
 - JSON output
-- per-finding prompt file
+- deterministic per-finding prompt generation
 
 不包含：
 
@@ -36,20 +32,22 @@ reviewstuff review --show-prompts
 
 1. 從 latest session 讀 findings。
 2. 實作 filters：status、severity、session id。
-3. 實作 `review findings` 作為 canonical namespace；top-level `findings` 保留 alias。
-4. prompt 從 stored finding + current file context 產生。
-5. 實作 `review --show-prompts` 作為 canonical prompt replay；top-level `prompts` 保留 alias。
+3. 實作 `review findings`；尚未發布過舊 command，因此不建立重複 top-level alias。
+4. prompt 從 stored finding + stored normalized diff 產生，確保工作樹後續改動不會偷偷改變
+   replay 內容；不假設 010 保存完整 source snapshot。若使用者明確要求 current context，先驗
+   preimage hash，輸出標示為 regenerated，hash drift 則拒絕並要求重新 review。
+5. 實作 `review prompts --finding <id>` 作為 prompt replay subcommand；它不進入一般
+   `review` provider flow，也不建立模糊的 `review --show-prompts` mode flag。
 6. prompt replay 不呼叫 AI engine。
-7. prompt 也存回 session 方便重用。
+7. 這一階段不持久化完整 prompt，只保存 prompt schema version/hash 等非敏感 metadata；
+   prompt/request snapshot 必須等 029 的 redaction、retention 與 cleanup policy 完成後才能 opt-in 保存。
 
 ## Verification
 
 ```bash
-AI_REVIEW_FAKE_ENGINE=1 ./dist/reviewstuff review --json
-./dist/reviewstuff findings --json
+./dist/reviewstuff review --engine fake --json
 ./dist/reviewstuff review findings --json
-./dist/reviewstuff prompts --finding <id>
-./dist/reviewstuff review --show-prompts
+./dist/reviewstuff review prompts --finding <id>
 ```
 
 ## Acceptance Criteria
@@ -57,7 +55,8 @@ AI_REVIEW_FAKE_ENGINE=1 ./dist/reviewstuff review --json
 - findings/prompts 不呼叫模型。
 - JSON output 穩定。
 - missing session 有清楚錯誤。
-- `review findings` / `review --show-prompts` 是文件建議用法，top-level commands 是相容 alias。
+- 相同 session/finding/schema version 產生相同 replay prompt；預設不把完整 prompt 寫回 disk。
+- findings/prompts 只有 `review` namespace 下的 canonical command，不維護尚未發布的重複 aliases。
 
 ## Learning Focus
 

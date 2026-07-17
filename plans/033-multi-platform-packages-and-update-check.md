@@ -22,10 +22,12 @@ reviewstuff update --check
 - npm packages：darwin-arm64、darwin-x64、linux-x64、linux-arm64
 - unsupported platform error
 - update manifest
+- signed update manifest + embedded verification public key/key-id
 - `UpdateService` contract 與 canonical implementation；測試 fake 留在 tests
 - `reviewstuff update --check`
 - install type detection
 - update guidance per install channel
+- deterministic `test:update-check` fake-network/signature harness
 
 不包含：
 
@@ -36,22 +38,27 @@ reviewstuff update --check
 
 ## Implementation Steps
 
-1. 擴充 release manifest 多平台 artifacts。
-2. 建立 npm platform packages。
-3. npm meta package 做 platform selection。
-4. 在 `UpdateService` canonical module 實作 install type detection 與 network-backed
+1. 擴充 release manifest 多平台 artifacts，明確記錄 OS/arch/libc/x64 compatibility variant。
+2. 建立 npm platform packages；每個 package 使用正確 `os`/`cpu` metadata、只包含對應
+   signed/release binary，且不使用 install script 下載或 rebuild。
+3. npm meta package 以 exact-version optional dependencies 做 allowlisted platform selection。
+4. 為 update manifest 定義 canonical serialization、signature、key id 與 key rotation/refusal
+   policy；release workflow 用離線/CI private key 簽署，binary 只嵌入 public key。checksum
+   驗 artifact integrity，signature 才建立 manifest authenticity。
+5. 在 `UpdateService` canonical module 實作 install type detection 與 network-backed
    update check；contract 不暴露 filesystem/network/platform types，use-case tests 在
-   測試附近建立 fake layer。
-5. update use-case 只依賴 `UpdateService`，command 只 render typed result。
-6. 根據 install channel 顯示更新建議：npm 用 package manager、Homebrew 用 brew、direct tarball 指向 034。
+   測試附近建立 fake layer。只允許固定 HTTPS origin、限制 redirect/response size/timeout，
+   並在解析版本或顯示更新前先驗 signature。
+6. update use-case 只依賴 `UpdateService`，command 只 render typed result。
+7. 根據 install channel 顯示更新建議：npm 用 package manager、Homebrew 用 brew、direct tarball 指向 034。
 
 ## Verification
 
 ```bash
 bun run package:release
-npm install -g ./packages/npm/reviewstuff/*.tgz
-reviewstuff --version
-reviewstuff update --check
+bun --cwd packages/npm/reviewstuff pm pack --ignore-scripts
+bun run test:package:npm -- --matrix
+bun run test:update-check
 ```
 
 ## Acceptance Criteria
@@ -62,6 +69,10 @@ reviewstuff update --check
 - update check 不會靜默修改使用者系統。
 - install channel detection 可被 doctor 使用。
 - update/doctor use-cases 不直接依賴 network、filesystem 或 platform service。
+- manifest bad/unknown-key/rollback signature、redirect 到非 allowlisted origin、oversized response
+  都被拒絕；update check 不信任未簽 checksum。
+- deterministic tests 使用 fake network/fixture manifest；對 production manifest 的 live check 是
+  明確 opt-in，不是一般 `bun run test` 必要條件。
 
 ## Learning Focus
 

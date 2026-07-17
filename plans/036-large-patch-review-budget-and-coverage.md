@@ -16,7 +16,8 @@ diff hunks，並讓使用者清楚知道哪些內容已 review、被截斷或被
 
 包含：
 
-- review input 的總 token/size budget 與 deterministic fallback estimate
+- serialized provider request 的總 input token/size budget、獨立 output reserve 與 deterministic
+  fallback estimate
 - `clip | skip` large-patch policy，預設使用 `clip`
 - 只在 hunk boundary 截斷，不產生不完整 diff hunk
 - stable file ordering 與 deterministic hunk selection
@@ -45,14 +46,20 @@ diff hunks，並讓使用者清楚知道哪些內容已 review、被截斷或被
   provider request 和 coverage，不直接執行 Git 或 provider command。
 
 兩者不可共用同一個常數或錯誤語意。低階 command cap 可以使用 bytes；review budget
-優先使用 provider tokenizer，無 tokenizer 時使用保守且 deterministic 的 estimate。
+必須先扣除 system prompt、schema、metadata、file context 等 fixed request overhead，並保留
+output budget。優先使用與 effective provider/model 相符的 tokenizer；無 tokenizer 時使用經
+fixture 驗證、不低估 UTF-8/JSON escaping 的保守 deterministic upper-bound estimate。不能只算
+diff 然後宣稱整個 serialized request 沒超限。
 
 ### Selection Policy
 
 1. 保留 023 已判定 included 的文字檔 metadata，即使其所有 hunks 最後都不在預算內。
-2. 使用 stable path ordering；同一檔案內維持原始 hunk order。
-3. hunk 能完整放入剩餘預算時才納入，不從 hunk 中間切斷。
-4. 第一個 hunk 就超出剩餘預算時，將檔案標記為 `truncated`，並記錄明確 reason。
+2. 使用 stable path ordering 與 deterministic round-robin hunk selection；同一檔案內維持
+   原始 hunk order，避免第一個大檔耗盡預算而永久餓死後續小檔。
+3. hunk 能完整放入剩餘預算時才納入，不從 hunk 中間切斷；放不下的 hunk 要記錄 omitted
+   reason，並繼續考慮其他檔案可完整容納的 hunk。
+4. 第一個 hunk 就超出剩餘預算時，將檔案標記為 `truncated`，並記錄明確 reason；即使零個
+   hunk 入選仍保留 coverage metadata。
 5. `skip` policy 才允許整份大型 patch 不進 request；binary/generated 等仍由 023 處理。
 6. selection 必須 deterministic：相同 diff、config 與 tokenizer estimate 產生相同 request。
 
@@ -83,6 +90,7 @@ diff hunks，並讓使用者清楚知道哪些內容已 review、被截斷或被
 2. 定義 `ReviewCoverageV1`、file coverage status 與 stable reason codes。
 3. 讓 Git diff result 保留 scope 內所有檔案 metadata，不以缺少 patch 代表檔案不存在。
 4. 在 `review/` 新增 pure budget estimator 與 whole-hunk selection policy。
+   estimator 輸入包含 fixed request envelope 與 output reserve，selector 不得自行猜 model limit。
 5. 將預設 large-patch policy 設為 `clip`，並保留明確的 `skip` override。
 6. 讓 request metadata、report、session、JSON 與 agent events 共用同一份 coverage。
 7. 更新 human renderer，顯示簡短 coverage summary 與 truncated/skipped reasons。
@@ -95,14 +103,15 @@ diff hunks，並讓使用者清楚知道哪些內容已 review、被截斷或被
 bun run typecheck
 bun run test
 bun run build
-./dist/reviewstuff review --json
-AI_REVIEW_FAKE_ENGINE=1 ./dist/reviewstuff review --json
+./dist/reviewstuff review --engine fake --json
 ```
 
 Fixture tests 至少覆蓋：
 
 - 單一大型文字檔可保留部分完整 hunks，並標記 `truncated`
 - 多個小檔案超過總預算時，selection 與 coverage deterministic
+- path-order starvation fixture：大型首檔不會阻止後續可容納小 hunk 被 review
+- UTF-8、JSON escaping、fixed prompt/schema/context overhead 與 output reserve 都納入 budget
 - binary/generated/lock file 維持 023 的 skip reason
 - `skip` policy 會明確回報，而不是靜默消失
 - `changedFiles = reviewed + truncated + skipped` 的 file-level 分類不重複且不遺漏
@@ -112,7 +121,8 @@ Fixture tests 至少覆蓋：
 ## Acceptance Criteria
 
 - 大型文字 patch 預設不再因固定逐檔 bytes threshold 被整份靜默略過。
-- provider request 永遠不超過 effective review input budget。
+- 完整 serialized provider request 永遠不超過 effective input/context budget，且保留設定的
+  output reserve。
 - 截斷只發生在完整 hunk boundary，結果 deterministic。
 - 所有 scope 內檔案都出現在 coverage，並具有 stable status/reason。
 - `changedFiles` 表示 Git scope 總數，不再只表示成功取得 patch 的檔案。
