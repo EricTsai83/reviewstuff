@@ -129,39 +129,24 @@ const resolveRepositoryRoot = (
     Effect.map((output) => output.replace(/\r?\n$/, "")),
   );
 
-const listStagedChanges = (
+type TrackedChangeMode = "staged" | "unstaged";
+
+const listTrackedChanges = (
   runner: CommandRunner.Service,
   repositoryRoot: string,
+  mode: TrackedChangeMode,
 ): Effect.Effect<ReadonlyArray<GitChange>, GitError> => {
-  const operation = "list staged files";
+  const operation = mode === "staged"
+    ? "list staged files"
+    : "list unstaged files";
+  const modeArguments = mode === "staged" ? ["--cached"] : [];
 
   return requireGitSuccess(
     runner,
     operation,
     [
       "diff",
-      "--cached",
-      ...trackedChangeListingArguments,
-    ],
-    repositoryRoot,
-  ).pipe(
-    Effect.flatMap((output) =>
-      parseNulSeparatedChanges(output, operation)
-    ),
-  );
-};
-
-const listUnstagedChanges = (
-  runner: CommandRunner.Service,
-  repositoryRoot: string,
-): Effect.Effect<ReadonlyArray<GitChange>, GitError> => {
-  const operation = "list unstaged files";
-
-  return requireGitSuccess(
-    runner,
-    operation,
-    [
-      "diff",
+      ...modeArguments,
       ...trackedChangeListingArguments,
     ],
     repositoryRoot,
@@ -236,13 +221,13 @@ const collectStagedDiff = Effect.fn("GitService.collectStagedDiff")(
   ): Effect.Effect<GitDiff, GitError> =>
     ensureNoUnmergedChanges(stagedChanges).pipe(
       Effect.andThen(
-        collectDiffPatches(
+        collectDiffPatches({
           runner,
           inspector,
-          stagedChanges,
-          "staged",
+          targets: stagedChanges,
+          source: "staged",
           repositoryRoot,
-        ),
+        }),
       ),
     ),
 );
@@ -255,7 +240,11 @@ const collectWorkingTreeDiff = Effect.fn(
   repositoryRoot: string,
   stagedChanges: ReadonlyArray<GitChange>,
 ): Effect.fn.Return<GitDiff, GitError> {
-  const unstagedChanges = yield* listUnstagedChanges(runner, repositoryRoot);
+  const unstagedChanges = yield* listTrackedChanges(
+    runner,
+    repositoryRoot,
+    "unstaged",
+  );
   const trackedChanges = [...stagedChanges, ...unstagedChanges];
   yield* ensureNoUnmergedChanges(trackedChanges);
 
@@ -271,21 +260,21 @@ const collectWorkingTreeDiff = Effect.fn(
   }));
   const [trackedDiff, untrackedDiff] = yield* Effect.all(
     [
-      collectDiffPatches(
+      collectDiffPatches({
         runner,
         inspector,
-        trackedPatchTargets,
-        "working-tree",
+        targets: trackedPatchTargets,
+        source: "working-tree",
         repositoryRoot,
-        reviewBase,
-      ),
-      collectDiffPatches(
+        diffBase: reviewBase,
+      }),
+      collectDiffPatches({
         runner,
         inspector,
-        untrackedPatchTargets,
-        "untracked",
+        targets: untrackedPatchTargets,
+        source: "untracked",
         repositoryRoot,
-      ),
+      }),
     ],
     { concurrency: diffSourceCollectionConcurrency },
   );
@@ -306,7 +295,11 @@ const readDiff = Effect.fn("GitService.readDiff")(function* (
 ): Effect.fn.Return<GitDiff, GitError> {
   yield* ensureReviewableWorkingTree(runner);
   const repositoryRoot = yield* resolveRepositoryRoot(runner);
-  const stagedChanges = yield* listStagedChanges(runner, repositoryRoot);
+  const stagedChanges = yield* listTrackedChanges(
+    runner,
+    repositoryRoot,
+    "staged",
+  );
 
   if (scope === "staged") {
     return yield* collectStagedDiff(

@@ -39,13 +39,13 @@ describe("Git diff patch collection", () => {
       gitResult("diff --git a/file.ts b/file.ts\n"),
     );
 
-    const collection = await collectDiffPatches(
-      fixture.runner,
-      { size: () => Effect.die("unused") },
-      [target("file.ts")],
-      "staged",
+    const collection = await collectDiffPatches({
+      runner: fixture.runner,
+      inspector: { size: () => Effect.die("unused") },
+      targets: [target("file.ts")],
+      source: "staged",
       repositoryRoot,
-    ).pipe(Effect.runPromise);
+    }).pipe(Effect.runPromise);
 
     expect(collection).toEqual({
       files: [
@@ -69,13 +69,13 @@ describe("Git diff patch collection", () => {
       "binary diff",
     );
 
-    const collection = await collectDiffPatches(
-      fixture.runner,
-      { size: () => Effect.die("unused") },
-      [target("image.dat")],
-      "staged",
+    const collection = await collectDiffPatches({
+      runner: fixture.runner,
+      inspector: { size: () => Effect.die("unused") },
+      targets: [target("image.dat")],
+      source: "staged",
       repositoryRoot,
-    ).pipe(Effect.runPromise);
+    }).pipe(Effect.runPromise);
 
     expect(collection.skippedFiles).toEqual([
       { path: "image.dat", source: "staged", reason: "binary" },
@@ -87,13 +87,13 @@ describe("Git diff patch collection", () => {
     const fixture = makeGitRunnerFixture();
     stagedSizeCommands(fixture, "large.txt", 524_289n);
 
-    const collection = await collectDiffPatches(
-      fixture.runner,
-      { size: () => Effect.die("unused") },
-      [target("large.txt")],
-      "staged",
+    const collection = await collectDiffPatches({
+      runner: fixture.runner,
+      inspector: { size: () => Effect.die("unused") },
+      targets: [target("large.txt")],
+      source: "staged",
       repositoryRoot,
-    ).pipe(Effect.runPromise);
+    }).pipe(Effect.runPromise);
 
     expect(collection.skippedFiles).toEqual([
       {
@@ -123,13 +123,13 @@ describe("Git diff patch collection", () => {
       size: () => Effect.succeed(undefined),
     };
 
-    const collection = await collectDiffPatches(
-      fixture.runner,
+    const collection = await collectDiffPatches({
+      runner: fixture.runner,
       inspector,
-      [target("deleted.ts")],
-      "working-tree",
+      targets: [target("deleted.ts")],
+      source: "working-tree",
       repositoryRoot,
-    ).pipe(Effect.runPromise);
+    }).pipe(Effect.runPromise);
 
     expect(collection.files[0]?.path).toBe("deleted.ts");
     fixture.verify();
@@ -137,13 +137,13 @@ describe("Git diff patch collection", () => {
 
   test("fails when an untracked file becomes unavailable", async () => {
     const fixture = makeGitRunnerFixture();
-    const error = await collectDiffPatches(
-      fixture.runner,
-      { size: () => Effect.succeed(undefined) },
-      [target("gone.ts")],
-      "untracked",
+    const error = await collectDiffPatches({
+      runner: fixture.runner,
+      inspector: { size: () => Effect.succeed(undefined) },
+      targets: [target("gone.ts")],
+      source: "untracked",
       repositoryRoot,
-    ).pipe(Effect.flip, Effect.runPromise);
+    }).pipe(Effect.flip, Effect.runPromise);
 
     expect(error).toBeInstanceOf(GitChangedFileUnavailableError);
     if (!(error instanceof GitChangedFileUnavailableError)) {
@@ -180,13 +180,13 @@ describe("Git diff patch collection", () => {
       );
     }
 
-    const collection = await collectDiffPatches(
-      fixture.runner,
-      { size: () => Effect.die("unused") },
-      paths.map(target),
-      "staged",
+    const collection = await collectDiffPatches({
+      runner: fixture.runner,
+      inspector: { size: () => Effect.die("unused") },
+      targets: paths.map(target),
+      source: "staged",
       repositoryRoot,
-    ).pipe(Effect.runPromise);
+    }).pipe(Effect.runPromise);
 
     expect(peakActiveCommands).toBe(4);
     expect(collection.files.map((file) => file.path)).toEqual(paths);

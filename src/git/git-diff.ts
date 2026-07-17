@@ -17,6 +17,8 @@ import {
 const patchMaxOutputBytes = 512 * 1024;
 const reviewableFileMaxBytes = BigInt(patchMaxOutputBytes);
 const patchCollectionConcurrency = 4;
+const gitDiffExitCodes: ReadonlySet<number> = new Set([0]);
+const gitNoIndexDiffExitCodes: ReadonlySet<number> = new Set([0, 1]);
 
 export interface GitFilePatch {
   readonly path: string;
@@ -31,18 +33,45 @@ export interface GitDiff {
   readonly skippedFiles: ReadonlyArray<GitSkippedFile>;
 }
 
+interface ReadChangedFileSizeOptions {
+  readonly runner: CommandRunner.Service;
+  readonly inspector: FileInspector.Service;
+  readonly path: string;
+  readonly source: ReviewFileSource;
+  readonly repositoryRoot: string;
+}
+
+interface ReadDiffPatchOptions {
+  readonly runner: CommandRunner.Service;
+  readonly operation: string;
+  readonly args: ReadonlyArray<string>;
+  readonly path: string;
+  readonly source: ReviewFileSource;
+  readonly expectedExitCodes: ReadonlySet<number>;
+  readonly repositoryRoot: string;
+}
+
+export interface CollectDiffPatchesOptions {
+  readonly runner: CommandRunner.Service;
+  readonly inspector: FileInspector.Service;
+  readonly targets: ReadonlyArray<GitPatchTarget>;
+  readonly source: ReviewFileSource;
+  readonly repositoryRoot: string;
+  readonly diffBase?: string;
+}
+
 const isBinaryPatch = (patch: string): boolean =>
   patch.split("\n").some((line) =>
     line.startsWith("Binary files ") || line === "GIT binary patch"
   );
 
-const readChangedFileSize = (
-  runner: CommandRunner.Service,
-  inspector: FileInspector.Service,
-  path: string,
-  source: GitFilePatch["source"],
-  repositoryRoot: string,
-): Effect.Effect<bigint | undefined, GitError> => {
+const readChangedFileSize = ({
+  runner,
+  inspector,
+  path,
+  source,
+  repositoryRoot,
+}: ReadChangedFileSizeOptions): Effect.Effect<bigint | undefined, GitError> => {
   if (source === "staged") {
     return readGitObjectSize(runner, `:./${path}`, repositoryRoot).pipe(
       Effect.flatMap((indexSize) =>
@@ -82,19 +111,19 @@ const readChangedFileSize = (
   );
 };
 
-const readDiffPatch = (
-  runner: CommandRunner.Service,
-  operation: string,
-  patchArguments: ReadonlyArray<string>,
-  patchPath: string,
-  patchSource: GitFilePatch["source"],
-  expectedExitCodes: ReadonlySet<number>,
-  repositoryRoot: string,
-): Effect.Effect<GitFilePatch | GitSkippedFile, GitError> =>
+const readDiffPatch = ({
+  runner,
+  operation,
+  args,
+  path,
+  source,
+  expectedExitCodes,
+  repositoryRoot,
+}: ReadDiffPatchOptions): Effect.Effect<GitFilePatch | GitSkippedFile, GitError> =>
   executeGit(
     runner,
     operation,
-    patchArguments,
+    args,
     patchMaxOutputBytes,
     repositoryRoot,
   ).pipe(
@@ -107,40 +136,41 @@ const readDiffPatch = (
         if (patchResult.stdout.length === 0) {
           return Effect.fail(
             new GitChangedFileUnavailableError({
-              path: patchPath,
-              source: patchSource,
+              path,
+              source,
             }),
           );
         }
 
         return Effect.succeed(
           isBinaryPatch(patchResult.stdout)
-            ? { path: patchPath, source: patchSource, reason: "binary" }
+            ? { path, source, reason: "binary" }
             : {
-                path: patchPath,
+                path,
                 patch: patchResult.stdout,
-                source: patchSource,
+                source,
               },
         );
       },
     ),
   );
 
-export interface GitPatchCollection {
-  readonly files: ReadonlyArray<GitFilePatch>;
-  readonly skippedFiles: ReadonlyArray<GitSkippedFile>;
-}
-
-export const collectDiffPatches = (
-  runner: CommandRunner.Service,
-  inspector: FileInspector.Service,
-  patchTargets: ReadonlyArray<GitPatchTarget>,
-  source: GitFilePatch["source"],
-  repositoryRoot: string,
-  diffBase: string = "HEAD",
-): Effect.Effect<GitPatchCollection, GitError> =>
-  Effect.forEach(patchTargets, ({ path, pathspecs }) =>
-    readChangedFileSize(runner, inspector, path, source, repositoryRoot).pipe(
+export const collectDiffPatches = ({
+  runner,
+  inspector,
+  targets,
+  source,
+  repositoryRoot,
+  diffBase = "HEAD",
+}: CollectDiffPatchesOptions): Effect.Effect<GitDiff, GitError> =>
+  Effect.forEach(targets, ({ path, pathspecs }) =>
+    readChangedFileSize({
+      runner,
+      inspector,
+      path,
+      source,
+      repositoryRoot,
+    }).pipe(
       Effect.flatMap((size) => {
         if (size === undefined && source === "untracked") {
           return Effect.fail(
@@ -159,10 +189,10 @@ export const collectDiffPatches = (
         }
 
         if (source === "untracked") {
-          return readDiffPatch(
+          return readDiffPatch({
             runner,
-            "read untracked diff",
-            [
+            operation: "read untracked diff",
+            args: [
               "diff",
               "--no-index",
               "--no-color",
@@ -173,19 +203,19 @@ export const collectDiffPatches = (
             ],
             path,
             source,
-            new Set([0, 1]),
+            expectedExitCodes: gitNoIndexDiffExitCodes,
             repositoryRoot,
-          );
+          });
         }
 
         const diffBaseArguments = source === "staged"
           ? ["--cached"]
           : [diffBase];
 
-        return readDiffPatch(
+        return readDiffPatch({
           runner,
-          `read ${source} diff`,
-          [
+          operation: `read ${source} diff`,
+          args: [
             "diff",
             ...diffBaseArguments,
             "--find-renames",
@@ -197,9 +227,9 @@ export const collectDiffPatches = (
           ],
           path,
           source,
-          new Set([0]),
+          expectedExitCodes: gitDiffExitCodes,
           repositoryRoot,
-        );
+        });
       }),
     ),
     { concurrency: patchCollectionConcurrency },

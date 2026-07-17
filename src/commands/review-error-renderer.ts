@@ -38,6 +38,19 @@ const renderUnmergedPaths = (paths: ReadonlyArray<string>): string =>
     "Resolve and stage these files, or abort the merge/rebase, then run review again.",
   ].join("\n");
 
+const renderGitExecutionFailure = (
+  error: Extract<RunReviewError, { readonly _tag: "GitExecutionError" }>,
+): string => {
+  switch (error.failure) {
+    case "command-start":
+      return `Unable to start Git while attempting to ${error.operation}.`;
+    case "command-termination":
+      return `Unable to terminate Git after ${error.operation}.`;
+    case "file-inspection":
+      return `Unable to ${error.operation} because file inspection failed.`;
+  }
+};
+
 export const renderReviewError = (error: RunReviewError): string =>
   Match.valueTags(error, {
     GitNotRepositoryError: (repositoryError) =>
@@ -57,10 +70,5 @@ export const renderReviewError = (error: RunReviewError): string =>
       renderUnmergedPaths(conflictError.paths),
     GitInvalidOutputError: (invalidOutputError) =>
       `Git ${invalidOutputError.operation} returned invalid output (${invalidOutputError.outputBytes} byte(s)).`,
-    GitExecutionError: (executionError) =>
-      executionError.failure === "command-start"
-        ? `Unable to start Git while attempting to ${executionError.operation}.`
-        : executionError.failure === "command-termination"
-        ? `Unable to terminate Git after ${executionError.operation}.`
-        : `Unable to ${executionError.operation} because file inspection failed.`,
+    GitExecutionError: renderGitExecutionFailure,
   });
