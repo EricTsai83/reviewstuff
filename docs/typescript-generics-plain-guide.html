@@ -1,0 +1,586 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="用淺白例子理解 TypeScript 泛型、型別參數、型別引數、型別推斷，以及 Effect 程式碼中的尖括號。">
+  <title>TypeScript 泛型入門：把型別當成可以填入的空格</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --clay: #d97757;
+      --slate: #141413;
+      --ivory: #faf9f5;
+      --oat: #e3dacc;
+      --white: #ffffff;
+      --gray-100: #f0eee6;
+      --gray-700: #3d3d3a;
+      --space-sm: 8px;
+      --space-md: 12px;
+      --space-lg: 16px;
+      --space-xl: 24px;
+      --space-2xl: 32px;
+      --space-3xl: 48px;
+      --radius-sm: 4px;
+      --radius-md: 8px;
+      --content-width: 68ch;
+    }
+
+    * { box-sizing: border-box; }
+
+    html {
+      background: var(--ivory);
+      scroll-behavior: smooth;
+    }
+
+    body {
+      margin: 0;
+      color: var(--slate);
+      background: var(--ivory);
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 16px;
+      font-weight: 430;
+      line-height: 1.55;
+      letter-spacing: 0;
+    }
+
+    main {
+      max-width: var(--content-width);
+      margin: 0 auto;
+      padding: var(--space-3xl) var(--space-xl);
+    }
+
+    article {
+      padding: 0;
+      background: transparent;
+      border: 0;
+      border-radius: 0;
+      box-shadow: none;
+    }
+
+    h1,
+    h2 {
+      color: var(--slate);
+      letter-spacing: -0.018em;
+    }
+
+    h1 {
+      max-width: none;
+      margin: 0 0 var(--space-lg);
+      font-size: 1.8rem;
+      font-weight: 720;
+      line-height: 1.18;
+      text-wrap: balance;
+      overflow-wrap: normal;
+    }
+
+    h2 {
+      margin: var(--space-3xl) 0 var(--space-lg);
+      padding-top: var(--space-xl);
+      border-top: 1px solid var(--oat);
+      font-size: 1.22rem;
+      font-weight: 700;
+      line-height: 1.25;
+    }
+
+    p { margin: 0 0 var(--space-lg); }
+
+    p,
+    ul,
+    ol,
+    .deck,
+    .callout,
+    table,
+    pre {
+      max-width: var(--content-width);
+    }
+
+    .deck {
+      margin-bottom: var(--space-2xl);
+      color: var(--gray-700);
+      font-size: 1.02rem;
+    }
+
+    code {
+      padding: 0.1em 0.3em;
+      color: var(--slate);
+      background: var(--gray-100);
+      border: 1px solid var(--oat);
+      border-radius: var(--radius-sm);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 0.9em;
+      overflow-wrap: anywhere;
+    }
+
+    pre {
+      position: relative;
+      width: 100%;
+      margin: var(--space-lg) 0 var(--space-xl);
+      overflow: hidden;
+      color: #d8d4ca;
+      background: #11110f;
+      border: 1px solid #26241f;
+      border-radius: var(--radius-md);
+    }
+
+    pre .label { display: none; }
+
+    pre code {
+      display: block;
+      padding: 18px 64px 18px 22px;
+      color: inherit;
+      background: transparent;
+      border: 0;
+      border-radius: 0;
+      overflow-x: auto;
+      overflow-wrap: normal;
+      white-space: pre;
+      font-size: 0.875rem;
+      font-weight: 400;
+      line-height: 1.62;
+      scrollbar-width: none;
+      tab-size: 2;
+    }
+
+    pre code::-webkit-scrollbar { width: 0; height: 0; }
+    pre code .k { color: #ff946e; font-weight: 400; }
+    pre code .s { color: #8fb86a; }
+    pre code .n,
+    pre code .p { color: #d8d4ca; }
+    pre code .c { color: #858177; font-style: italic; }
+    pre code .f { color: #cfc6a2; }
+    pre code .t { color: #cfc6a2; font-weight: 400; }
+    pre code .o { color: #ff946e; }
+
+    .copy-code {
+      position: absolute;
+      top: 9px;
+      right: 9px;
+      z-index: 1;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 30px;
+      height: 30px;
+      padding: 0;
+      color: rgba(250, 249, 245, 0.72);
+      background: rgba(250, 249, 245, 0.06);
+      border: 1px solid rgba(250, 249, 245, 0.14);
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+    }
+
+    .copy-code:hover,
+    .copy-code:focus-visible {
+      color: var(--ivory);
+      background: rgba(250, 249, 245, 0.12);
+      border-color: rgba(250, 249, 245, 0.28);
+      outline: none;
+    }
+
+    .copy-code.copied {
+      color: #b8d99a;
+      background: rgba(143, 184, 106, 0.14);
+      border-color: rgba(143, 184, 106, 0.42);
+    }
+
+    .copy-code svg {
+      width: 13px;
+      height: 13px;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 1.8;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      pointer-events: none;
+    }
+
+    .code-scrollbar {
+      position: absolute;
+      right: 0;
+      bottom: 0;
+      left: 0;
+      height: 3px;
+      background: rgba(250, 249, 245, 0.1);
+      border-radius: 999px;
+      cursor: pointer;
+    }
+
+    .code-scrollbar.hidden { display: none; }
+
+    .code-scrollbar-thumb {
+      height: 100%;
+      background: rgba(255, 148, 110, 0.82);
+      border-radius: inherit;
+      transform: translateX(0);
+      cursor: grab;
+    }
+
+    .code-scrollbar-thumb:active { cursor: grabbing; }
+
+    ul,
+    ol { padding-left: 1.35rem; }
+
+    li { margin-bottom: var(--space-sm); }
+
+    .table-wrap {
+      width: 100%;
+      margin: var(--space-xl) 0;
+      overflow-x: auto;
+      border: 1px solid var(--oat);
+      border-radius: var(--radius-md);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: var(--white);
+      font-size: 0.9rem;
+    }
+
+    th,
+    td {
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--oat);
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th {
+      color: var(--gray-700);
+      background: var(--gray-100);
+      font-size: 0.78rem;
+      letter-spacing: 0.02em;
+    }
+
+    tr:last-child td { border-bottom: 0; }
+
+    .callout {
+      margin: var(--space-xl) 0;
+      padding: var(--space-lg) var(--space-xl);
+      background: var(--gray-100);
+      border: 1px solid var(--oat);
+      border-left: 3px solid var(--clay);
+      border-radius: var(--radius-md);
+    }
+
+    .callout strong {
+      display: block;
+      margin-bottom: 4px;
+    }
+
+    @media (max-width: 640px) {
+      body { font-size: 15px; }
+      main { padding: var(--space-xl); }
+      h1 { font-size: 1.65rem; }
+      pre code { font-size: 0.8125rem; line-height: 1.5; }
+      p code,
+      li code,
+      td code { font-size: 0.9em; }
+      table,
+      .deck { font-size: 0.875rem; }
+      th,
+      td { min-width: 132px; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <article>
+      <h1>TypeScript 泛型入門：把型別當成可以填入的空格</h1>
+      <p class="deck">看到 <code>&lt;T&gt;</code>、<code>Array&lt;string&gt;</code> 或 <code>Effect&lt;GitDiff, GitError&gt;</code> 時，不必把它當成特殊魔法。泛型只是先替「型別」留一個空格，等使用時再填入具體型別。</p>
+
+      <section>
+        <h2>先從盒子上的標籤開始</h2>
+        <p>想像工廠製造了一種盒子，但還不知道盒子要裝什麼。工廠可以先把標籤留空：</p>
+
+        <pre><span class="label">概念</span><code>Box&lt;Item&gt;
+// Item 就是「盒子裡裝什麼」的型別空格</code></pre>
+
+        <p>真正使用盒子時，再把標籤填上去：</p>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="t">Box</span><span class="o">&lt;</span>string<span class="o">&gt;</span>  <span class="c">// 裝字串的盒子</span>
+<span class="t">Box</span><span class="o">&lt;</span>number<span class="o">&gt;</span>  <span class="c">// 裝數字的盒子</span></code></pre>
+
+        <p>泛型的價值就在這裡：盒子的設計只要寫一次，但可以安全地裝不同型別的資料。</p>
+      </section>
+
+      <section>
+        <h2>你其實早就在使用泛型：Array</h2>
+        <p>TypeScript 的陣列就是最常見的泛型：</p>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">const</span> names<span class="o">:</span> <span class="t">Array</span><span class="o">&lt;</span>string<span class="o">&gt;</span> <span class="o">=</span> <span class="o">[</span><span class="s">"Eric"</span><span class="o">,</span> <span class="s">"Alice"</span><span class="o">]</span><span class="o">;</span>
+<span class="k">const</span> scores<span class="o">:</span> <span class="t">Array</span><span class="o">&lt;</span>number<span class="o">&gt;</span> <span class="o">=</span> <span class="o">[</span><span class="n">80</span><span class="o">,</span> <span class="n">90</span><span class="o">,</span> <span class="n">100</span><span class="o">]</span><span class="o">;</span></code></pre>
+
+        <p><code>Array</code> 是同一種容器，尖括號裡的型別則說明容器裡能放什麼。</p>
+
+        <ul>
+          <li><code>Array&lt;string&gt;</code>：只能放字串。</li>
+          <li><code>Array&lt;number&gt;</code>：只能放數字。</li>
+        </ul>
+
+        <p>你也可能看過另一種寫法：</p>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code>string<span class="o">[</span><span class="o">]</span>  <span class="c">// 等同 Array&lt;string&gt;</span>
+number<span class="o">[</span><span class="o">]</span>  <span class="c">// 等同 Array&lt;number&gt;</span></code></pre>
+      </section>
+
+      <section>
+        <h2><code>T</code> 是什麼？</h2>
+        <p><code>T</code> 只是替型別空格取的名字。它不是 TypeScript 的特殊關鍵字，也可以換成別的名稱。</p>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">function</span> identity<span class="o">&lt;</span><span class="t">T</span><span class="o">&gt;</span><span class="o">(</span>value<span class="o">:</span> <span class="t">T</span><span class="o">)</span><span class="o">:</span> <span class="t">T</span> <span class="o">{</span>
+  <span class="k">return</span> value<span class="o">;</span>
+<span class="o">}</span></code></pre>
+
+        <p>這個函式的規則是：「收到什麼型別，就回傳相同型別。」例如：</p>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">const</span> message <span class="o">=</span> identity<span class="o">&lt;</span>string<span class="o">&gt;</span><span class="o">(</span><span class="s">"hello"</span><span class="o">)</span><span class="o">;</span>
+<span class="k">const</span> score <span class="o">=</span> identity<span class="o">&lt;</span>number<span class="o">&gt;</span><span class="o">(</span><span class="n">100</span><span class="o">)</span><span class="o">;</span></code></pre>
+
+        <p>第一次呼叫時，TypeScript 把所有 <code>T</code> 當成 <code>string</code>；第二次則把所有 <code>T</code> 當成 <code>number</code>。所以 <code>message</code> 是字串，<code>score</code> 是數字。</p>
+      </section>
+
+      <section>
+        <h2>型別參數和型別引數</h2>
+        <p>這兩個詞很像，但只是在說「空格」和「填進空格的答案」。</p>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>名稱</th>
+                <th>例子</th>
+                <th>意思</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>型別參數</td>
+                <td><code>identity&lt;T&gt;</code> 裡的 <code>T</code></td>
+                <td>宣告時預留的型別空格</td>
+              </tr>
+              <tr>
+                <td>型別引數</td>
+                <td><code>identity&lt;string&gt;</code> 裡的 <code>string</code></td>
+                <td>使用時填入的具體型別</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p>日常討論中，大家常把兩者都簡稱為「泛型參數」。只要知道一個是空格、一個是答案，就不容易混淆。</p>
+      </section>
+
+      <section>
+        <h2>型別參數和普通參數有什麼不同？</h2>
+        <p>同一個函式可以同時接收型別和真正的資料：</p>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">function</span> identity<span class="o">&lt;</span><span class="t">T</span><span class="o">&gt;</span><span class="o">(</span>value<span class="o">:</span> <span class="t">T</span><span class="o">)</span><span class="o">:</span> <span class="t">T</span> <span class="o">{</span>
+  <span class="k">return</span> value<span class="o">;</span>
+<span class="o">}</span>
+
+identity<span class="o">&lt;</span>string<span class="o">&gt;</span><span class="o">(</span><span class="s">"hello"</span><span class="o">)</span><span class="o">;</span></code></pre>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>部分</th>
+                <th>種類</th>
+                <th>用途</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>string</code></td>
+                <td>型別引數</td>
+                <td>告訴 TypeScript 如何檢查程式</td>
+              </tr>
+              <tr>
+                <td><code>"hello"</code></td>
+                <td>值引數</td>
+                <td>程式執行時真正傳入函式的資料</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section>
+        <h2>通常不用自己填：TypeScript 會推斷</h2>
+        <p>很多時候可以省略尖括號，因為 TypeScript 會從真正的資料推斷 <code>T</code>：</p>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">const</span> message <span class="o">=</span> <span class="f">identity</span><span class="o">(</span><span class="s">"hello"</span><span class="o">)</span><span class="o">;</span>
+<span class="c">// TypeScript 推斷 T 是 string</span>
+
+<span class="k">const</span> score <span class="o">=</span> <span class="f">identity</span><span class="o">(</span><span class="n">100</span><span class="o">)</span><span class="o">;</span>
+<span class="c">// TypeScript 推斷 T 是 number</span></code></pre>
+
+        <p>除非推斷結果不正確或無法推斷，否則讓 TypeScript 自動推斷通常比較簡潔。</p>
+      </section>
+
+      <section>
+        <h2>為什麼不直接使用一個固定型別？</h2>
+        <p>如果函式只接受字串，它就不能處理數字：</p>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">function</span> <span class="f">identityString</span><span class="o">(</span>value<span class="o">:</span> string<span class="o">)</span><span class="o">:</span> string <span class="o">{</span>
+  <span class="k">return</span> value<span class="o">;</span>
+<span class="o">}</span></code></pre>
+
+        <p>泛型則能重複使用同一套邏輯，同時保留「輸入和輸出是相同型別」的關係：</p>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">function</span> identity<span class="o">&lt;</span><span class="t">T</span><span class="o">&gt;</span><span class="o">(</span>value<span class="o">:</span> <span class="t">T</span><span class="o">)</span><span class="o">:</span> <span class="t">T</span> <span class="o">{</span>
+  <span class="k">return</span> value<span class="o">;</span>
+<span class="o">}</span></code></pre>
+
+        <p>泛型不是把型別檢查關掉，而是讓型別檢查可以配合不同情況調整。</p>
+      </section>
+
+      <section>
+        <h2>一個泛型可以有多個型別空格</h2>
+        <p>如果一個結果同時需要描述成功和失敗，就可以預留兩個型別參數：</p>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">type</span> <span class="t">Result</span><span class="o">&lt;</span><span class="t">Success</span><span class="o">,</span> <span class="t">Failure</span><span class="o">&gt;</span> <span class="o">=</span> <span class="o">{</span>
+  readonly value<span class="o">?</span><span class="o">:</span> <span class="t">Success</span><span class="o">;</span>
+  readonly error<span class="o">?</span><span class="o">:</span> <span class="t">Failure</span><span class="o">;</span>
+<span class="o">}</span><span class="o">;</span>
+
+<span class="k">type</span> <span class="t">ReadResult</span> <span class="o">=</span> <span class="t">Result</span><span class="o">&lt;</span><span class="t">GitDiff</span><span class="o">,</span> <span class="t">GitError</span><span class="o">&gt;</span><span class="o">;</span></code></pre>
+
+        <p>使用 <code>ReadResult</code> 時，可以把它讀成：「成功資料是 <code>GitDiff</code>，失敗資料是 <code>GitError</code>。」</p>
+      </section>
+
+      <section>
+        <h2>接回 Effect 程式碼</h2>
+        <p>Effect 的型別也使用同一種概念：</p>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="t">Effect</span><span class="o">.</span><span class="p">Effect</span><span class="o">&lt;</span><span class="t">GitDiff</span><span class="o">,</span> <span class="t">GitError</span><span class="o">&gt;</span></code></pre>
+
+        <p>把尖括號當成型別空格，就可以讀成：</p>
+
+        <ul>
+          <li>第一格 <code>GitDiff</code>：成功時得到什麼。</li>
+          <li>第二格 <code>GitError</code>：失敗時得到什麼。</li>
+        </ul>
+
+        <p><code>Context.Service</code> 也是相同道理：</p>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="t">Context</span><span class="o">.</span><span class="p">Service</span><span class="o">&lt;</span><span class="t">GitService</span><span class="o">,</span> <span class="t">ServiceShape</span><span class="o">&gt;</span><span class="o">(</span><span class="o">)</span></code></pre>
+
+        <ul>
+          <li><code>GitService</code> 填入服務識別型別的位置。</li>
+          <li><code>ServiceShape</code> 填入服務內容型別的位置。</li>
+        </ul>
+
+        <p>雖然 Effect 的服務語法看起來比較密集，但泛型本身沒有改變：仍然只是把具體型別填進程式庫預留的位置。</p>
+      </section>
+
+      <section>
+        <h2>泛型在執行時會去哪裡？</h2>
+        <p>泛型主要給 TypeScript 做編譯期間的檢查。編譯成 JavaScript 後，泛型型別通常會被移除：</p>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code>identity<span class="o">&lt;</span>string<span class="o">&gt;</span><span class="o">(</span><span class="s">"hello"</span><span class="o">)</span><span class="o">;</span></code></pre>
+
+        <p>執行期近似只剩：</p>
+
+        <pre class="language-typescript"><span class="label">JavaScript</span><code><span class="f">identity</span><span class="o">(</span><span class="s">"hello"</span><span class="o">)</span><span class="o">;</span></code></pre>
+
+        <aside class="callout">
+          <strong>因此，尖括號裡的型別不是執行期資料。</strong>
+          <code>string</code> 是給 TypeScript 的資訊；真正傳入函式並在執行期存在的是 <code>"hello"</code>。
+        </aside>
+      </section>
+
+      <section>
+        <h2>以後看到泛型，可以這樣讀</h2>
+        <p>不要急著理解整個程式庫，先按以下順序閱讀：</p>
+
+        <ol>
+          <li>找到名稱，例如 <code>Array</code>、<code>Result</code> 或 <code>Effect</code>。</li>
+          <li>把 <code>&lt;...&gt;</code> 看成它預留的型別空格。</li>
+          <li>逐格確認填入了什麼具體型別。</li>
+          <li>回到程式庫定義或文件，確認每一格分別代表什麼。</li>
+        </ol>
+
+        <p>例如 <code>Effect.Effect&lt;GitDiff, GitError&gt;</code>，只要先讀成「Effect 的第一格是 <code>GitDiff</code>，第二格是 <code>GitError</code>」，再查清楚每格的角色，就不需要一次吞下整套語法。</p>
+      </section>
+    </article>
+  </main>
+  <script>
+    const copyIcon = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="10" height="10" rx="2"></rect><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"></path></svg>';
+    const checkIcon = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"></path></svg>';
+
+    function copyText(text) {
+      if (navigator.clipboard && window.isSecureContext) {
+        return navigator.clipboard.writeText(text);
+      }
+
+      const textarea = document.createElement('textarea');
+      textarea.value = text;
+      textarea.style.position = 'fixed';
+      textarea.style.opacity = '0';
+      document.body.append(textarea);
+      textarea.select();
+      document.execCommand('copy');
+      textarea.remove();
+      return Promise.resolve();
+    }
+
+    document.querySelectorAll('pre').forEach((pre) => {
+      const code = pre.querySelector('code');
+      if (!code) return;
+
+      const button = document.createElement('button');
+      button.className = 'copy-code';
+      button.type = 'button';
+      button.setAttribute('aria-label', '複製程式碼');
+      button.innerHTML = copyIcon;
+      button.addEventListener('click', async () => {
+        await copyText(code.textContent || '');
+        button.classList.add('copied');
+        button.setAttribute('aria-label', '已複製');
+        button.innerHTML = checkIcon;
+        window.setTimeout(() => {
+          button.classList.remove('copied');
+          button.setAttribute('aria-label', '複製程式碼');
+          button.innerHTML = copyIcon;
+        }, 1400);
+      });
+      pre.append(button);
+
+      const track = document.createElement('div');
+      const thumb = document.createElement('div');
+      track.className = 'code-scrollbar';
+      thumb.className = 'code-scrollbar-thumb';
+      track.setAttribute('aria-hidden', 'true');
+      track.append(thumb);
+      pre.append(track);
+
+      const syncScrollbar = () => {
+        const visibleRatio = code.clientWidth / code.scrollWidth;
+        track.classList.toggle('hidden', visibleRatio >= 1);
+        const thumbWidth = Math.max(36, track.clientWidth * visibleRatio);
+        const maxThumbX = track.clientWidth - thumbWidth;
+        const maxScroll = code.scrollWidth - code.clientWidth;
+        const thumbX = maxScroll > 0 ? (code.scrollLeft / maxScroll) * maxThumbX : 0;
+        thumb.style.width = `${thumbWidth}px`;
+        thumb.style.transform = `translateX(${thumbX}px)`;
+      };
+
+      code.addEventListener('scroll', syncScrollbar, { passive: true });
+      window.addEventListener('resize', syncScrollbar, { passive: true });
+      track.addEventListener('pointerdown', (event) => {
+        const rect = track.getBoundingClientRect();
+        const ratio = Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width));
+        code.scrollLeft = ratio * (code.scrollWidth - code.clientWidth);
+      });
+      syncScrollbar();
+    });
+  </script>
+</body>
+</html>
