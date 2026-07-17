@@ -25,9 +25,14 @@ When uncertain, prefer: Tailwind, TypeScript, Bun, Convex, Clerk, Vercel.
 
 ## Source Code Reference
 
-Source code for dependencies is cached at `~/.opensrc/`.
+Source code for dependencies and external open-source references may already be cached at `~/.opensrc/`.
 
-Use `opensrc path` inside other commands to read source:
+Whenever asked to inspect open-source code, check the local opensrc cache first.
+
+- **External open-source repositories:** Before every reference, refresh the cached repository so the reference uses the latest upstream source. Because `opensrc` does not provide an update command, run `opensrc remove <owner/repo>` (if it is already cached), followed by `opensrc fetch <owner/repo>`.
+- **Dependency source code:** Do not update it independently. It must stay aligned with the dependency version used by this project, as resolved from the project's manifest and lockfile. Use `opensrc path --cwd . <package>` to locate or fetch that exact version.
+
+Use `opensrc path` to read source:
 
 \`\`\`bash
 rg "pattern" $(opensrc path <package>)
