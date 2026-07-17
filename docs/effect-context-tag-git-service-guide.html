@@ -625,17 +625,29 @@
 
         <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">type</span> <span class="t">GitError</span> <span class="o">=</span>
   <span class="o">|</span> <span class="t">GitNotRepositoryError</span>
+  <span class="o">|</span> <span class="t">GitWorkingTreeUnavailableError</span>
   <span class="o">|</span> <span class="t">GitCommandError</span>
-  <span class="o">|</span> <span class="t">GitExecutionError</span><span class="o">;</span></code></pre>
+  <span class="o">|</span> <span class="t">GitExecutionError</span>
+  <span class="o">|</span> <span class="t">GitCommandProcessError</span>
+  <span class="o">|</span> <span class="t">GitCommandTimeoutError</span>
+  <span class="o">|</span> <span class="t">GitCommandOutputLimitError</span>
+  <span class="o">|</span> <span class="t">GitChangedFileUnavailableError</span>
+  <span class="o">|</span> <span class="t">GitInvalidOutputError</span><span class="o">;</span></code></pre>
 
         <table>
           <thead>
             <tr><th>錯誤</th><th>語意</th><th>邊界作用</th></tr>
           </thead>
           <tbody>
-            <tr><td data-label="錯誤"><code>GitNotRepositoryError</code></td><td data-label="語意">目前不在 Git repository。</td><td data-label="邊界作用">把特定 exit code 與輸出判讀翻譯成領域語意。</td></tr>
+            <tr><td data-label="錯誤"><code>GitNotRepositoryError</code></td><td data-label="語意">Git 明確回報目前不在 repository。</td><td data-label="邊界作用">只有已辨識的 not-repository 診斷才使用此 tag。</td></tr>
+            <tr><td data-label="錯誤"><code>GitWorkingTreeUnavailableError</code></td><td data-label="語意">repository 沒有可用 working tree。</td><td data-label="邊界作用">避免把 bare repository 誤稱為不是 repository。</td></tr>
             <tr><td data-label="錯誤"><code>GitCommandError</code></td><td data-label="語意">Git command 已執行，但結果不符合預期。</td><td data-label="邊界作用">保留 operation、exit code 等可診斷資訊。</td></tr>
-            <tr><td data-label="錯誤"><code>GitExecutionError</code></td><td data-label="語意">命令啟動、逾時或檔案檢查等執行失敗。</td><td data-label="邊界作用">包裝底層 cause，避免平台型別滲入上層 contract。</td></tr>
+            <tr><td data-label="錯誤"><code>GitExecutionError</code></td><td data-label="語意">命令啟動、終止或檔案檢查失敗。</td><td data-label="邊界作用">包裝共用基礎設施 failure 與底層 cause。</td></tr>
+            <tr><td data-label="錯誤"><code>GitCommandProcessError</code></td><td data-label="語意">讀取 stdout、stderr 或 exit code 失敗。</td><td data-label="邊界作用">讓 process phase 成為必填欄位。</td></tr>
+            <tr><td data-label="錯誤"><code>GitCommandTimeoutError</code></td><td data-label="語意">Git command 超過時間上限。</td><td data-label="邊界作用">保留 timeout 設定以產生精確提示。</td></tr>
+            <tr><td data-label="錯誤"><code>GitCommandOutputLimitError</code></td><td data-label="語意">command combined output 超出限制。</td><td data-label="邊界作用">避免把不完整 patch 當成完整 coverage。</td></tr>
+            <tr><td data-label="錯誤"><code>GitChangedFileUnavailableError</code></td><td data-label="語意">列舉後的變更檔案已不可用。</td><td data-label="邊界作用">把 TOCTOU race 表達成 coverage failure。</td></tr>
+            <tr><td data-label="錯誤"><code>GitInvalidOutputError</code></td><td data-label="語意">Git 成功回覆但輸出格式不可信。</td><td data-label="邊界作用">以 operation 與 UTF-8 bytes 提供安全診斷。</td></tr>
           </tbody>
         </table>
 
