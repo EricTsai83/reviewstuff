@@ -134,6 +134,27 @@ Effect 的採用節奏要保守：先建立 runtime entrypoint 和必要 service
 - 是否避免同時新增多個外部 integration。
 - 是否有清楚的「不包含」項目。
 
+## Plan Execution Contract
+
+007 之後每份 plan 在開始實作前都要再確認以下契約；若外部 API/tool 已變動，先更新 plan，
+不能照過期命令硬做：
+
+- verification 只使用該 plan 完成後已存在的 command/flag/service；需要 credentials、付費
+  request、Apple identity 或 release permission 的 live smoke 必須明確標示 prerequisite，不能
+  成為一般 deterministic test 的必要條件。
+- 所有 future CLI examples 使用 `reviewstuff` 自己的 flags/config；provider credentials 只使用
+  provider 官方環境變數。不要新增未定義的 `AI_REVIEW_*` compatibility surface。
+- analyzer 產生 diagnostics；test/build command 是 gate。昂貴或可能寫檔的 gate 只在 explicit、
+  isolated flow 執行，不能因語言偵測就在使用者工作樹自動跑。
+- checksum 只能證明下載內容與 manifest 一致，不能證明 manifest 可信；self-update 必須驗證
+  signed manifest、固定來源、platform identity 與 atomic replacement boundary。
+- 多檔案更新不能宣稱是單一 filesystem-atomic operation；必須有 journal、rollback/recovery，
+  或縮小成真正可 atomic 的單檔 replacement。
+- repo/session/archive path 全部要處理 canonicalization、symlink、traversal 與 size limit；
+  `--dir` 選定的新 repo root 才是後續 containment boundary。
+- public/persisted schema 變更要 version bump + previous-version fixture/migration/refusal test；
+  machine-readable output 的 stdout 不得混入 diagnostics。
+
 ## Scope Refinement Notes
 
 這份 plan set 已把容易過大的階段排成連續編號：
@@ -205,7 +226,7 @@ Effect 的採用節奏要保守：先建立 runtime entrypoint 和必要 service
 | [x] DONE | 003 | [Local CLI Workflow](./003-local-cli-workflow.md) | 可直接執行本機 compiled binary |
 | [x] DONE | 004 | [Repository Structure Boundaries](./004-repository-structure-boundaries.md) | module 邊界固定 |
 | [ ] TODO | 005 | [Git Diff Review MVP](./005-git-diff-review-mvp.md) | 可 review git diff 並輸出 deterministic report |
-| [ ] TODO | 006 | [Config Profiles](./006-config-profiles-and-prompts.md) | 可用 config/profile 控制 review |
+| [x] DONE | 006 | [Config Profiles](./006-config-profiles-and-prompts.md) | 可用 config/profile 控制 review |
 | [ ] TODO | 007 | [Engine Adapters MVP](./007-engine-adapters-mvp.md) | deterministic engine 穩定，provider adapters 有清楚邊界 |
 | [ ] TODO | 008 | [Real AI Review Provider](./008-real-ai-review-provider.md) | 第一個真實 cloud provider 可 review local changes |
 | [ ] TODO | 009 | [Additional Provider Adapters](./009-additional-provider-adapters.md) | Anthropic 與 local CLI provider 接上同一 contract |
