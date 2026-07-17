@@ -1,7 +1,8 @@
-import { FileSystem, Path } from "@effect/platform";
-import { BunContext } from "@effect/platform-bun";
+import * as BunServices from "@effect/platform-bun/BunServices";
 import { expect, test } from "bun:test";
-import { Effect } from "effect";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
 import {
   createScanner,
   LanguageVariant,
@@ -9,10 +10,10 @@ import {
 } from "typescript/unstable/ast";
 
 const fs = FileSystem.FileSystem.pipe(
-  Effect.provide(BunContext.layer),
+  Effect.provide(BunServices.layer),
   Effect.runSync,
 );
-const path = Path.Path.pipe(Effect.provide(BunContext.layer), Effect.runSync);
+const path = Path.Path.pipe(Effect.provide(BunServices.layer), Effect.runSync);
 const repoRoot = path.resolve(import.meta.dir, "../..");
 const sourceRoot = path.join(repoRoot, "src");
 
@@ -284,8 +285,10 @@ test("source modules preserve the documented dependency direction", async () => 
       }
 
       const importsEffectPlatform =
-        moduleName === "@effect/platform" ||
-        moduleName.startsWith("@effect/platform/");
+        moduleName === "effect/FileSystem" ||
+        moduleName === "effect/Path" ||
+        moduleName === "effect/PlatformError" ||
+        moduleName.startsWith("effect/unstable/process");
       const importsBunPlatform = moduleName.startsWith("@effect/platform-bun");
 
       if (area !== "root" && area !== "platform" && importsEffectPlatform) {

@@ -1,461 +1,325 @@
-import { Context, Data, Effect, Layer } from "effect";
+import * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { ReviewScope } from "../domain/scope";
 import * as CommandRunner from "../platform/command-runner";
 import * as FileInspector from "../platform/file-inspector";
+import {
+  collectPatches,
+  executeGit,
+  mergeChangedPaths,
+  nulSeparatedChangedPaths,
+  nulSeparatedPaths,
+  requireGitSuccess,
+  resolveEmptyTree,
+  unmergedPaths,
+  type GitChangedPath,
+  type GitDiff,
+} from "./git-diff";
+import {
+  GitInvalidOutputError,
+  GitNotRepositoryError,
+  GitUnmergedPathsError,
+  GitWorkingTreeUnavailableError,
+  makeGitCommandError,
+  type GitError,
+} from "./git-errors";
 
-const commandTimeout = "10 seconds";
-const listOutputLimit = 4 * 1024 * 1024;
-const patchOutputLimit = 512 * 1024;
-const fileSizeLimit = BigInt(patchOutputLimit);
-const emptyTree = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
+export type {
+  GitDiff,
+  GitFilePatch,
+  GitSkippedFile,
+} from "./git-diff";
+export {
+  GitChangedFileUnavailableError,
+  GitCommandError,
+  type GitCommandFailure,
+  GitCommandOutputLimitError,
+  GitCommandProcessError,
+  GitCommandTimeoutError,
+  type GitError,
+  GitExecutionError,
+  GitInvalidOutputError,
+  GitNotRepositoryError,
+  type GitProcessPhase,
+  GitUnmergedPathsError,
+  GitWorkingTreeUnavailableError,
+} from "./git-errors";
 
-export interface GitFilePatch {
-  readonly path: string;
-  readonly patch: string;
-  readonly source: "staged" | "working-tree" | "untracked";
-}
-
-export interface GitDiff {
-  readonly files: ReadonlyArray<GitFilePatch>;
-}
-
-interface GitChangedPath {
-  readonly path: string;
-  readonly pathspecs: ReadonlyArray<string>;
-}
-
-export class GitNotRepositoryError extends Data.TaggedError(
-  "GitNotRepositoryError",
-)<{}> {}
-
-export class GitCommandError extends Data.TaggedError("GitCommandError")<{
-  readonly operation: string;
-  readonly exitCode: number;
-  readonly stderrLength: number;
-}> {}
-
-export class GitExecutionError extends Data.TaggedError("GitExecutionError")<{
-  readonly operation: string;
-  readonly cause: unknown;
-}> {}
-
-export type GitError =
-  | GitNotRepositoryError
-  | GitCommandError
-  | GitExecutionError;
-
-export class GitService extends Context.Tag("reviewstuff/GitService")<
+export class GitService extends Context.Service<
   GitService,
   {
+    /**
+     * Collects reviewable text patches for the selected scope and reports
+     * binary or oversized files separately.
+     */
     readonly readDiff: (
       scope: ReviewScope,
     ) => Effect.Effect<GitDiff, GitError>;
   }
->() {}
+>()("reviewstuff/GitService") {}
 
-const execute = (
-  runner: CommandRunner.Service,
-  operation: string,
-  args: ReadonlyArray<string>,
-  maxOutputBytes: number,
-  workingDirectory?: string,
-) =>
-  runner
-    .run({
-      program: "git",
-      args: ["--literal-pathspecs", ...args],
-      ...(workingDirectory === undefined ? {} : { workingDirectory }),
-      timeout: commandTimeout,
-      maxOutputBytes,
-    })
-    .pipe(
-      Effect.mapError(
-        (cause) => new GitExecutionError({ operation, cause }),
-      ),
-    );
+const repositoryDetectionMaxOutputBytes = 4 * 1024 * 1024;
+const reviewBaseMaxOutputBytes = 1_024;
+const diffSourceCollectionConcurrency = 2;
+const trackedChangeListingArguments = [
+  "--find-renames",
+  "--name-status",
+  "-z",
+  "--diff-filter=ACDMRTUXB",
+  "--",
+] as const;
 
-const requireSuccess = (
-  runner: CommandRunner.Service,
-  operation: string,
-  args: ReadonlyArray<string>,
-  workingDirectory?: string,
-) =>
-  execute(runner, operation, args, listOutputLimit, workingDirectory).pipe(
-    Effect.flatMap((result) =>
-      result.exitCode === 0
-        ? Effect.succeed(result.stdout)
-        : Effect.fail(
-            new GitCommandError({
-              operation,
-              exitCode: result.exitCode,
-              stderrLength: result.stderr.length,
-            }),
-          ),
-    ),
-  );
+const ensureReviewableWorkingTree = Effect.fn(
+  "GitService.ensureReviewableWorkingTree",
+)(function* (runner: CommandRunner.Service) {
+  const operation = "detect git repository";
 
-const nulSeparatedPaths = (output: string): ReadonlyArray<string> =>
-  output
-    .split("\0")
-    .filter((path) => path.length > 0)
-    .sort((left, right) => (left < right ? -1 : left > right ? 1 : 0));
-
-const nulSeparatedChangedPaths = (
-  output: string,
-): ReadonlyArray<GitChangedPath> => {
-  const fields = output.split("\0");
-  const changes: Array<GitChangedPath> = [];
-
-  for (let index = 0; index < fields.length;) {
-    const status = fields[index];
-
-    if (status === undefined || status.length === 0) {
-      break;
-    }
-
-    const sourcePath = fields[index + 1];
-
-    if (sourcePath === undefined) {
-      break;
-    }
-
-    if (status.startsWith("R") || status.startsWith("C")) {
-      const targetPath = fields[index + 2];
-
-      if (targetPath === undefined) {
-        break;
-      }
-
-      changes.push({
-        path: targetPath,
-        pathspecs: [sourcePath, targetPath],
-      });
-      index += 3;
-      continue;
-    }
-
-    changes.push({ path: sourcePath, pathspecs: [sourcePath] });
-    index += 2;
-  }
-
-  return changes.sort((left, right) =>
-    left.path < right.path ? -1 : left.path > right.path ? 1 : 0
-  );
-};
-
-const mergeChangedPaths = (
-  changes: ReadonlyArray<GitChangedPath>,
-): ReadonlyArray<GitChangedPath> => {
-  const merged = new Map<string, Set<string>>();
-
-  for (const change of changes) {
-    const pathspecs = merged.get(change.path) ?? new Set<string>();
-
-    for (const pathspec of change.pathspecs) {
-      pathspecs.add(pathspec);
-    }
-
-    merged.set(change.path, pathspecs);
-  }
-
-  return [...merged.entries()]
-    .map(([path, pathspecs]) => ({ path, pathspecs: [...pathspecs].sort() }))
-    .sort((left, right) =>
-      left.path < right.path ? -1 : left.path > right.path ? 1 : 0
-    );
-};
-
-const isBinaryPatch = (patch: string): boolean =>
-  patch.split("\n").some((line) =>
-    line.startsWith("Binary files ") || line === "GIT binary patch"
-  );
-
-const readObjectSize = (
-  runner: CommandRunner.Service,
-  object: string,
-  workingDirectory: string,
-): Effect.Effect<bigint | undefined, GitError> =>
-  execute(
+  // The raw result distinguishes an absent repository from other failures and
+  // from repositories, such as bare repositories, that have no working tree.
+  const workingTreeDetection = yield* executeGit(
     runner,
-    "inspect git object",
-    ["cat-file", "-s", object],
-    1_024,
-    workingDirectory,
-  ).pipe(
-    Effect.flatMap((result) => {
-      if (result.exitCode !== 0) {
-        return Effect.succeed<undefined>(undefined);
-      }
-
-      const size = result.stdout.trim();
-
-      return /^\d+$/.test(size)
-        ? Effect.succeed(BigInt(size))
-        : Effect.fail(
-            new GitCommandError({
-              operation: "inspect git object",
-              exitCode: result.exitCode,
-              stderrLength: result.stderr.length,
-            }),
-          );
-    }),
+    operation,
+    ["rev-parse", "--is-inside-work-tree"],
+    repositoryDetectionMaxOutputBytes,
   );
 
-const withinFileSizeLimit = (
-  runner: CommandRunner.Service,
-  inspector: FileInspector.Service,
-  path: string,
-  source: GitFilePatch["source"],
-  repositoryRoot: string,
-): Effect.Effect<boolean, GitError> => {
-  if (source === "staged") {
-    return readObjectSize(runner, `:./${path}`, repositoryRoot).pipe(
-      Effect.flatMap((size) =>
-        size === undefined
-          ? readObjectSize(runner, `HEAD:${path}`, repositoryRoot)
-          : Effect.succeed(size),
-      ),
-      Effect.map((size) => size === undefined || size <= fileSizeLimit),
-    );
+  if (workingTreeDetection.exitCode !== 0) {
+    if (
+      !workingTreeDetection.stderr.toLowerCase().includes(
+        "not a git repository",
+      )
+    ) {
+      return yield* makeGitCommandError(operation, workingTreeDetection);
+    }
+
+    return yield* new GitNotRepositoryError({
+      exitCode: workingTreeDetection.exitCode,
+      stdoutLength: workingTreeDetection.stdout.length,
+      stderrLength: workingTreeDetection.stderr.length,
+    });
   }
 
-  return inspector.size(path, repositoryRoot).pipe(
-    Effect.mapError(
-      (cause) =>
-        new GitExecutionError({ operation: "inspect changed file", cause }),
+  const workingTreeStatus = workingTreeDetection.stdout.trim();
+  if (workingTreeStatus === "false") {
+    return yield* new GitWorkingTreeUnavailableError({
+      stdoutLength: workingTreeDetection.stdout.length,
+      stderrLength: workingTreeDetection.stderr.length,
+    });
+  }
+  if (workingTreeStatus !== "true") {
+    return yield* new GitInvalidOutputError({
+      operation,
+      outputBytes: Buffer.byteLength(workingTreeDetection.stdout),
+    });
+  }
+});
+
+const resolveRepositoryRoot = (
+  runner: CommandRunner.Service,
+): Effect.Effect<string, GitError> =>
+  requireGitSuccess(runner, "resolve repository root", [
+    "rev-parse",
+    "--show-toplevel",
+  ]).pipe(
+    Effect.map((output) => output.replace(/\r?\n$/, "")),
+  );
+
+const listStagedChanges = (
+  runner: CommandRunner.Service,
+  repositoryRoot: string,
+): Effect.Effect<ReadonlyArray<GitChangedPath>, GitError> => {
+  const operation = "list staged files";
+
+  return requireGitSuccess(
+    runner,
+    operation,
+    [
+      "diff",
+      "--cached",
+      ...trackedChangeListingArguments,
+    ],
+    repositoryRoot,
+  ).pipe(
+    Effect.flatMap((output) =>
+      nulSeparatedChangedPaths(output, operation)
     ),
-    Effect.flatMap((size) => {
-      if (size !== undefined) {
-        return Effect.succeed(size <= fileSizeLimit);
-      }
-
-      if (source === "untracked") {
-        return Effect.succeed(false);
-      }
-
-      return readObjectSize(runner, `HEAD:${path}`, repositoryRoot).pipe(
-        Effect.flatMap((headSize) =>
-          headSize === undefined
-            ? readObjectSize(runner, `:./${path}`, repositoryRoot)
-            : Effect.succeed(headSize),
-        ),
-        Effect.map((trackedSize) =>
-          trackedSize === undefined || trackedSize <= fileSizeLimit,
-        ),
-      );
-    }),
   );
 };
 
-const readPatch = (
+const listUnstagedChanges = (
   runner: CommandRunner.Service,
-  operation: string,
-  args: ReadonlyArray<string>,
-  path: string,
-  source: GitFilePatch["source"],
-  expectedExitCodes: ReadonlySet<number>,
-  workingDirectory: string,
-): Effect.Effect<GitFilePatch | undefined, GitError> =>
-  runner
-    .run({
-      program: "git",
-      args: ["--literal-pathspecs", ...args],
-      workingDirectory,
-      timeout: commandTimeout,
-      maxOutputBytes: patchOutputLimit,
-    })
-    .pipe(
-      Effect.mapError((cause) =>
-        cause instanceof CommandRunner.CommandOutputLimitError
-          ? cause
-          : new GitExecutionError({ operation, cause }),
-      ),
-      Effect.flatMap((result) => {
-        if (!expectedExitCodes.has(result.exitCode)) {
-          return Effect.fail(
-            new GitCommandError({
-              operation,
-              exitCode: result.exitCode,
-              stderrLength: result.stderr.length,
-            }),
-          );
-        }
-
-        return Effect.succeed(
-          result.stdout.length === 0 || isBinaryPatch(result.stdout)
-            ? undefined
-            : { path, patch: result.stdout, source },
-        );
-      }),
-      Effect.catchTag("CommandOutputLimitError", () =>
-        Effect.succeed<undefined>(undefined),
-      ),
-    );
-
-const collectPatches = (
-  runner: CommandRunner.Service,
-  inspector: FileInspector.Service,
-  changes: ReadonlyArray<GitChangedPath>,
-  kind: GitFilePatch["source"],
   repositoryRoot: string,
-  base: string = "HEAD",
-): Effect.Effect<ReadonlyArray<GitFilePatch>, GitError> =>
-  Effect.forEach(changes, ({ path, pathspecs }) =>
-    withinFileSizeLimit(runner, inspector, path, kind, repositoryRoot).pipe(
-      Effect.flatMap((withinLimit) => {
-        if (!withinLimit) {
-          return Effect.succeed<undefined>(undefined);
-        }
+): Effect.Effect<ReadonlyArray<GitChangedPath>, GitError> => {
+  const operation = "list unstaged files";
 
-        if (kind === "untracked") {
-          return readPatch(
-            runner,
-            "read untracked diff",
-            ["diff", "--no-index", "--no-color", "--no-ext-diff", "--", "/dev/null", path],
-            path,
-            kind,
-            new Set([0, 1]),
-            repositoryRoot,
-          );
-        }
-
-        const diffTarget = kind === "staged" ? ["--cached"] : [base];
-
-        return readPatch(
-          runner,
-          `read ${kind} diff`,
-          [
-            "diff",
-            ...diffTarget,
-            "--find-renames",
-            "--no-color",
-            "--no-ext-diff",
-            "--unified=3",
-            "--",
-            ...pathspecs,
-          ],
-          path,
-          kind,
-          new Set([0]),
-          repositoryRoot,
-        );
-      }),
-    ),
+  return requireGitSuccess(
+    runner,
+    operation,
+    [
+      "diff",
+      ...trackedChangeListingArguments,
+    ],
+    repositoryRoot,
   ).pipe(
-    Effect.map((patches) =>
-      patches.filter((patch): patch is GitFilePatch => patch !== undefined),
+    Effect.flatMap((output) =>
+      nulSeparatedChangedPaths(output, operation)
     ),
   );
+};
 
-const readDiff = (
+const listUntrackedFiles = (
+  runner: CommandRunner.Service,
+  repositoryRoot: string,
+): Effect.Effect<ReadonlyArray<string>, GitError> => {
+  const operation = "list untracked files";
+
+  return requireGitSuccess(
+    runner,
+    operation,
+    ["ls-files", "--others", "--exclude-standard", "-z", "--"],
+    repositoryRoot,
+  ).pipe(
+    Effect.flatMap((output) =>
+      nulSeparatedPaths(output, operation)
+    ),
+  );
+};
+
+const ensureNoUnmergedChanges = (
+  changes: ReadonlyArray<GitChangedPath>,
+): Effect.Effect<void, GitUnmergedPathsError> => {
+  const conflictingPaths = unmergedPaths(changes);
+
+  return conflictingPaths.length === 0
+    ? Effect.void
+    : Effect.fail(new GitUnmergedPathsError({ paths: conflictingPaths }));
+};
+
+const resolveReviewBase = Effect.fn("GitService.resolveReviewBase")(
+  function* (
+    runner: CommandRunner.Service,
+    repositoryRoot: string,
+  ): Effect.fn.Return<string, GitError> {
+    const operation = "resolve review base";
+    const headCommitVerification = yield* executeGit(
+      runner,
+      operation,
+      ["rev-parse", "--verify", "--quiet", "HEAD^{commit}"],
+      reviewBaseMaxOutputBytes,
+      repositoryRoot,
+    );
+
+    if (headCommitVerification.exitCode === 0) {
+      return "HEAD";
+    }
+    if (headCommitVerification.exitCode !== 1) {
+      return yield* makeGitCommandError(operation, headCommitVerification);
+    }
+
+    // An initial repository has no HEAD commit, so its tracked files are
+    // compared against the repository-format-specific empty tree.
+    return yield* resolveEmptyTree(runner, repositoryRoot);
+  },
+);
+
+const collectStagedDiff = Effect.fn("GitService.collectStagedDiff")(
+  (
+    runner: CommandRunner.Service,
+    inspector: FileInspector.Service,
+    repositoryRoot: string,
+    stagedChanges: ReadonlyArray<GitChangedPath>,
+  ): Effect.Effect<GitDiff, GitError> =>
+    ensureNoUnmergedChanges(stagedChanges).pipe(
+      Effect.andThen(
+        collectPatches(
+          runner,
+          inspector,
+          stagedChanges,
+          "staged",
+          repositoryRoot,
+        ),
+      ),
+    ),
+);
+
+const collectWorkingTreeDiff = Effect.fn(
+  "GitService.collectWorkingTreeDiff",
+)(function* (
+  runner: CommandRunner.Service,
+  inspector: FileInspector.Service,
+  repositoryRoot: string,
+  stagedChanges: ReadonlyArray<GitChangedPath>,
+): Effect.fn.Return<GitDiff, GitError> {
+  const unstagedChanges = yield* listUnstagedChanges(runner, repositoryRoot);
+  const trackedChanges = [...stagedChanges, ...unstagedChanges];
+  yield* ensureNoUnmergedChanges(trackedChanges);
+
+  const untrackedFiles = yield* listUntrackedFiles(runner, repositoryRoot);
+  const reviewBase = yield* resolveReviewBase(runner, repositoryRoot);
+
+  // A file may appear in both staged and unstaged changes. Merge its
+  // pathspecs so the working-tree diff reads every tracked file only once.
+  const trackedPatchTargets = mergeChangedPaths(trackedChanges);
+  const untrackedPatchTargets = untrackedFiles.map((path) => ({
+    path,
+    pathspecs: [path],
+  }));
+  const [trackedDiff, untrackedDiff] = yield* Effect.all(
+    [
+      collectPatches(
+        runner,
+        inspector,
+        trackedPatchTargets,
+        "working-tree",
+        repositoryRoot,
+        reviewBase,
+      ),
+      collectPatches(
+        runner,
+        inspector,
+        untrackedPatchTargets,
+        "untracked",
+        repositoryRoot,
+      ),
+    ],
+    { concurrency: diffSourceCollectionConcurrency },
+  );
+
+  return {
+    files: [...trackedDiff.files, ...untrackedDiff.files],
+    skippedFiles: [
+      ...trackedDiff.skippedFiles,
+      ...untrackedDiff.skippedFiles,
+    ],
+  };
+});
+
+const readDiff = Effect.fn("GitService.readDiff")(function* (
   runner: CommandRunner.Service,
   inspector: FileInspector.Service,
   scope: ReviewScope,
-): Effect.Effect<GitDiff, GitError> =>
-  Effect.gen(function* () {
-    const repositoryCheck = yield* execute(
+): Effect.fn.Return<GitDiff, GitError> {
+  yield* ensureReviewableWorkingTree(runner);
+  const repositoryRoot = yield* resolveRepositoryRoot(runner);
+  const stagedChanges = yield* listStagedChanges(runner, repositoryRoot);
+
+  if (scope === "staged") {
+    return yield* collectStagedDiff(
       runner,
-      "detect git repository",
-      ["rev-parse", "--is-inside-work-tree"],
-      listOutputLimit,
-    );
-
-    if (
-      repositoryCheck.exitCode !== 0 ||
-      repositoryCheck.stdout.trim() !== "true"
-    ) {
-      return yield* new GitNotRepositoryError();
-    }
-
-    const repositoryRoot = (
-      yield* requireSuccess(runner, "resolve repository root", [
-        "rev-parse",
-        "--show-toplevel",
-      ])
-    ).replace(/\r?\n$/, "");
-
-    const stagedPaths = nulSeparatedChangedPaths(
-      yield* requireSuccess(runner, "list staged files", [
-        "diff",
-        "--cached",
-        "--find-renames",
-        "--name-status",
-        "-z",
-        "--diff-filter=ACDMRTUXB",
-        "--",
-      ], repositoryRoot),
-    );
-
-    if (scope === "staged") {
-      const staged = yield* collectPatches(
-        runner,
-        inspector,
-        stagedPaths,
-        "staged",
-        repositoryRoot,
-      );
-
-      return { files: staged };
-    }
-
-    const unstagedPaths = nulSeparatedChangedPaths(
-      yield* requireSuccess(runner, "list unstaged files", [
-        "diff",
-        "--find-renames",
-        "--name-status",
-        "-z",
-        "--diff-filter=ACDMRTUXB",
-        "--",
-      ], repositoryRoot),
-    );
-    const untrackedPaths = nulSeparatedPaths(
-      yield* requireSuccess(runner, "list untracked files", [
-        "ls-files",
-        "--others",
-        "--exclude-standard",
-        "-z",
-        "--",
-      ], repositoryRoot),
-    );
-    const baseResult = yield* execute(
-      runner,
-      "resolve review base",
-      ["rev-parse", "--verify", "HEAD"],
-      1_024,
+      inspector,
       repositoryRoot,
+      stagedChanges,
     );
-    const base = baseResult.exitCode === 0 ? "HEAD" : emptyTree;
-    const trackedPaths = mergeChangedPaths([
-      ...stagedPaths,
-      ...unstagedPaths,
-    ]);
-    const untrackedChanges = untrackedPaths.map((path) => ({
-      path,
-      pathspecs: [path],
-    }));
-    const [tracked, untracked] = yield* Effect.all(
-      [
-        collectPatches(
-          runner,
-          inspector,
-          trackedPaths,
-          "working-tree",
-          repositoryRoot,
-          base,
-        ),
-        collectPatches(
-          runner,
-          inspector,
-          untrackedChanges,
-          "untracked",
-          repositoryRoot,
-        ),
-      ],
-      { concurrency: "unbounded" },
-    );
+  }
 
-    return { files: [...tracked, ...untracked] };
-  });
+  return yield* collectWorkingTreeDiff(
+    runner,
+    inspector,
+    repositoryRoot,
+    stagedChanges,
+  );
+});
 
 export const layer: Layer.Layer<
   GitService,

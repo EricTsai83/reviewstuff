@@ -1,13 +1,16 @@
-import { Command, FileSystem, Path } from "@effect/platform";
-import { BunContext } from "@effect/platform-bun";
+import * as BunServices from "@effect/platform-bun/BunServices";
 import { describe, expect, test } from "bun:test";
-import { Effect, Stream } from "effect";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
+import * as Stream from "effect/Stream";
+import * as ChildProcess from "effect/unstable/process/ChildProcess";
 
 const fs = FileSystem.FileSystem.pipe(
-  Effect.provide(BunContext.layer),
+  Effect.provide(BunServices.layer),
   Effect.runSync,
 );
-const path = Path.Path.pipe(Effect.provide(BunContext.layer), Effect.runSync);
+const path = Path.Path.pipe(Effect.provide(BunServices.layer), Effect.runSync);
 const repoRoot = path.resolve(import.meta.dir, "../..");
 const validator = path.join(
   repoRoot,
@@ -19,7 +22,7 @@ const streamToString = (
 ): Effect.Effect<string, unknown> =>
   stream.pipe(
     Stream.decodeText(),
-    Stream.runFold("", (output, chunk) => output + chunk),
+    Stream.runFold(() => "", (output, chunk) => output + chunk),
   );
 
 const validate = (css: string) =>
@@ -34,12 +37,11 @@ const validate = (css: string) =>
       `<!doctype html><style>${css}</style>`,
     );
 
-    const command = Command.make("bun", validator, htmlFile).pipe(
-      Command.workingDirectory(repoRoot),
-      Command.stderr("pipe"),
-      Command.stdout("pipe"),
-    );
-    const process = yield* Command.start(command);
+    const process = yield* ChildProcess.make("bun", [validator, htmlFile], {
+      cwd: repoRoot,
+      stderr: "pipe",
+      stdout: "pipe",
+    });
     const [, stderr, exitCode] = yield* Effect.all(
       [
         streamToString(process.stdout),
@@ -50,7 +52,7 @@ const validate = (css: string) =>
     );
 
     return { exitCode: Number(exitCode), stderr };
-  }).pipe(Effect.scoped, Effect.provide(BunContext.layer), Effect.runPromise);
+  }).pipe(Effect.scoped, Effect.provide(BunServices.layer), Effect.runPromise);
 
 describe("validate-html", () => {
   test("accepts braces inside quoted CSS values", async () => {

@@ -1,7 +1,8 @@
-import { Command } from "@effect/cli";
-import * as ValidationError from "@effect/cli/ValidationError";
-import { BunContext, BunRuntime } from "@effect/platform-bun";
-import { Effect, Layer } from "effect";
+import * as BunRuntime from "@effect/platform-bun/BunRuntime";
+import * as BunServices from "@effect/platform-bun/BunServices";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { Command } from "effect/unstable/cli";
 import packageJson from "../package.json";
 import { doctorCommand } from "./commands/doctor";
 import { reviewCommand } from "./commands/review";
@@ -11,7 +12,7 @@ import * as FileInspector from "./platform/file-inspector";
 
 const AppLive = GitService.layer.pipe(
   Layer.provide(Layer.merge(CommandRunner.layer, FileInspector.layer)),
-  Layer.provideMerge(BunContext.layer),
+  Layer.provideMerge(BunServices.layer),
 );
 
 const command = Command.make("reviewstuff").pipe(
@@ -19,22 +20,8 @@ const command = Command.make("reviewstuff").pipe(
   Command.withSubcommands([reviewCommand, doctorCommand]),
 );
 
-const cli = Command.run(command, {
-  executable: "reviewstuff",
-  name: "reviewstuff",
-  version: packageJson.version,
-});
-
-cli(Bun.argv).pipe(
-  Effect.catchAll((error) => {
-    if (ValidationError.isValidationError(error)) {
-      return Effect.sync(() => {
-        process.exitCode = 1;
-      });
-    }
-
-    return Effect.fail(error);
-  }),
+Command.run(command, { version: packageJson.version }).pipe(
+  Effect.scoped,
   Effect.provide(AppLive),
   BunRuntime.runMain,
 );

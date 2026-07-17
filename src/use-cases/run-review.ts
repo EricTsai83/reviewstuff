@@ -1,5 +1,6 @@
-import { Effect } from "effect";
+import * as Effect from "effect/Effect";
 import type { Finding } from "../domain/finding";
+import type { ReviewFileCoverage } from "../domain/review-file";
 import type { ReviewReport } from "../domain/report";
 import type { ReviewScope } from "../domain/scope";
 import {
@@ -64,14 +65,33 @@ export const runReview = (
     const git = yield* GitService;
     const diff = yield* git.readDiff(scope);
     const findings = diff.files.flatMap(findingsForPatch);
-    const changedFiles = new Set(diff.files.map((file) => file.path)).size;
+    const coverageFiles: ReadonlyArray<ReviewFileCoverage> = [
+      ...diff.files.map((file) => ({
+        path: file.path,
+        source: file.source,
+        status: "reviewed" as const,
+      })),
+      ...diff.skippedFiles.map((file) => ({
+        ...file,
+        status: "skipped" as const,
+      })),
+    ].sort((left, right) =>
+      left.path < right.path ? -1 : left.path > right.path ? 1 : 0
+    );
 
     return {
-      schemaVersion: 1,
+      schemaVersion: 2,
       scope,
       summary: {
-        changedFiles,
+        changedFiles: coverageFiles.length,
+        reviewedFiles: diff.files.length,
+        skippedFiles: diff.skippedFiles.length,
         findings: findings.length,
+      },
+      coverage: {
+        schemaVersion: 1,
+        complete: diff.skippedFiles.length === 0,
+        files: coverageFiles,
       },
       findings,
     };

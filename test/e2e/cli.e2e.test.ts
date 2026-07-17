@@ -1,14 +1,17 @@
-import { Command, FileSystem, Path } from "@effect/platform";
-import { BunContext } from "@effect/platform-bun";
+import * as BunServices from "@effect/platform-bun/BunServices";
 import { describe, expect, test } from "bun:test";
-import { Effect, Stream } from "effect";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
+import * as Stream from "effect/Stream";
+import * as ChildProcess from "effect/unstable/process/ChildProcess";
 import packageJson from "../../package.json";
 
 const binaryPath = Effect.gen(function* () {
   const path = yield* Path.Path;
 
   return path.join(process.cwd(), "dist", "reviewstuff");
-}).pipe(Effect.provide(BunContext.layer), Effect.runSync);
+}).pipe(Effect.provide(BunServices.layer), Effect.runSync);
 
 interface CliResult {
   exitCode: number | null;
@@ -22,7 +25,7 @@ const streamToString = (
 ): Effect.Effect<string, unknown> =>
   stream.pipe(
     Stream.decodeText(),
-    Stream.runFold("", (output, chunk) => output + chunk),
+    Stream.runFold(() => "", (output, chunk) => output + chunk),
   );
 
 function formatFailure(args: ReadonlyArray<string>, result: CliResult): string {
@@ -41,15 +44,11 @@ const runCliProcess = (
   options: { cwd?: string } = {},
 ): Promise<CliResult> =>
   Effect.gen(function* () {
-    const baseCommand = Command.make(binaryPath, ...args).pipe(
-      Command.stdout("pipe"),
-      Command.stderr("pipe"),
-    );
-    const command =
-      options.cwd === undefined
-        ? baseCommand
-        : baseCommand.pipe(Command.workingDirectory(options.cwd));
-    const process = yield* Command.start(command);
+    const process = yield* ChildProcess.make(binaryPath, args, {
+      ...(options.cwd === undefined ? {} : { cwd: options.cwd }),
+      stdout: "pipe",
+      stderr: "pipe",
+    });
     const [stdout, stderr, exitCode] = yield* Effect.all(
       [
         streamToString(process.stdout),
@@ -60,12 +59,12 @@ const runCliProcess = (
     );
 
     return {
-      exitCode,
+      exitCode: Number(exitCode),
       success: exitCode === 0,
       stdout,
       stderr,
     };
-  }).pipe(Effect.scoped, Effect.provide(BunContext.layer), Effect.runPromise);
+  }).pipe(Effect.scoped, Effect.provide(BunServices.layer), Effect.runPromise);
 
 const runCli = (
   args: ReadonlyArray<string>,
@@ -105,12 +104,11 @@ const runGit = async (
   args: ReadonlyArray<string>,
 ): Promise<CliResult> => {
   const result = await Effect.gen(function* () {
-    const command = Command.make("git", ...args).pipe(
-      Command.workingDirectory(cwd),
-      Command.stdout("pipe"),
-      Command.stderr("pipe"),
-    );
-    const process = yield* Command.start(command);
+    const process = yield* ChildProcess.make("git", args, {
+      cwd,
+      stdout: "pipe",
+      stderr: "pipe",
+    });
     const [stdout, stderr, exitCode] = yield* Effect.all(
       [
         streamToString(process.stdout),
@@ -120,8 +118,13 @@ const runGit = async (
       { concurrency: "unbounded" },
     );
 
-    return { exitCode, success: exitCode === 0, stdout, stderr };
-  }).pipe(Effect.scoped, Effect.provide(BunContext.layer), Effect.runPromise);
+    return {
+      exitCode: Number(exitCode),
+      success: exitCode === 0,
+      stdout,
+      stderr,
+    };
+  }).pipe(Effect.scoped, Effect.provide(BunServices.layer), Effect.runPromise);
 
   if (!result.success) {
     throw new Error(
@@ -137,7 +140,7 @@ const makeRepository = async (): Promise<string> => {
     Effect.flatMap((fs) =>
       fs.makeTempDirectory({ prefix: "reviewstuff-git-e2e-" }),
     ),
-    Effect.provide(BunContext.layer),
+    Effect.provide(BunServices.layer),
     Effect.runPromise,
   );
 
@@ -153,14 +156,16 @@ const makeRepository = async (): Promise<string> => {
 
 describe("reviewstuff binary", () => {
   test("--version prints the package version", async () => {
-    expect((await runCli(["--version"])).trim()).toBe(packageJson.version);
+    expect((await runCli(["--version"])).trim()).toBe(
+      `reviewstuff v${packageJson.version}`,
+    );
   });
 
   test("--help prints command documentation", async () => {
     const stdout = await runCli(["--help"]);
 
-    expect(stdout).toContain(`reviewstuff ${packageJson.version}`);
-    expect(stdout).toContain("COMMANDS");
+    expect(stdout).toContain("USAGE");
+    expect(stdout).toContain("SUBCOMMANDS");
     expect(stdout).toContain("review");
     expect(stdout).toContain("doctor");
   });
@@ -170,9 +175,9 @@ describe("reviewstuff binary", () => {
 
     expect(result.exitCode).toBe(1);
     expect(result.stderr).toContain(
-      "Invalid subcommand for reviewstuff - use one of 'review', 'doctor'",
+      'Unknown subcommand "unknown" for "reviewstuff"',
     );
-    expect(result.stdout).toBe("");
+    expect(result.stdout).toContain("USAGE");
   });
 
   test("review command reports a usage failure outside a git repository", async () => {
@@ -180,7 +185,7 @@ describe("reviewstuff binary", () => {
       Effect.flatMap((fs) =>
         fs.makeTempDirectory({ prefix: "reviewstuff-e2e-" }),
       ),
-      Effect.provide(BunContext.layer),
+      Effect.provide(BunServices.layer),
       Effect.runPromise,
     );
 
@@ -201,9 +206,15 @@ describe("reviewstuff binary", () => {
     expect(
       JSON.parse(await runCli(["review", "--json"], { cwd })),
     ).toEqual({
-      schemaVersion: 1,
+      schemaVersion: 2,
       scope: "working-tree",
-      summary: { changedFiles: 0, findings: 0 },
+      summary: {
+        changedFiles: 0,
+        reviewedFiles: 0,
+        skippedFiles: 0,
+        findings: 0,
+      },
+      coverage: { schemaVersion: 1, complete: true, files: [] },
       findings: [],
     });
   });
@@ -227,11 +238,21 @@ describe("reviewstuff binary", () => {
     const report = JSON.parse(
       await runCli(["review", "--json"], { cwd }),
     ) as {
-      summary: { changedFiles: number; findings: number };
+      summary: {
+        changedFiles: number;
+        reviewedFiles: number;
+        skippedFiles: number;
+        findings: number;
+      };
       findings: ReadonlyArray<{ file: string }>;
     };
 
-    expect(report.summary).toEqual({ changedFiles: 3, findings: 3 });
+    expect(report.summary).toEqual({
+      changedFiles: 3,
+      reviewedFiles: 3,
+      skippedFiles: 0,
+      findings: 3,
+    });
     expect(report.findings.map((finding) => finding.file)).toEqual([
       "staged.ts",
       "tracked.ts",
@@ -255,12 +276,22 @@ describe("reviewstuff binary", () => {
       await runCli(["review", "--staged", "--json"], { cwd }),
     ) as {
       scope: string;
-      summary: { changedFiles: number; findings: number };
+      summary: {
+        changedFiles: number;
+        reviewedFiles: number;
+        skippedFiles: number;
+        findings: number;
+      };
       findings: ReadonlyArray<{ file: string }>;
     };
 
     expect(report.scope).toBe("staged");
-    expect(report.summary).toEqual({ changedFiles: 1, findings: 1 });
+    expect(report.summary).toEqual({
+      changedFiles: 1,
+      reviewedFiles: 1,
+      skippedFiles: 0,
+      findings: 1,
+    });
     expect(report.findings.map((finding) => finding.file)).toEqual([
       "staged.ts",
     ]);
@@ -298,11 +329,21 @@ describe("reviewstuff binary", () => {
 
     for (const args of [["review", "--json"], ["review", "--staged", "--json"]]) {
       const report = JSON.parse(await runCli(args, { cwd })) as {
-        summary: { changedFiles: number; findings: number };
+        summary: {
+          changedFiles: number;
+          reviewedFiles: number;
+          skippedFiles: number;
+          findings: number;
+        };
         findings: ReadonlyArray<unknown>;
       };
 
-      expect(report.summary).toEqual({ changedFiles: 1, findings: 0 });
+      expect(report.summary).toEqual({
+        changedFiles: 1,
+        reviewedFiles: 1,
+        skippedFiles: 0,
+        findings: 0,
+      });
       expect(report.findings).toEqual([]);
     }
   });
@@ -322,18 +363,28 @@ describe("reviewstuff binary", () => {
     );
     await FileSystem.FileSystem.pipe(
       Effect.flatMap((fs) => fs.makeDirectory(`${cwd}/nested`)),
-      Effect.provide(BunContext.layer),
+      Effect.provide(BunServices.layer),
       Effect.runPromise,
     );
 
     const report = JSON.parse(
       await runCli(["review", "--json"], { cwd: `${cwd}/nested` }),
     ) as {
-      summary: { changedFiles: number; findings: number };
+      summary: {
+        changedFiles: number;
+        reviewedFiles: number;
+        skippedFiles: number;
+        findings: number;
+      };
       findings: ReadonlyArray<{ file: string }>;
     };
 
-    expect(report.summary).toEqual({ changedFiles: 2, findings: 2 });
+    expect(report.summary).toEqual({
+      changedFiles: 2,
+      reviewedFiles: 2,
+      skippedFiles: 0,
+      findings: 2,
+    });
     expect(report.findings.map((finding) => finding.file)).toEqual([
       ":literal.ts",
       "tracked.ts",
@@ -372,11 +423,51 @@ describe("reviewstuff binary", () => {
     const report = JSON.parse(
       await runCli(["review", "--json"], { cwd }),
     ) as {
-      summary: { changedFiles: number; findings: number };
+      summary: {
+        changedFiles: number;
+        reviewedFiles: number;
+        skippedFiles: number;
+        findings: number;
+      };
+      coverage: {
+        complete: boolean;
+        files: ReadonlyArray<{
+          path: string;
+          status: "reviewed" | "skipped";
+          reason?: string;
+        }>;
+      };
       findings: ReadonlyArray<{ file: string }>;
     };
 
-    expect(report.summary).toEqual({ changedFiles: 1, findings: 1 });
+    expect(report.summary).toEqual({
+      changedFiles: 5,
+      reviewedFiles: 1,
+      skippedFiles: 4,
+      findings: 1,
+    });
+    expect(report.coverage.complete).toBe(false);
+    expect(
+      report.coverage.files.map(({ path, status, reason }) => ({
+        path,
+        status,
+        ...(reason === undefined ? {} : { reason }),
+      })),
+    ).toEqual([
+      { path: "binary.dat", status: "skipped", reason: "binary" },
+      { path: "included.ts", status: "reviewed" },
+      {
+        path: "large-staged.txt",
+        status: "skipped",
+        reason: "file-too-large",
+      },
+      {
+        path: "large-unstaged.txt",
+        status: "skipped",
+        reason: "file-too-large",
+      },
+      { path: "large.txt", status: "skipped", reason: "file-too-large" },
+    ]);
     expect(report.findings.map((finding) => finding.file)).toEqual([
       "included.ts",
     ]);

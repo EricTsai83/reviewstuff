@@ -1,6 +1,9 @@
-import * as FileSystem from "@effect/platform/FileSystem";
-import * as Path from "@effect/platform/Path";
-import { Context, Data, Effect, Layer } from "effect";
+import * as Context from "effect/Context";
+import * as Data from "effect/Data";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Layer from "effect/Layer";
+import * as Path from "effect/Path";
 
 export class FileInspectionError extends Data.TaggedError(
   "FileInspectionError",
@@ -9,7 +12,7 @@ export class FileInspectionError extends Data.TaggedError(
   readonly cause: unknown;
 }> {}
 
-export class FileInspector extends Context.Tag("reviewstuff/FileInspector")<
+export class FileInspector extends Context.Service<
   FileInspector,
   {
     readonly size: (
@@ -17,9 +20,9 @@ export class FileInspector extends Context.Tag("reviewstuff/FileInspector")<
       workingDirectory?: string,
     ) => Effect.Effect<bigint | undefined, FileInspectionError>;
   }
->() {}
+>()("reviewstuff/FileInspector") {}
 
-export type Service = Context.Tag.Service<typeof FileInspector>;
+export type Service = FileInspector["Service"];
 
 export const layer: Layer.Layer<
   FileInspector,
