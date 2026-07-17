@@ -230,19 +230,38 @@
         <h3>Effect 與 domain imports</h3>
         <p><code>Context</code> 用來宣告 service tag，<code>Data</code> 建立可辨識的 tagged error，<code>Effect</code> 描述成功值與錯誤流程，<code>Layer</code> 則把實作與依賴組裝成可注入的 service。<code>ReviewScope</code> 是輸入型別；<code>ReviewFileSource</code> 與 <code>ReviewSkippedFile</code> 讓 Git adapter 和 report domain 共用相同的 coverage 契約；兩個 platform module 則是本服務的執行依賴。</p>
 
-        <h3>四個限制值與空 tree</h3>
+        <h3>四個限制值</h3>
         <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">const</span> commandTimeoutMilliseconds <span class="o">=</span> <span class="n">10_000</span><span class="o">;</span>
 <span class="k">const</span> listOutputLimit <span class="o">=</span> <span class="n">4</span> <span class="o">*</span> <span class="n">1024</span> <span class="o">*</span> <span class="n">1024</span><span class="o">;</span>
 <span class="k">const</span> patchOutputLimit <span class="o">=</span> <span class="n">512</span> <span class="o">*</span> <span class="n">1024</span><span class="o">;</span>
-<span class="k">const</span> fileSizeLimit <span class="o">=</span> <span class="f">BigInt</span><span class="o">(</span>patchOutputLimit<span class="o">)</span><span class="o">;</span>
-<span class="k">const</span> emptyTree <span class="o">=</span> <span class="s">"4b825dc642cb6eb9a060e54bf8d69288fbee4904"</span><span class="o">;</span></code></pre>
+<span class="k">const</span> fileSizeLimit <span class="o">=</span> <span class="f">BigInt</span><span class="o">(</span>patchOutputLimit<span class="o">)</span><span class="o">;</span></code></pre>
         <ul>
           <li>所有 Git 指令最多執行 10 秒。</li>
           <li>列舉路徑等操作最多接收 4 MiB 輸出。</li>
           <li>單一 patch 指令的 stdout 與 stderr 合併輸出上限是 512 KiB。</li>
           <li>檔案大小也以 512 KiB 為門檻；轉成 <code>bigint</code> 是為了與檔案大小結果安全比較。</li>
-          <li><code>emptyTree</code> 是 Git 的空 tree object ID；沒有 <code>HEAD</code> 的初始 repository 可以拿它當 diff base。</li>
         </ul>
+
+        <h3>動態解析空 tree object ID</h3>
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">export</span> <span class="k">const</span> resolveEmptyTree <span class="o">=</span> <span class="o">(</span>
+  runner<span class="o">:</span> <span class="t">CommandRunner</span><span class="o">.</span><span class="t">Service</span><span class="o">,</span>
+  repositoryRoot<span class="o">:</span> <span class="t">string</span><span class="o">,</span>
+<span class="o">)</span><span class="o">:</span> <span class="t">Effect</span><span class="o">.</span><span class="t">Effect</span><span class="o">&lt;</span><span class="t">string</span><span class="o">,</span> <span class="t">GitError</span><span class="o">&gt;</span> <span class="o">=&gt;</span>
+  requireGitSuccess<span class="o">(</span>
+    runner<span class="o">,</span>
+    <span class="s">"resolve empty tree"</span><span class="o">,</span>
+    <span class="o">[</span><span class="s">"hash-object"</span><span class="o">,</span> <span class="s">"-t"</span><span class="o">,</span> <span class="s">"tree"</span><span class="o">,</span> <span class="s">"/dev/null"</span><span class="o">]</span><span class="o">,</span>
+    repositoryRoot<span class="o">,</span>
+  <span class="o">)</span><span class="o">.</span><span class="f">pipe</span><span class="o">(</span>
+    <span class="t">Effect</span><span class="o">.</span><span class="f">flatMap</span><span class="o">(</span><span class="o">(</span>output<span class="o">)</span> <span class="o">=&gt;</span> <span class="o">{</span>
+      <span class="k">const</span> objectId <span class="o">=</span> output<span class="o">.</span><span class="f">trim</span><span class="o">(</span><span class="o">)</span><span class="o">;</span>
+
+      <span class="k">return</span> isObjectId<span class="o">(</span>objectId<span class="o">)</span>
+        <span class="o">?</span> <span class="t">Effect</span><span class="o">.</span><span class="f">succeed</span><span class="o">(</span>objectId<span class="o">)</span>
+        <span class="o">:</span> <span class="t">Effect</span><span class="o">.</span><span class="f">fail</span><span class="o">(</span><span class="k">new</span> <span class="t">GitInvalidOutputError</span><span class="o">(</span><span class="o">{</span> <span class="o">...</span> <span class="o">}</span><span class="o">)</span><span class="o">)</span><span class="o">;</span>
+    <span class="o">}</span><span class="o">)</span><span class="o">,</span>
+  <span class="o">)</span><span class="o">;</span></code></pre>
+        <p>空 tree object ID 仍以 <code>string</code> 表示，但不再寫死 SHA-1 值。<code>resolveEmptyTree</code> 讓目前 repository 的 Git 透過 <code>git hash-object -t tree /dev/null</code> 產生正確 ID，因此同時支援 SHA-1 與 SHA-256 repository。去除換行後，結果必須是 40 或 64 個十六進位字元，否則回傳 <code>GitInvalidOutputError</code>。</p>
 
         <h3>輸出資料結構</h3>
         <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">export</span> interface <span class="t">GitFilePatch</span> <span class="o">{</span>
@@ -268,17 +287,19 @@
           <table>
             <thead><tr><th>錯誤</th><th>代表情況</th><th>攜帶資訊</th></tr></thead>
             <tbody>
-              <tr><td><code>GitNotRepositoryError</code></td><td>目前位置不在 Git working tree 內</td><td>exit code、stdout 與 stderr 長度</td></tr>
+              <tr><td><code>GitNotRepositoryError</code></td><td>Git 明確回報目前位置不在 repository 內</td><td>exit code、stdout 與 stderr 長度</td></tr>
+              <tr><td><code>GitWorkingTreeUnavailableError</code></td><td>repository 偵測成功，但目前位置沒有可用 working tree</td><td>stdout 與 stderr 長度</td></tr>
               <tr><td><code>GitCommandError</code></td><td>指令有執行完成，但 exit code 不符合預期</td><td>操作名稱、exit code、stderr 長度與正規化的 failure 類別</td></tr>
-              <tr><td><code>GitExecutionError</code></td><td>指令啟動、process I/O、終止或檔案檢查失敗</td><td>操作名稱、failure、可選 phase 與原始 <code>cause</code></td></tr>
+              <tr><td><code>GitExecutionError</code></td><td>指令啟動、終止或檔案檢查失敗</td><td>操作名稱、failure 與原始 <code>cause</code></td></tr>
+              <tr><td><code>GitCommandProcessError</code></td><td>讀取 stdout、stderr 或 exit code 時失敗</td><td>操作名稱、必填 phase 與原始 <code>cause</code></td></tr>
               <tr><td><code>GitCommandTimeoutError</code></td><td>Git 指令超過執行時間</td><td>操作名稱、timeout 毫秒數與原始 <code>cause</code></td></tr>
               <tr><td><code>GitCommandOutputLimitError</code></td><td>Git 指令的合併輸出超過限制</td><td>操作名稱、限制、至少已觀察到的 bytes 與原始 <code>cause</code></td></tr>
               <tr><td><code>GitChangedFileUnavailableError</code></td><td>列出的變更檔案在讀取時已不存在或沒有 patch</td><td>路徑與來源</td></tr>
-              <tr><td><code>GitInvalidOutputError</code></td><td>Git 回傳不符合預期格式的 object ID 或大小</td><td>操作名稱與輸出長度</td></tr>
+              <tr><td><code>GitInvalidOutputError</code></td><td>Git 回傳不符合預期格式的 repository 狀態、object ID 或大小</td><td>操作名稱與 UTF-8 輸出 bytes</td></tr>
             </tbody>
           </table>
         </div>
-        <p>七種錯誤以 <code>Data.TaggedError</code> 建立，再合成 <code>GitError</code> union。這讓 Effect 的錯誤 channel 保持明確，呼叫端可以依 tag 分支處理。timeout 與 output limit 不會再被壓成一般 execution error；檔案 race 與 Git 輸出格式錯誤也各有獨立語意。</p>
+        <p>九種錯誤以 <code>Data.TaggedError</code> 建立，再合成 <code>GitError</code> union。這讓 Effect 的錯誤 channel 保持明確，呼叫端可以依 tag 分支處理。timeout、output limit 與帶有必填 phase 的 process read failure 不會被壓成一般 execution error；working-tree 不可用、檔案 race 與 Git 輸出格式錯誤也各有獨立語意。</p>
 
         <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">export</span> <span class="k">class</span> <span class="t">GitService</span> <span class="k">extends</span> <span class="t">Context</span><span class="o">.</span><span class="p">Service</span><span class="o">&lt;</span>
   <span class="t">GitService</span><span class="o">,</span>
@@ -295,13 +316,13 @@
         <h2>4. Git 指令執行層：execute 與 requireSuccess</h2>
         <h3><code>execute</code>：統一執行設定</h3>
         <p><code>execute</code> 封裝共通的 runner 設定：程式固定是 <code>git</code>、所有參數前面加上 <code>--literal-pathspecs</code>、套用 timeout 與輸出限制，並視需要指定 working directory。</p>
-        <p><code>--literal-pathspecs</code> 很重要：它要求 Git 把 pathspec 中的特殊字元當成檔名本身，而不是 glob 或其他 pathspec 語法。runner error 會交給 <code>mapCommandExecutionError</code>：timeout 與 output limit 保留成專屬 Git error；process、termination 與 start failure 才映射成帶分類的 <code>GitExecutionError</code>。</p>
+        <p><code>--literal-pathspecs</code> 很重要：它要求 Git 把 pathspec 中的特殊字元當成檔名本身，而不是 glob 或其他 pathspec 語法。runner error 會交給 <code>mapCommandExecutionError</code>：timeout、output limit 與 process read failure 保留成專屬 Git error；termination 與 start failure 才映射成帶分類的 <code>GitExecutionError</code>。</p>
 
         <h3><code>requireSuccess</code>：exit code 必須是 0</h3>
         <p><code>execute</code> 本身不把非零 exit code 視為 Effect failure，因為有些 Git 指令的非零結果是正常語意。<code>requireSuccess</code> 才加上「必須為 0」的政策：成功只取 <code>stdout</code>，否則透過 <code>makeGitCommandError</code> 建立已分類的 <code>GitCommandError</code>。</p>
         <div class="callout">
           <strong>為什麼不保存 stderr 本文？</strong>
-          <p>Git adapter 會用 stderr 辨識 index lock、權限不足與 repository 損毀等可行動的失敗類別，但 domain error 只保存正規化後的 <code>failure</code> 與 stderr 長度。CLI 依類別顯示穩定的處理建議；無法安全分類時則引導使用者執行 <code>git status</code> 取得原始 Git 診斷。這避免錯誤值承載大量或敏感的命令輸出，同時不會只留下缺乏行動性的 exit code。</p>
+          <p>Git adapter 會用 stderr 辨識權限不足、不安全 ownership、index lock 與 repository 損毀等可行動的失敗類別，但 domain error 只保存正規化後的 <code>failure</code> 與 stderr 長度。權限判斷早於 index lock，避免把 <code>index.lock: Permission denied</code> 誤判為 stale lock。CLI 依類別顯示穩定的處理建議；無法安全分類時則引導使用者執行 <code>git status</code> 取得原始 Git 診斷。</p>
         </div>
       </section>
 
@@ -408,7 +429,8 @@ index <span class="o">+</span><span class="o">=</span> <span class="n">2</span><
         <h3>步驟一：確認 repository 與 root</h3>
         <ol>
           <li>執行 <code>git rev-parse --is-inside-work-tree</code>。</li>
-          <li>exit code 非 0 或 stdout 去空白後不是 <code>true</code>，回傳帶有 exit code 與輸出長度的 <code>GitNotRepositoryError</code>。</li>
+          <li>非零 exit code 且 stderr 明確包含 <code>not a git repository</code> 時回傳 <code>GitNotRepositoryError</code>；其他非零結果保留成已分類的 <code>GitCommandError</code>。</li>
+          <li>exit code 為 0 且 stdout 是 <code>false</code> 時回傳 <code>GitWorkingTreeUnavailableError</code>；既非 <code>true</code> 也非 <code>false</code> 時回傳 <code>GitInvalidOutputError</code>。</li>
           <li>執行 <code>git rev-parse --show-toplevel</code>，並只移除結尾的一個換行序列，取得 repository root。</li>
         </ol>
         <p>第一次檢查尚未知道 repository root，所以使用 runner 的預設 working directory；知道 root 後，後續指令全部固定在 root 執行。</p>
@@ -423,7 +445,7 @@ index <span class="o">+</span><span class="o">=</span> <span class="n">2</span><
         <ol>
           <li>以相似的 <code>git diff --name-status -z</code> 列出 unstaged paths。</li>
           <li>以 <code>git ls-files --others --exclude-standard -z</code> 列出未被 ignore 規則排除的 untracked files。</li>
-          <li>用 <code>git rev-parse --verify --quiet HEAD^{commit}</code> 判斷 commit base 是否存在：exit code 0 使用 <code>HEAD</code>，1 使用 <code>emptyTree</code>，其他 exit code 回傳 <code>GitCommandError</code>。</li>
+          <li>用 <code>git rev-parse --verify --quiet HEAD^{commit}</code> 判斷 commit base 是否存在：exit code 0 使用 <code>HEAD</code>；1 呼叫 <code>resolveEmptyTree</code>，使用 Git 回傳的空 tree object ID；其他 exit code 回傳 <code>GitCommandError</code>。</li>
           <li>合併 staged 與 unstaged tracked paths；把 untracked path 轉成統一的 <code>GitChangedPath</code> 結構。</li>
           <li>用 <code>Effect.all(..., { concurrency: "unbounded" })</code> 同時收集 tracked 與 untracked patch 群組。</li>
           <li><code>files</code> 與 <code>skippedFiles</code> 都以 tracked 在前、untracked 在後的順序串接。</li>
