@@ -1,0 +1,1149 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>git-errors.ts：Git 錯誤模型與觸發情境</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --clay: #D97757;
+      --slate: #141413;
+      --ivory: #FAF9F5;
+      --oat: #E3DACC;
+      --white: #FFFFFF;
+      --gray-100: #F0EEE6;
+      --gray-300: #D1CFC5;
+      --gray-500: #87867F;
+      --gray-700: #3D3D3A;
+      --warning: #C78E3F;
+      --space-sm: 8px;
+      --space-md: 12px;
+      --space-lg: 16px;
+      --space-xl: 24px;
+      --space-2xl: 32px;
+      --space-3xl: 48px;
+      --radius-sm: 4px;
+      --radius-md: 8px;
+      --content-width: 68ch;
+    }
+
+    * { box-sizing: border-box; }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      margin: 0;
+      background: var(--ivory);
+      color: var(--slate);
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 16px;
+      font-weight: 430;
+      line-height: 1.55;
+      letter-spacing: 0;
+    }
+
+    main {
+      max-width: var(--content-width);
+      margin: 0 auto;
+      padding: var(--space-3xl) var(--space-xl);
+    }
+
+    article {
+      background: transparent;
+      border: 0;
+      border-radius: 0;
+      box-shadow: none;
+      padding: 0;
+    }
+
+    h1 {
+      max-width: none;
+      margin: 0 0 var(--space-lg);
+      font-size: 1.8rem;
+      line-height: 1.18;
+      text-wrap: balance;
+      overflow-wrap: normal;
+    }
+
+    h2 {
+      margin: var(--space-3xl) 0 var(--space-lg);
+      font-size: 1.22rem;
+      line-height: 1.25;
+      scroll-margin-top: var(--space-xl);
+    }
+
+    h3 {
+      margin: var(--space-2xl) 0 var(--space-md);
+      font-size: 1rem;
+      line-height: 1.35;
+    }
+
+    p, ul, ol, .deck, .callout, table, pre {
+      max-width: var(--content-width);
+    }
+
+    p { margin: 0 0 var(--space-lg); }
+
+    ul, ol {
+      margin: 0 0 var(--space-xl);
+      padding-left: 1.35rem;
+    }
+
+    li + li { margin-top: var(--space-sm); }
+
+    .deck {
+      margin: 0 0 var(--space-2xl);
+      color: var(--gray-700);
+      font-size: 1.05rem;
+    }
+
+    a {
+      color: var(--clay);
+      text-decoration: underline;
+      text-underline-offset: 0.18em;
+    }
+
+    a:hover { text-decoration-thickness: 2px; }
+
+    nav {
+      margin: 0 0 var(--space-2xl);
+      padding: var(--space-lg) var(--space-xl);
+      border-left: 3px solid var(--clay);
+      background: var(--gray-100);
+    }
+
+    nav strong { display: block; margin-bottom: var(--space-sm); }
+    nav ul { margin: 0; }
+
+    p code, li code, td code, th code {
+      padding: 0.08em 0.28em;
+      border: 1px solid var(--oat);
+      border-radius: var(--radius-sm);
+      background: var(--gray-100);
+      overflow-wrap: anywhere;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.9em;
+    }
+
+    .table-wrap {
+      width: 100%;
+      margin: var(--space-lg) 0 var(--space-xl);
+      overflow-x: auto;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.92rem;
+    }
+
+    th, td {
+      padding: 10px 12px;
+      border: 1px solid var(--oat);
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th {
+      background: var(--gray-100);
+      font-weight: 650;
+    }
+
+    tbody tr:nth-child(even) { background: rgba(240, 238, 230, 0.36); }
+
+    .callout {
+      margin: var(--space-xl) 0;
+      padding: var(--space-lg) var(--space-xl);
+      border: 1px solid var(--oat);
+      border-left: 4px solid var(--clay);
+      border-radius: var(--radius-sm);
+      background: var(--gray-100);
+    }
+
+    .callout.warning { border-left-color: var(--warning); }
+    .callout p:last-child { margin-bottom: 0; }
+
+    .error-section {
+      padding-bottom: var(--space-sm);
+      border-bottom: 1px solid var(--oat);
+    }
+
+    .field-list {
+      display: grid;
+      grid-template-columns: minmax(9rem, 0.8fr) minmax(0, 2fr);
+      margin: var(--space-lg) 0 var(--space-xl);
+      border-top: 1px solid var(--oat);
+    }
+
+    .field-list dt, .field-list dd {
+      margin: 0;
+      padding: 9px 0;
+      border-bottom: 1px solid var(--oat);
+    }
+
+    .field-list dt {
+      padding-right: var(--space-lg);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.88rem;
+      font-weight: 600;
+    }
+
+    .field-list dd { color: var(--gray-700); }
+
+    .error-hierarchy {
+      width: 100%;
+      margin: var(--space-xl) 0 var(--space-2xl);
+    }
+
+    .hierarchy-root {
+      width: fit-content;
+      min-width: 13rem;
+      margin: 0 auto;
+      padding: var(--space-md) var(--space-xl);
+      border: 2px solid var(--clay);
+      border-radius: var(--radius-md);
+      background: var(--white);
+      text-align: center;
+    }
+
+    .hierarchy-root .hierarchy-level {
+      display: block;
+      margin-bottom: 2px;
+      color: var(--gray-500);
+      font-size: 0.75rem;
+      font-weight: 650;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    .hierarchy-root code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 1rem;
+      font-weight: 700;
+    }
+
+    .hierarchy-arrow {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+      margin: 0 auto var(--space-md);
+      color: var(--gray-700);
+      font-size: 0.78rem;
+      font-weight: 600;
+      text-align: center;
+    }
+
+    .hierarchy-arrow::before {
+      width: 2px;
+      height: 24px;
+      background: var(--clay);
+      content: "";
+    }
+
+    .hierarchy-arrow::after {
+      width: 0;
+      height: 0;
+      border-top: 7px solid var(--clay);
+      border-right: 5px solid transparent;
+      border-left: 5px solid transparent;
+      content: "";
+    }
+
+    .hierarchy-groups {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: var(--space-lg);
+    }
+
+    .hierarchy-group {
+      min-width: 0;
+      padding: var(--space-md);
+      border: 1px solid var(--oat);
+      border-radius: var(--radius-md);
+      background: rgba(255, 255, 255, 0.58);
+    }
+
+    .hierarchy-group > h3 {
+      margin: 0 0 var(--space-md);
+      color: var(--gray-700);
+      font-size: 0.82rem;
+      font-weight: 700;
+    }
+
+    .hierarchy-group > h3 span {
+      display: block;
+      margin-top: 2px;
+      color: var(--gray-500);
+      font-size: 0.72rem;
+      font-weight: 500;
+    }
+
+    .tag-node {
+      border: 1px solid var(--oat);
+      border-radius: var(--radius-sm);
+      background: var(--white);
+    }
+
+    .tag-node + .tag-node { margin-top: var(--space-sm); }
+
+    .tag-node summary {
+      position: relative;
+      display: flex;
+      align-items: flex-start;
+      gap: var(--space-sm);
+      padding: 10px 10px 10px 30px;
+      cursor: pointer;
+      list-style: none;
+    }
+
+    .tag-node summary::-webkit-details-marker { display: none; }
+
+    .tag-node summary::before {
+      position: absolute;
+      top: 12px;
+      left: 11px;
+      color: var(--clay);
+      content: "›";
+      font-size: 1.05rem;
+      font-weight: 800;
+      line-height: 1;
+      transform: rotate(0deg);
+    }
+
+    .tag-node[open] summary::before { transform: rotate(90deg); }
+
+    .tag-node summary:focus-visible {
+      outline: 2px solid var(--clay);
+      outline-offset: 2px;
+    }
+
+    .tag-node summary code {
+      min-width: 0;
+      padding: 0;
+      border: 0;
+      background: transparent;
+      overflow-wrap: anywhere;
+      font-size: 0.72rem;
+      font-weight: 650;
+    }
+
+    .discriminator {
+      flex: 0 0 auto;
+      padding: 1px 5px;
+      border: 1px solid rgba(217, 119, 87, 0.42);
+      border-radius: var(--radius-sm);
+      background: rgba(217, 119, 87, 0.09);
+      color: #9d4d35;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.68rem;
+      font-weight: 700;
+    }
+
+    .tag-body {
+      padding: 0 10px 10px 30px;
+      border-top: 1px solid var(--gray-100);
+    }
+
+    .sub-branch {
+      position: relative;
+      margin: 10px 0 7px 12px;
+      color: var(--gray-700);
+      font-size: 0.75rem;
+      font-weight: 650;
+    }
+
+    .sub-branch::before {
+      position: absolute;
+      top: -11px;
+      bottom: 0.48em;
+      left: -12px;
+      width: 8px;
+      border-bottom: 1px solid var(--gray-300);
+      border-left: 1px solid var(--gray-300);
+      content: "";
+    }
+
+    .value-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .value-list li {
+      max-width: 100%;
+      margin: 0;
+    }
+
+    .value-list code {
+      display: inline-block;
+      max-width: 100%;
+      padding: 2px 5px;
+      border-color: var(--gray-300);
+      background: var(--gray-100);
+      overflow-wrap: anywhere;
+      font-size: 0.68rem;
+    }
+
+    .metadata {
+      margin: var(--space-sm) 0 0;
+      color: var(--gray-500);
+      font-size: 0.72rem;
+      line-height: 1.45;
+    }
+
+    .hierarchy-legend {
+      margin: var(--space-md) 0 0;
+      color: var(--gray-700);
+      font-size: 0.78rem;
+    }
+
+    .error-hierarchy figcaption {
+      margin-top: var(--space-md);
+      color: var(--gray-700);
+      font-size: 0.85rem;
+    }
+
+    pre {
+      position: relative;
+      width: 100%;
+      margin: var(--space-lg) 0 var(--space-xl);
+      border: 1px solid #26241f;
+      border-radius: var(--radius-md);
+      background: #11110f;
+      color: #d8d4ca;
+      overflow: hidden;
+    }
+
+    pre code {
+      display: block;
+      border: 0;
+      background: transparent;
+      padding: 18px 64px 18px 22px;
+      color: inherit;
+      overflow-x: auto;
+      white-space: pre;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.875rem;
+      font-weight: 400;
+      line-height: 1.62;
+      scrollbar-width: none;
+    }
+
+    pre code::-webkit-scrollbar { width: 0; height: 0; }
+    pre .label { display: none; }
+
+    .copy-code {
+      position: absolute;
+      top: 9px;
+      right: 9px;
+      z-index: 1;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 30px;
+      height: 30px;
+      padding: 0;
+      border: 1px solid rgba(250, 249, 245, 0.14);
+      border-radius: var(--radius-sm);
+      background: rgba(250, 249, 245, 0.06);
+      color: rgba(250, 249, 245, 0.72);
+      cursor: pointer;
+    }
+
+    .copy-code:hover, .copy-code:focus-visible {
+      border-color: rgba(250, 249, 245, 0.28);
+      background: rgba(250, 249, 245, 0.12);
+      color: var(--ivory);
+      outline: none;
+    }
+
+    .copy-code.copied {
+      border-color: rgba(143, 184, 106, 0.42);
+      background: rgba(143, 184, 106, 0.14);
+      color: #b8d99a;
+    }
+
+    .copy-code svg {
+      width: 13px;
+      height: 13px;
+      stroke: currentColor;
+      stroke-width: 1.8;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      fill: none;
+      pointer-events: none;
+    }
+
+    .code-scrollbar {
+      position: absolute;
+      right: 0;
+      bottom: 0;
+      left: 0;
+      height: 3px;
+      border-radius: 999px;
+      background: rgba(250, 249, 245, 0.1);
+      cursor: pointer;
+    }
+
+    .code-scrollbar.hidden { display: none; }
+
+    .code-scrollbar-thumb {
+      height: 100%;
+      border-radius: inherit;
+      background: rgba(255, 148, 110, 0.82);
+      transform: translateX(0);
+      cursor: grab;
+    }
+
+    .code-scrollbar-thumb:active { cursor: grabbing; }
+
+    pre code .k { color: #ff946e; font-weight: 400; }
+    pre code .s { color: #8fb86a; }
+    pre code .n, pre code .p { color: #d8d4ca; }
+    pre code .c { color: #858177; font-style: italic; }
+    pre code .f { color: #cfc6a2; }
+    pre code .t { color: #cfc6a2; font-weight: 400; }
+    pre code .o { color: #ff946e; }
+
+    .closing {
+      margin-top: var(--space-3xl);
+      padding-top: var(--space-xl);
+      border-top: 1px solid var(--oat);
+    }
+
+    @media (max-width: 640px) {
+      body { font-size: 15px; }
+      h1 { font-size: 1.65rem; }
+      main { padding: var(--space-xl); }
+      pre code { font-size: 0.8125rem; line-height: 1.5; }
+      p code, li code, td code { font-size: 0.9em; }
+      table, .deck { font-size: 0.875rem; }
+      .field-list { grid-template-columns: 1fr; }
+      .field-list dt { padding-bottom: 2px; border-bottom: 0; }
+      .field-list dd { padding-top: 2px; }
+      .hierarchy-groups { grid-template-columns: 1fr; }
+      .hierarchy-group { padding: 10px; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <article>
+      <h1><code>git-errors.ts</code>：Git 錯誤模型與觸發情境</h1>
+      <p class="deck">這個檔案定義 <code>GitService</code> 對外暴露的 typed error。它的重點不是把所有失敗都叫做「Git error」，而是保留失敗發生在哪一層，讓 CLI 可以給出不同訊息，也讓 Effect 程式能用 <code>catchTags</code> 精準處理。</p>
+
+      <nav aria-label="本文目錄">
+        <strong>閱讀路徑</strong>
+        <ul>
+          <li><a href="#hierarchy">展開 Git error 的型別層級</a></li>
+          <li><a href="#mental-model">先用四層模型判斷錯誤</a></li>
+          <li><a href="#errors">逐一理解九種 error</a></li>
+          <li><a href="#mapping">理解兩個轉譯函式</a></li>
+          <li><a href="#boundaries">釐清容易混淆的邊界</a></li>
+        </ul>
+      </nav>
+
+      <section id="hierarchy">
+        <h2>從 <code>GitError</code> 展開完整錯誤層級</h2>
+        <p><code>GitError</code> 是九種 tagged error 的 union。程式先以 <code>_tag</code> 判斷是哪一種 error；選到特定 tag 後，只有三種 error 還需要第二層 discriminator：兩種使用 <code>failure</code>，一種使用 <code>phase</code>。點擊節點可以展開或收合欄位。</p>
+
+        <figure class="error-hierarchy" aria-labelledby="hierarchy-caption">
+          <div class="hierarchy-root">
+            <span class="hierarchy-level">Effect error channel</span>
+            <code>GitError</code>
+          </div>
+          <div class="hierarchy-arrow"><span><code>_tag</code> 選出一個 tagged error</span></div>
+
+          <div class="hierarchy-groups">
+            <section class="hierarchy-group" aria-labelledby="group-precondition">
+              <h3 id="group-precondition">環境前置條件<span>概念分組，不是額外的 runtime tag</span></h3>
+
+              <details class="tag-node">
+                <summary><span class="discriminator">_tag</span><code>GitNotRepositoryError</code></summary>
+                <div class="tag-body">
+                  <p class="metadata"><strong>metadata</strong>：<code>exitCode</code>、<code>stdoutLength</code>、<code>stderrLength</code></p>
+                </div>
+              </details>
+
+              <details class="tag-node">
+                <summary><span class="discriminator">_tag</span><code>GitWorkingTreeUnavailableError</code></summary>
+                <div class="tag-body">
+                  <p class="metadata"><strong>metadata</strong>：<code>stdoutLength</code>、<code>stderrLength</code></p>
+                </div>
+              </details>
+            </section>
+
+            <section class="hierarchy-group" aria-labelledby="group-command">
+              <h3 id="group-command">Git 指令結果<span>Git 已回傳完整 CommandResult</span></h3>
+
+              <details class="tag-node" open>
+                <summary><span class="discriminator">_tag</span><code>GitCommandError</code></summary>
+                <div class="tag-body">
+                  <div class="sub-branch"><code>failure: GitCommandFailure</code></div>
+                  <ul class="value-list" aria-label="GitCommandFailure 的所有值">
+                    <li><code>permission-denied</code></li>
+                    <li><code>unsafe-repository</code></li>
+                    <li><code>index-locked</code></li>
+                    <li><code>repository-corrupt</code></li>
+                    <li><code>unknown</code></li>
+                  </ul>
+                  <p class="metadata"><strong>metadata</strong>：<code>operation</code>、<code>exitCode</code>、<code>stderrLength</code></p>
+                </div>
+              </details>
+            </section>
+
+            <section class="hierarchy-group" aria-labelledby="group-infrastructure">
+              <h3 id="group-infrastructure">執行基礎設施<span>尚未取得可靠的 Git command result</span></h3>
+
+              <details class="tag-node" open>
+                <summary><span class="discriminator">_tag</span><code>GitExecutionError</code></summary>
+                <div class="tag-body">
+                  <div class="sub-branch"><code>failure</code></div>
+                  <ul class="value-list" aria-label="GitExecutionError failure 的所有值">
+                    <li><code>command-start</code></li>
+                    <li><code>command-termination</code></li>
+                    <li><code>file-inspection</code></li>
+                  </ul>
+                  <p class="metadata"><strong>metadata</strong>：<code>operation</code>、<code>cause</code></p>
+                </div>
+              </details>
+
+              <details class="tag-node" open>
+                <summary><span class="discriminator">_tag</span><code>GitCommandProcessError</code></summary>
+                <div class="tag-body">
+                  <div class="sub-branch"><code>phase: GitProcessPhase</code></div>
+                  <ul class="value-list" aria-label="GitProcessPhase 的所有值">
+                    <li><code>stdout</code></li>
+                    <li><code>stderr</code></li>
+                    <li><code>exit-code</code></li>
+                  </ul>
+                  <p class="metadata"><strong>metadata</strong>：<code>operation</code>、<code>cause</code></p>
+                </div>
+              </details>
+
+              <details class="tag-node">
+                <summary><span class="discriminator">_tag</span><code>GitCommandTimeoutError</code></summary>
+                <div class="tag-body">
+                  <p class="metadata"><strong>metadata</strong>：<code>operation</code>、<code>timeoutMilliseconds</code>、<code>cause</code></p>
+                </div>
+              </details>
+
+              <details class="tag-node">
+                <summary><span class="discriminator">_tag</span><code>GitCommandOutputLimitError</code></summary>
+                <div class="tag-body">
+                  <p class="metadata"><strong>metadata</strong>：<code>operation</code>、<code>maxOutputBytes</code>、<code>observedOutputBytes</code>、<code>cause</code></p>
+                </div>
+              </details>
+            </section>
+
+            <section class="hierarchy-group" aria-labelledby="group-domain">
+              <h3 id="group-domain">領域一致性<span>Git 有回覆，但資料不符合 review 假設</span></h3>
+
+              <details class="tag-node">
+                <summary><span class="discriminator">_tag</span><code>GitChangedFileUnavailableError</code></summary>
+                <div class="tag-body">
+                  <p class="metadata"><strong>metadata</strong>：<code>path</code>、<code>source</code></p>
+                </div>
+              </details>
+
+              <details class="tag-node">
+                <summary><span class="discriminator">_tag</span><code>GitInvalidOutputError</code></summary>
+                <div class="tag-body">
+                  <p class="metadata"><strong>metadata</strong>：<code>operation</code>、<code>outputBytes</code></p>
+                </div>
+              </details>
+            </section>
+          </div>
+
+          <p class="hierarchy-legend"><span class="discriminator">_tag</span> 是所有 variant 共用的第一層 discriminator；<code>failure</code> 與 <code>phase</code> 只存在於圖中明確列出的 tag。四個群組標題只是幫助理解失敗層次，不存在於實際資料結構。</p>
+          <figcaption id="hierarchy-caption">由上往下讀：每個 <code>GitError</code> value 先由 <code>_tag</code> 識別 variant；選到該 tag 後，再讀它專屬的 discriminator 與 metadata。</figcaption>
+        </figure>
+      </section>
+
+      <section id="mental-model">
+        <h2>先用四層模型判斷錯誤</h2>
+        <p>讀這個檔案最有效的方式，是先問：「程式有沒有取得完整的 <code>CommandResult</code>？」一個完整結果包含 <code>stdout</code>、<code>stderr</code> 與 <code>exitCode</code>。這個問題能先把 command failure 與執行環境 failure 分開。</p>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>失敗層次</th>
+                <th>判斷方式</th>
+                <th>對應 error</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>環境前置條件</td>
+                <td>目前位置不是 repository，或 repository 沒有可用的 working tree</td>
+                <td><code>GitNotRepositoryError</code>、<code>GitWorkingTreeUnavailableError</code></td>
+              </tr>
+              <tr>
+                <td>Git 指令結果</td>
+                <td>程序正常結束，也取得 exit code，但該操作不接受這個非零結果</td>
+                <td><code>GitCommandError</code></td>
+              </tr>
+              <tr>
+                <td>執行基礎設施</td>
+                <td>啟動、讀取 process、等待 exit code、終止程序、逾時或輸出上限出問題</td>
+                <td><code>GitExecutionError</code>、<code>GitCommandProcessError</code>、<code>GitCommandTimeoutError</code>、<code>GitCommandOutputLimitError</code></td>
+              </tr>
+              <tr>
+                <td>領域一致性</td>
+                <td>Git 有回覆，但資料格式不合法，或列出的變更檔案在稍後讀取時已不可用</td>
+                <td><code>GitInvalidOutputError</code>、<code>GitChangedFileUnavailableError</code></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="callout">
+          <p><strong>核心差異：</strong><code>GitCommandError</code> 表示「Git 跑完後回報失敗」；<code>GitExecutionError</code> 表示「連可靠的 Git 執行結果都沒有拿到」。非零 exit code 本身不是 process infrastructure error。</p>
+        </div>
+
+        <p>所有類別都使用 Effect 的 <code>Data.TaggedError</code>。每個 instance 會有穩定的 <code>_tag</code>，例如 <code>"GitCommandError"</code>；因此上層不必解析 message 字串，可以直接依 tag 做 exhaustive handling。最後的 <code>GitError</code> union 則是 <code>GitService.readDiff</code> 的完整 error channel。</p>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">export</span> <span class="k">type</span> <span class="t">GitError</span> <span class="o">=</span>
+  <span class="o">|</span> <span class="t">GitNotRepositoryError</span>
+  <span class="o">|</span> <span class="t">GitWorkingTreeUnavailableError</span>
+  <span class="o">|</span> <span class="t">GitCommandError</span>
+  <span class="o">|</span> <span class="t">GitExecutionError</span>
+  <span class="o">|</span> <span class="t">GitCommandProcessError</span>
+  <span class="o">|</span> <span class="t">GitCommandTimeoutError</span>
+  <span class="o">|</span> <span class="t">GitCommandOutputLimitError</span>
+  <span class="o">|</span> <span class="t">GitChangedFileUnavailableError</span>
+  <span class="o">|</span> <span class="t">GitInvalidOutputError</span><span class="o">;</span></code></pre>
+      </section>
+
+      <section id="errors">
+        <h2>九種 error 各自代表什麼</h2>
+
+        <section class="error-section">
+          <h3><code>GitNotRepositoryError</code>：Git 明確回報目前不在 repository</h3>
+          <p><code>GitService</code> 一開始執行 <code>git rev-parse --is-inside-work-tree</code>。只有 command 回傳非零 exit code，而且 stderr 明確包含 <code>not a git repository</code> 時，才建立這個 error。</p>
+          <p>典型情境是 CLI 在一般資料夾執行或路徑已不屬於任何 Git repository。其他非零結果，例如權限不足、dubious ownership 或 repository 損壞，會保留成 <code>GitCommandError</code>，不再被誤稱為 not-repository。</p>
+          <dl class="field-list">
+            <dt>exitCode</dt><dd>repository 偵測指令的 exit code。</dd>
+            <dt>stdoutLength</dt><dd>偵測輸出的字串長度，不保留原始 stdout。</dd>
+            <dt>stderrLength</dt><dd>錯誤輸出的字串長度，不保留原始 stderr。</dd>
+          </dl>
+          <div class="callout warning">
+            <p><strong>這仍是最佳努力判斷。</strong><code>not a git repository</code> 是英文 stderr 片段；若 Git 使用其他 locale，真正的 not-repository 可能保守地落入 <code>GitCommandError</code>。這比把權限或損壞誤判為 not-repository 安全，但未完全消除 locale 依賴。</p>
+          </div>
+          <p>要注意：如果連 Git 都啟動不了，或偵測指令逾時，並不會得到這個 error；那些情況會先由 command runner 映射成 execution、timeout 或 output-limit error。</p>
+        </section>
+
+        <section class="error-section">
+          <h3><code>GitWorkingTreeUnavailableError</code>：repository 沒有可用的 working tree</h3>
+          <p>repository 偵測 command exit 0，但 stdout 去除空白後是精確的 <code>false</code> 時建立。最典型的情況是 bare repository：它是合法 Git repository，卻沒有可供 review local changes 的 working tree。</p>
+          <dl class="field-list">
+            <dt>stdoutLength</dt><dd>偵測輸出的字串長度，不保留原始 stdout。</dd>
+            <dt>stderrLength</dt><dd>錯誤輸出的字串長度，不保留原始 stderr。</dd>
+          </dl>
+          <p>這個 tag 與 <code>GitNotRepositoryError</code> 分開，讓 CLI 不會把「是 repository、但沒有 working tree」錯誤描述成「不是 repository」。</p>
+        </section>
+
+        <section class="error-section">
+          <h3><code>GitCommandError</code>：Git 已完成，但該操作失敗</h3>
+          <div class="callout">
+            <p><strong>先讀結論：</strong>這個 error 不是說「Git 無法執行」，而是說「Git 有執行、有回傳結果，但呼叫端判定這次操作沒有成功」。程式知道哪個操作失敗及 Git 回傳的 exit code；至於失敗原因，只能再從 stderr 文字做有限度的推測。</p>
+          </div>
+
+          <p>判斷過程可以拆成三步：</p>
+          <ol>
+            <li>command runner 成功啟動 Git，並取得完整的 <code>CommandResult</code>：<code>stdout</code>、<code>stderr</code> 與 <code>exitCode</code>。</li>
+            <li>執行該操作的程式碼判斷 exit code 是否可接受。多數操作只接受 <code>0</code>；少數探測型指令會把 <code>1</code> 當成「不存在」等正常結果。</li>
+            <li>若 exit code 對該操作而言不在預期範圍，才呼叫 <code>makeGitCommandError</code>，建立 <code>GitCommandError</code>。</li>
+          </ol>
+
+          <p>因此，<strong>非零 exit code 不會自動等於 <code>GitCommandError</code></strong>；是否為錯誤取決於正在執行的 operation 如何解讀它。例如列出 staged files 時 exit code <code>1</code> 是失敗，但用 <code>rev-parse --verify --quiet</code> 探測 object 時，exit code <code>1</code> 可以只是「object 不存在」。</p>
+
+          <p>常見來源包括：列出 staged files 失敗、解析 repository root 失敗、讀 diff 回傳非預期 exit code，或讀取 Git object 失敗。這些情況都已經拿到 Git 的完整執行結果，所以不同於「程序啟動不了」的 <code>GitExecutionError</code>。</p>
+          <dl class="field-list">
+            <dt>operation</dt><dd>呼叫端提供的人類可讀操作名稱，回答「當時想做什麼」，例如 <code>list staged files</code>、<code>resolve git object</code> 或 <code>read working-tree diff</code>。它不是 Git stderr 的內容。</dd>
+            <dt>exitCode</dt><dd>Git process 實際回傳的數值，回答「Git 以什麼狀態結束」。它能確認操作未符合預期，但單靠數字通常不能判斷完整根因。</dd>
+            <dt>stderrLength</dt><dd>stderr 的字元數，只回答「Git 寫了多少錯誤輸出」。error 刻意不攜帶原始 stderr，因此不能靠這個欄位還原錯誤內容。</dd>
+            <dt>failure</dt><dd>程式掃描 stderr 關鍵字後得到的粗略分類，回答「可以先往哪個方向排查」。它是提示，不是經 Git 保證的精確根因。</dd>
+          </dl>
+
+          <p>例如，假設 Git 在讀取 working-tree diff 時回傳 exit code <code>128</code>，stderr 中包含 <code>Permission denied</code>，程式會建立概念上如下的 error：</p>
+
+          <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">new</span> <span class="f">GitCommandError</span><span class="o">(</span><span class="o">{</span>
+  operation<span class="o">:</span> <span class="s">"read working-tree diff"</span><span class="o">,</span>
+  exitCode<span class="o">:</span> <span class="n">128</span><span class="o">,</span>
+  stderrLength<span class="o">:</span> <span class="n">42</span><span class="o">,</span>
+  failure<span class="o">:</span> <span class="s">"permission-denied"</span><span class="o">,</span>
+<span class="o">}</span><span class="o">)</span><span class="o">;</span></code></pre>
+
+          <p>這裡可以確定的是：程式正在讀 working-tree diff，而且 Git 回傳了 <code>128</code>。<code>permission-denied</code> 則表示 stderr 命中了權限相關片段，適合拿來產生修復建議；它不保證權限一定是唯一或最底層的根因。</p>
+
+          <p><code>failure</code> 有五種值。分類前會先把 stderr 轉成小寫，所以不受英文大小寫影響；條件按照下表由上到下比對，第一個符合者勝出。權限檢查刻意早於 index lock，避免 <code>index.lock: Permission denied</code> 被錯誤解讀成 stale lock。</p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>failure</th>
+                  <th>stderr 判斷</th>
+                  <th>常見情境與 CLI 建議</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>permission-denied</code></td>
+                  <td>包含 <code>permission denied</code> 或 <code>access is denied</code></td>
+                  <td>repository、object database、index 或檔案權限不足。第二個片語兼顧常見 Windows 訊息。</td>
+                </tr>
+                <tr>
+                  <td><code>unsafe-repository</code></td>
+                  <td>包含 <code>dubious ownership</code> 或 <code>safe.directory</code></td>
+                  <td>Git 因目錄 ownership 安全檢查拒絕 repository。CLI 會要求先驗證 owner，只有信任該目錄時才設定 <code>safe.directory</code>。</td>
+                </tr>
+                <tr>
+                  <td><code>index-locked</code></td>
+                  <td>包含 <code>index.lock</code>，並同時包含 <code>file exists</code>、<code>another git process</code> 或 <code>index is locked</code></td>
+                  <td>另一個 Git process 正在操作 index，或先前異常中止留下 stale lock。CLI 會建議確認沒有其他 Git process，再移除過期的 <code>.git/index.lock</code>。</td>
+                </tr>
+                <tr>
+                  <td><code>repository-corrupt</code></td>
+                  <td>包含 <code>corrupt</code>、<code>bad object</code>、<code>invalid object</code> 或 <code>index file smaller than expected</code></td>
+                  <td>Git object、ref 或 index 疑似損壞。CLI 會建議執行 <code>git fsck</code> 取得細節。</td>
+                </tr>
+                <tr>
+                  <td><code>unknown</code></td>
+                  <td>以上皆未命中</td>
+                  <td>程式知道 Git command 失敗，但沒有可靠規則可細分；CLI 建議先執行 <code>git status</code>。</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="callout warning">
+            <p><strong><code>failure</code> 是輕量文字判斷，不是 Git 官方錯誤協定。</strong>目前程式只是把 stderr 轉成小寫，再搜尋幾個英文片段；它沒有解析結構化的 Git error code。若使用不同 locale、Git 版本，或遇到規則尚未涵蓋的訊息，即使原因其實是權限或 repository 損壞，也可能得到 <code>unknown</code>。</p>
+            <p>閱讀這個 error 時，應把欄位分成兩層：<code>operation</code> 與 <code>exitCode</code> 是可靠的執行脈絡；<code>failure</code> 是為了選擇較有用的使用者提示而做的最佳努力分類。<code>unknown</code> 只代表「現有規則無法分類」，不代表沒有錯誤，也不代表發生了某種名為 unknown 的 Git 錯誤。</p>
+          </div>
+        </section>
+
+        <section class="error-section">
+          <h3><code>GitExecutionError</code>：程序或檔案檢查基礎設施失敗</h3>
+          <p>這個 wrapper 保留 command start、termination 或 filesystem inspection 的底層 <code>cause</code>。它不代表 Git 以非零 exit code 拒絕操作，而是取得結果的過程本身失敗。</p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>failure</th>
+                  <th>發生位置</th>
+                  <th>可能情境</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>command-start</code></td>
+                  <td>建立 Git child process</td>
+                  <td><code>git</code> 不在 PATH、執行檔無法啟動、作業系統拒絕 spawn，或工作目錄無效。</td>
+                </tr>
+                <tr>
+                  <td><code>command-termination</code></td>
+                  <td>command 結束後的清理階段</td>
+                  <td>runner 嘗試以 <code>SIGKILL</code> 終止仍在執行的 child process，但 kill 操作失敗。</td>
+                </tr>
+                <tr>
+                  <td><code>file-inspection</code></td>
+                  <td>讀取 working-tree 或 untracked 檔案大小</td>
+                  <td>filesystem inspector 本身失敗，例如權限、I/O 或無法存取工作目錄。</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <dl class="field-list">
+            <dt>operation</dt><dd>失敗時正在進行的 Git 領域操作。</dd>
+            <dt>failure</dt><dd><code>command-start</code>、<code>command-termination</code> 或 <code>file-inspection</code>。</dd>
+            <dt>cause</dt><dd>原始 typed error 或 filesystem error，保留給診斷與測試。</dd>
+          </dl>
+        </section>
+
+        <section class="error-section">
+          <h3><code>GitCommandProcessError</code>：讀取 process 結果時失敗</h3>
+          <p>當 command 已啟動，但讀取 stdout、stderr 或 exit code 的 stream 發生非預期錯誤時建立。它獨立成一個 tag，使 <code>phase</code> 在型別上永遠必填，不再允許 <code>command-process</code> 卻缺少 phase 的不合法狀態。</p>
+          <dl class="field-list">
+            <dt>operation</dt><dd>失敗時正在進行的 Git 領域操作。</dd>
+            <dt>phase</dt><dd><code>stdout</code>、<code>stderr</code> 或 <code>exit-code</code>。</dd>
+            <dt>cause</dt><dd>command runner 的 <code>CommandProcessError</code>。</dd>
+          </dl>
+        </section>
+
+        <section class="error-section">
+          <h3><code>GitCommandTimeoutError</code>：Git 超過 10 秒仍未完成</h3>
+          <p>所有透過 <code>executeGit</code> 執行的 Git command 都設定 10,000 ms timeout。超時會保留成專屬 error，而不是被壓成一般 <code>GitExecutionError</code>，所以 CLI 能直接告訴使用者是哪個 operation 逾時多久。</p>
+          <dl class="field-list">
+            <dt>operation</dt><dd>逾時的高階 Git 操作。</dd>
+            <dt>timeoutMilliseconds</dt><dd>本次 command 的時間上限，目前固定為 10,000。</dd>
+            <dt>cause</dt><dd>command runner 的 <code>CommandTimeoutError</code>。</dd>
+          </dl>
+          <p>可能原因包括 repository 很大、儲存裝置或 network filesystem 太慢、Git hook／外部環境阻塞，或 child process 卡住。timeout 發生後 runner 仍會進入 process termination 清理。</p>
+        </section>
+
+        <section class="error-section">
+          <h3><code>GitCommandOutputLimitError</code>：stdout 與 stderr 合計超出上限</h3>
+          <p>command runner 使用同一個 byte counter 計算 stdout 與 stderr，因此這裡的限制是兩個 stream 的<strong>合計</strong>，不是各自一份額度。只要目前觀察到的 bytes 超過限制，就立即失敗。</p>
+          <dl class="field-list">
+            <dt>operation</dt><dd>產生過多輸出的 Git 操作。</dd>
+            <dt>maxOutputBytes</dt><dd>該操作允許的最大 combined output。</dd>
+            <dt>observedOutputBytes</dt><dd>觸發失敗時至少已觀察到的 bytes，通常剛超過上限。</dd>
+            <dt>cause</dt><dd>command runner 的 <code>CommandOutputLimitError</code>。</dd>
+          </dl>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>操作類型</th><th>上限</th><th>例子</th></tr></thead>
+              <tbody>
+                <tr><td>一般列表與 metadata</td><td>4 MiB</td><td>列 staged／unstaged／untracked files、repository root</td></tr>
+                <tr><td>單一 patch</td><td>512 KiB</td><td>讀 staged、working-tree 或 untracked diff</td></tr>
+                <tr><td>Git object metadata</td><td>1 KiB</td><td>解析 object ID、讀 object size、解析 empty tree</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p>這個 error 是整次 review 的 fatal failure。它與「檔案太大所以略過」不同：檔案大小預檢若已知超過 512 KiB，可以產生可解釋的 skipped record；但若 command 已經把 patch 輸出到超限，程式無法證明 patch 完整，因此不能假裝 coverage 只是一般 skip。</p>
+        </section>
+
+        <section class="error-section">
+          <h3><code>GitChangedFileUnavailableError</code>：列舉與讀取之間，檔案狀態改變了</h3>
+          <p><code>GitService</code> 先列出 changed paths，再逐一檢查大小與讀 patch。這兩步不是 atomic transaction；若使用者、編輯器或另一個 process 在中間刪除／移動檔案，就可能發生典型的 TOCTOU（time-of-check to time-of-use）race。</p>
+          <p>目前有兩個明確觸發點：</p>
+          <ul>
+            <li>列出的 untracked file 在 filesystem size inspection 時已不存在，因此 size 是 <code>undefined</code>。</li>
+            <li>Git diff command 的 exit code 在允許範圍內，但 stdout 為空，代表先前列出的變更已無法產生 patch。</li>
+          </ul>
+          <dl class="field-list">
+            <dt>path</dt><dd>已變得不可讀或無 patch 的檔案路徑。</dd>
+            <dt>source</dt><dd><code>staged</code>、<code>working-tree</code> 或 <code>untracked</code>，指出它原本來自哪種 review coverage。</dd>
+          </dl>
+          <p>這不是 binary 或 large file 的 skip。程式會讓整次讀取失敗，因為如果靜默略過，最終 review report 可能宣稱 coverage 完整，但實際遺漏一個原本列出的變更。</p>
+        </section>
+
+        <section class="error-section">
+          <h3><code>GitInvalidOutputError</code>：Git 成功回覆，但格式違反程式假設</h3>
+          <p>這類錯誤發生在 exit code 看似成功，但 stdout 無法安全解析。現在程式驗證四種輸出：</p>
+          <ul>
+            <li><code>detect git repository</code>：輸出必須是精確的 <code>true</code> 或 <code>false</code>。</li>
+            <li><code>resolve empty tree</code>：輸出必須是 40 或 64 位十六進位 object ID，以支援 SHA-1 與 SHA-256 repository。</li>
+            <li><code>resolve git object</code>：<code>rev-parse</code> 成功後也必須得到同樣格式的 object ID。</li>
+            <li><code>inspect git object</code>：<code>git cat-file -s</code> 的輸出必須全部是十進位數字，才能轉成 <code>BigInt</code>。</li>
+          </ul>
+          <dl class="field-list">
+            <dt>operation</dt><dd>哪一個解析步驟收到不合法輸出。</dd>
+            <dt>outputBytes</dt><dd>以 UTF-8 計算的輸出 bytes；不保留原始內容。</dd>
+          </dl>
+          <p>這通常暗示 Git 輸出被 wrapper、alias、環境或異常 repository 狀態干擾，也可能是程式的格式假設需要更新。它和 <code>GitCommandError</code> 的差別是：後者有明確的失敗 exit code；這裡則是「表面成功、內容不可信」。</p>
+        </section>
+      </section>
+
+      <section id="mapping">
+        <h2>兩個 helper 如何把底層失敗轉成 Git error</h2>
+
+        <h3><code>mapCommandExecutionError</code>：保留重要的 runner 分類</h3>
+        <p><code>CommandRunner</code> 有五種 execution error。mapper 使用 <code>Match.valueTags</code> 依底層 <code>_tag</code> 做 exhaustive mapping：timeout、output limit 與帶有必填 phase 的 process failure 都提升成專屬 Git error；start 與 termination failure 則收斂為帶有 <code>failure</code> discriminator 的 <code>GitExecutionError</code>。</p>
+
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>CommandRunner error</th><th>Git error</th><th>保留資訊</th></tr></thead>
+            <tbody>
+              <tr><td><code>CommandStartError</code></td><td><code>GitExecutionError</code></td><td><code>failure: "command-start"</code>、cause</td></tr>
+              <tr><td><code>CommandTimeoutError</code></td><td><code>GitCommandTimeoutError</code></td><td>timeout ms、cause</td></tr>
+              <tr><td><code>CommandOutputLimitError</code></td><td><code>GitCommandOutputLimitError</code></td><td>limit、observed bytes、cause</td></tr>
+              <tr><td><code>CommandProcessError</code></td><td><code>GitCommandProcessError</code></td><td>必填 phase、cause</td></tr>
+              <tr><td><code>CommandTerminationError</code></td><td><code>GitExecutionError</code></td><td><code>failure: "command-termination"</code>、cause</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3><code>makeGitCommandError</code>：從 stderr 提煉可操作分類</h3>
+        <p>這個 helper 接收已完成的 <code>CommandResult</code>，以 stderr 關鍵字推導 <code>failure</code>，最後只留下 operation、exit code、stderr 長度與分類。測試特別確認 error instance 沒有 <code>stderr</code> property，表示原始錯誤文字不會一路流進上層 report。</p>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">const</span> stderr <span class="o">=</span> result<span class="o">.</span><span class="p">stderr</span><span class="o">.</span><span class="p">toLowerCase</span><span class="o">(</span><span class="o">)</span><span class="o">;</span>
+<span class="k">let</span> failure<span class="o">:</span> <span class="t">GitCommandFailure</span> <span class="o">=</span> <span class="s">"unknown"</span><span class="o">;</span>
+
+<span class="k">if</span> <span class="o">(</span>
+  stderr<span class="o">.</span><span class="p">includes</span><span class="o">(</span><span class="s">"permission denied"</span><span class="o">)</span> <span class="o">|</span><span class="o">|</span>
+  stderr<span class="o">.</span><span class="p">includes</span><span class="o">(</span><span class="s">"access is denied"</span><span class="o">)</span>
+<span class="o">)</span> <span class="o">{</span>
+  failure <span class="o">=</span> <span class="s">"permission-denied"</span><span class="o">;</span>
+<span class="o">}</span> <span class="k">else</span> <span class="k">if</span> <span class="o">(</span>
+  stderr<span class="o">.</span><span class="p">includes</span><span class="o">(</span><span class="s">"dubious ownership"</span><span class="o">)</span> <span class="o">|</span><span class="o">|</span>
+  stderr<span class="o">.</span><span class="p">includes</span><span class="o">(</span><span class="s">"safe.directory"</span><span class="o">)</span>
+<span class="o">)</span> <span class="o">{</span>
+  failure <span class="o">=</span> <span class="s">"unsafe-repository"</span><span class="o">;</span>
+<span class="o">}</span> <span class="k">else</span> <span class="k">if</span> <span class="o">(</span>
+  stderr<span class="o">.</span><span class="p">includes</span><span class="o">(</span><span class="s">"index.lock"</span><span class="o">)</span> <span class="o">&amp;</span><span class="o">&amp;</span>
+  <span class="o">(</span>stderr<span class="o">.</span><span class="p">includes</span><span class="o">(</span><span class="s">"file exists"</span><span class="o">)</span> <span class="o">|</span><span class="o">|</span>
+    stderr<span class="o">.</span><span class="p">includes</span><span class="o">(</span><span class="s">"another git process"</span><span class="o">)</span> <span class="o">|</span><span class="o">|</span>
+    stderr<span class="o">.</span><span class="p">includes</span><span class="o">(</span><span class="s">"index is locked"</span><span class="o">)</span><span class="o">)</span>
+<span class="o">)</span> <span class="o">{</span>
+  failure <span class="o">=</span> <span class="s">"index-locked"</span><span class="o">;</span>
+<span class="o">}</span></code></pre>
+
+        <p>這種設計讓 domain error 不依賴任意長度的 Git 診斷內容，也避免直接把 repository path 或其他 stderr 細節顯示給終端使用者。代價是失去原始文字；如果未來需要深度除錯，較合適的做法是把原始 cause／stderr送到受控的 debug logging，而不是改變公開 error contract。</p>
+      </section>
+
+      <section id="boundaries">
+        <h2>幾個容易混淆的邊界</h2>
+
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>看起來相似的情況</th><th>實際判斷</th></tr></thead>
+            <tbody>
+              <tr>
+                <td>Git 回傳 exit code 128</td>
+                <td>有完整結果，所以通常是 <code>GitCommandError</code>；repository 偵測只有在 stderr 明確指出 <code>not a git repository</code> 時才轉成 <code>GitNotRepositoryError</code>。</td>
+              </tr>
+              <tr>
+                <td>無法執行 <code>git</code></td>
+                <td>沒有 command result，是 <code>GitExecutionError</code> 的 <code>command-start</code>，不是 <code>GitCommandError</code>。</td>
+              </tr>
+              <tr>
+                <td><code>rev-parse --quiet</code> exit 1</td>
+                <td>在特定 object／HEAD 探測中是預期的「不存在」，可能回傳 <code>undefined</code> 或改用 empty tree；其他非預期 exit code 才成為 <code>GitCommandError</code>。</td>
+              </tr>
+              <tr>
+                <td>檔案超過 512 KiB</td>
+                <td>大小預檢已知時是 <code>file-too-large</code> skip；command 輸出實際衝破 512 KiB 時是 fatal <code>GitCommandOutputLimitError</code>。</td>
+              </tr>
+              <tr>
+                <td>Git exit 0 但輸出是垃圾值</td>
+                <td>如果該輸出有嚴格 parser，會是 <code>GitInvalidOutputError</code>，而非 command failure。</td>
+              </tr>
+              <tr>
+                <td>repository 偵測 exit 0 且輸出 <code>false</code></td>
+                <td>目前位置沒有可用 working tree，使用 <code>GitWorkingTreeUnavailableError</code>；它不等於「不是 repository」。</td>
+              </tr>
+              <tr>
+                <td>列出變更後檔案被刪除</td>
+                <td>若已無法取得預期 patch，屬於 coverage 一致性問題，使用 <code>GitChangedFileUnavailableError</code>。</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="callout">
+          <p><strong>快速判斷順序：</strong>先問是否取得完整 command result；再看 exit code 是否為該操作的預期值；成功時再驗證輸出格式；最後確認列舉的檔案仍可提供 patch。這個順序正好對應本檔案的錯誤邊界。</p>
+        </div>
+
+        <div class="callout warning">
+          <p><strong>欄位單位並不完全相同：</strong><code>maxOutputBytes</code>、<code>observedOutputBytes</code> 與 <code>outputBytes</code> 都以 bytes 計算；<code>stdoutLength</code> 與 <code>stderrLength</code> 仍是 JavaScript 字串的 <code>.length</code>，計算 UTF-16 code units。欄位名稱刻意用 <code>Length</code> 與 <code>Bytes</code> 區分兩者。</p>
+        </div>
+      </section>
+
+      <section class="closing">
+        <h2>整體設計的意義</h2>
+        <p><code>git-errors.ts</code> 是平台層與 Git domain 之間的 anti-corruption layer。底層只知道 process spawn、stream 與 bytes；Git domain 則補上 operation、repository、object、patch 與 coverage 的語意。上層 CLI 因此能用 tag 做完整分流，同時不必知道 child-process 實作細節。</p>
+        <p>這套模型最重要的不是 error class 數量，而是它沒有把「Git 說不行」、「Git 根本沒跑完」、「Git 回了無法解析的資料」與「變更在讀取途中消失」混成同一種失敗。這讓錯誤訊息、測試與未來恢復策略都有清楚的落點。</p>
+      </section>
+    </article>
+  </main>
+
+  <script>
+    (() => {
+      const copyIcon = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="11" height="11" rx="2"></rect><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"></path></svg>';
+      const checkIcon = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"></path></svg>';
+
+      const fallbackCopy = (text) => {
+        const area = document.createElement("textarea");
+        area.value = text;
+        area.setAttribute("readonly", "");
+        area.style.position = "fixed";
+        area.style.opacity = "0";
+        document.body.appendChild(area);
+        area.select();
+        const copied = document.execCommand("copy");
+        area.remove();
+        return copied;
+      };
+
+      document.querySelectorAll("pre").forEach((pre) => {
+        const code = pre.querySelector("code");
+        if (!code) return;
+
+        const button = document.createElement("button");
+        button.className = "copy-code";
+        button.type = "button";
+        button.setAttribute("aria-label", "複製程式碼");
+        button.innerHTML = copyIcon;
+        button.addEventListener("click", async () => {
+          let copied = false;
+          try {
+            if (navigator.clipboard) {
+              await navigator.clipboard.writeText(code.textContent || "");
+              copied = true;
+            } else {
+              copied = fallbackCopy(code.textContent || "");
+            }
+          } catch {
+            copied = fallbackCopy(code.textContent || "");
+          }
+          if (!copied) return;
+          button.classList.add("copied");
+          button.innerHTML = checkIcon;
+          setTimeout(() => {
+            button.classList.remove("copied");
+            button.innerHTML = copyIcon;
+          }, 1400);
+        });
+        pre.appendChild(button);
+
+        const track = document.createElement("div");
+        track.className = "code-scrollbar";
+        const thumb = document.createElement("div");
+        thumb.className = "code-scrollbar-thumb";
+        track.appendChild(thumb);
+        pre.appendChild(track);
+
+        const syncThumb = () => {
+          const overflow = code.scrollWidth - code.clientWidth;
+          if (overflow <= 1) {
+            track.classList.add("hidden");
+            return;
+          }
+          track.classList.remove("hidden");
+          const ratio = code.clientWidth / code.scrollWidth;
+          const width = Math.max(28, track.clientWidth * ratio);
+          const travel = track.clientWidth - width;
+          thumb.style.width = `${width}px`;
+          thumb.style.transform = `translateX(${overflow === 0 ? 0 : (code.scrollLeft / overflow) * travel}px)`;
+        };
+
+        code.addEventListener("scroll", syncThumb, { passive: true });
+        window.addEventListener("resize", syncThumb, { passive: true });
+        requestAnimationFrame(syncThumb);
+
+        let dragStartX = 0;
+        let dragStartScroll = 0;
+        thumb.addEventListener("pointerdown", (event) => {
+          dragStartX = event.clientX;
+          dragStartScroll = code.scrollLeft;
+          thumb.setPointerCapture(event.pointerId);
+        });
+        thumb.addEventListener("pointermove", (event) => {
+          if (!thumb.hasPointerCapture(event.pointerId)) return;
+          const maxThumbTravel = track.clientWidth - thumb.clientWidth;
+          const overflow = code.scrollWidth - code.clientWidth;
+          if (maxThumbTravel > 0) {
+            code.scrollLeft = dragStartScroll + ((event.clientX - dragStartX) / maxThumbTravel) * overflow;
+          }
+        });
+        track.addEventListener("click", (event) => {
+          if (event.target === thumb) return;
+          const rect = track.getBoundingClientRect();
+          const ratio = (event.clientX - rect.left) / rect.width;
+          code.scrollLeft = ratio * (code.scrollWidth - code.clientWidth);
+        });
+      });
+    })();
+  </script>
+</body>
+</html>
