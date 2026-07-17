@@ -1,8 +1,60 @@
 import { expect, test } from "bun:test";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import {
+  ConfigService,
+  resolveReviewConfig,
+  UnsupportedReviewSelectionError,
+} from "../../src/config/config-service";
 import { GitService } from "../../src/git/git-service";
-import { runReview } from "../../src/use-cases/run-review";
+import {
+  ReviewTimeoutError,
+  runReview,
+} from "../../src/use-cases/run-review";
+
+const config = Layer.succeed(ConfigService, {
+  load: (overrides) => Effect.succeed(resolveReviewConfig(undefined, overrides)),
+});
+
+test("runReview rejects selections that cannot execute yet", async () => {
+  const git = Layer.succeed(GitService, {
+    readDiff: () => Effect.die("unsupported selections must fail before Git"),
+  });
+
+  const error = await runReview("working-tree", {
+    engine: "openai",
+    provider: "openai",
+    model: "gpt-example",
+  }).pipe(
+    Effect.provide(git),
+    Effect.provide(config),
+    Effect.flip,
+    Effect.runPromise,
+  );
+
+  expect(error).toEqual(
+    new UnsupportedReviewSelectionError({
+      engine: "openai",
+      provider: "openai",
+      model: "gpt-example",
+    }),
+  );
+});
+
+test("runReview applies the resolved timeout to review work", async () => {
+  const git = Layer.succeed(GitService, {
+    readDiff: () => Effect.never,
+  });
+
+  const error = await runReview("working-tree", { timeoutMs: 1 }).pipe(
+    Effect.provide(git),
+    Effect.provide(config),
+    Effect.flip,
+    Effect.runPromise,
+  );
+
+  expect(error).toEqual(new ReviewTimeoutError({ timeoutMilliseconds: 1 }));
+});
 
 test("runReview produces deterministic findings from added marker lines", async () => {
   const git = Layer.succeed(GitService, {
@@ -25,6 +77,7 @@ test("runReview produces deterministic findings from added marker lines", async 
   });
   const report = await runReview("working-tree").pipe(
     Effect.provide(git),
+    Effect.provide(config),
     Effect.runPromise,
   );
 
@@ -80,6 +133,7 @@ test("finding IDs do not change when the same patch is staged", async () => {
             }),
         }),
       ),
+      Effect.provide(config),
       Effect.map((report) => report.findings[0]?.id),
       Effect.runPromise,
     );
@@ -117,6 +171,7 @@ test("runReview reports deterministic incomplete coverage", async () => {
           }),
       }),
     ),
+    Effect.provide(config),
     Effect.runPromise,
   );
 

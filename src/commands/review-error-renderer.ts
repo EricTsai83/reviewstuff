@@ -53,6 +53,14 @@ const renderGitExecutionFailure = (
 
 export const renderReviewError = (error: RunReviewError): string =>
   Match.valueTags(error, {
+    ConfigFileReadError: (configError) =>
+      `Unable to read config file ${escapeTerminalText(configError.path)}.`,
+    ConfigFileInvalidError: (configError) =>
+      `Invalid config file ${escapeTerminalText(configError.path)}: ${escapeTerminalText(configError.message)}`,
+    UnsupportedReviewSelectionError: (selectionError) =>
+      `Unsupported review selection: engine=${escapeTerminalText(selectionError.engine)}, provider=${escapeTerminalText(selectionError.provider)}, model=${escapeTerminalText(selectionError.model)}. This build supports engine=fake, provider=fake, model=fake-reviewer-v1.`,
+    ReviewTimeoutError: (timeoutError) =>
+      `Review timed out after ${Duration.format(Duration.millis(timeoutError.timeoutMilliseconds))}.`,
     GitNotRepositoryError: (repositoryError) =>
       `Not a git repository (or any parent directory); detection exited with code ${repositoryError.exitCode}.`,
     GitWorkingTreeUnavailableError: () =>

@@ -1,0 +1,105 @@
+import { describe, expect, test } from "bun:test";
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
+import {
+  profiles,
+  resolveReviewConfig,
+} from "../../src/config/config-service";
+import { ReviewstuffConfigJsonSchema } from "../../src/config/schema";
+
+const decodeConfig = (contents: string) =>
+  Schema.decodeUnknownEffect(ReviewstuffConfigJsonSchema)(contents, {
+    onExcessProperty: "error",
+  }).pipe(Effect.runPromise);
+
+describe("config schema", () => {
+  test("decodes the versioned config shape", async () => {
+    expect(
+      await decodeConfig(
+        JSON.stringify({
+          schemaVersion: 1,
+          review: {
+            profile: "standard",
+            engine: "fake",
+            provider: "fake",
+            model: "fake-reviewer-v1",
+            timeoutMs: 120_000,
+            concurrency: 2,
+          },
+        }),
+      ),
+    ).toEqual({
+      schemaVersion: 1,
+      review: {
+        profile: "standard",
+        engine: "fake",
+        provider: "fake",
+        model: "fake-reviewer-v1",
+        timeoutMs: 120_000,
+        concurrency: 2,
+      },
+    });
+  });
+
+  test.each([
+    [{ schemaVersion: 2 }, "unsupported schema version"],
+    [
+      { schemaVersion: 1, review: { profile: "thorough" } },
+      "unsupported profile",
+    ],
+    [
+      { schemaVersion: 1, review: { timeoutMs: 0 } },
+      "non-positive timeout",
+    ],
+    [
+      { schemaVersion: 1, review: { concurrency: 1.5 } },
+      "non-integer concurrency",
+    ],
+    [{ schemaVersion: 1, unknown: true }, "unknown property"],
+  ])("rejects %s (%s)", async (input) => {
+    expect(decodeConfig(JSON.stringify(input))).rejects.toBeDefined();
+  });
+});
+
+describe("review config resolution", () => {
+  test("uses the standard profile when no config exists", () => {
+    expect(resolveReviewConfig(undefined)).toEqual(profiles.standard);
+  });
+
+  test("quick and standard profiles have distinct execution budgets", () => {
+    expect(profiles.quick.timeoutMs).toBeLessThan(profiles.standard.timeoutMs);
+    expect(profiles.quick.concurrency).toBeLessThan(
+      profiles.standard.concurrency,
+    );
+  });
+
+  test("resolves profile defaults, config values, then CLI overrides", () => {
+    expect(
+      resolveReviewConfig(
+        {
+          schemaVersion: 1,
+          review: {
+            profile: "quick",
+            engine: "config-engine",
+            provider: "config-provider",
+            model: "config-model",
+            timeoutMs: 45_000,
+            concurrency: 3,
+          },
+        },
+        {
+          profile: "standard",
+          engine: "cli-engine",
+          model: "cli-model",
+        },
+      ),
+    ).toEqual({
+      profile: "standard",
+      engine: "cli-engine",
+      provider: "config-provider",
+      model: "cli-model",
+      timeoutMs: 45_000,
+      concurrency: 3,
+    });
+  });
+});

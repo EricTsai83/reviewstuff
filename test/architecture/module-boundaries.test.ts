@@ -291,7 +291,12 @@ test("source modules preserve the documented dependency direction", async () => 
         moduleName.startsWith("effect/unstable/process");
       const importsBunPlatform = moduleName.startsWith("@effect/platform-bun");
 
-      if (area !== "root" && area !== "platform" && importsEffectPlatform) {
+      if (
+        area !== "root" &&
+        area !== "platform" &&
+        area !== "config" &&
+        importsEffectPlatform
+      ) {
         violations.push(
           `${relativeFile}: ${area} must use semantic services instead of ${moduleName}`,
         );

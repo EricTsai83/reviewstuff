@@ -1,4 +1,12 @@
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import {
+  type ConfigError,
+  ConfigService,
+  type ReviewConfigOverrides,
+  type ResolvedReviewConfig,
+  UnsupportedReviewSelectionError,
+} from "../config/config-service";
 import type { Finding } from "../domain/finding";
 import type { ReviewFileCoverage } from "../domain/review-file";
 import type { ReviewReport } from "../domain/report";
@@ -10,9 +18,30 @@ import {
   GitService,
 } from "../git/git-service";
 
-export type RunReviewError = GitError;
+export class ReviewTimeoutError extends Data.TaggedError(
+  "ReviewTimeoutError",
+)<{
+  readonly timeoutMilliseconds: number;
+}> {}
+
+export type RunReviewError = GitError | ConfigError | ReviewTimeoutError;
 
 const fakeFindingMarker = "REVIEWSTUFF_FAKE_FINDING";
+
+const ensureSupportedFakeSelection = (
+  config: ResolvedReviewConfig,
+): Effect.Effect<void, UnsupportedReviewSelectionError> =>
+  config.engine === "fake" &&
+    config.provider === "fake" &&
+    config.model === "fake-reviewer-v1"
+    ? Effect.void
+    : Effect.fail(
+        new UnsupportedReviewSelectionError({
+          engine: config.engine,
+          provider: config.provider,
+          model: config.model,
+        }),
+      );
 
 // Finding IDs are compatibility-sensitive deterministic identities. This is
 // intentionally not a cryptographic hash and must never be used for security.
@@ -109,10 +138,34 @@ const buildReviewReport = (
 
 export const runReview = (
   scope: ReviewScope,
-): Effect.Effect<ReviewReport, RunReviewError, GitService> =>
+  overrides: ReviewConfigOverrides = {},
+): Effect.Effect<
+  ReviewReport,
+  RunReviewError,
+  GitService | ConfigService
+> =>
   Effect.gen(function* () {
+    const configService = yield* ConfigService;
     const git = yield* GitService;
-    const diff = yield* git.readDiff(scope);
-    const findings = diff.files.flatMap(findingsForPatch);
-    return buildReviewReport(scope, diff, findings);
+    const config = yield* configService.load(overrides);
+    yield* ensureSupportedFakeSelection(config);
+    return yield* Effect.gen(function* () {
+      const diff = yield* git.readDiff(scope);
+      const findings = yield* Effect.forEach(
+        diff.files,
+        (file) => Effect.sync(() => findingsForPatch(file)),
+        { concurrency: config.concurrency },
+      ).pipe(Effect.map((fileFindings) => fileFindings.flat()));
+      return buildReviewReport(scope, diff, findings);
+    }).pipe(
+      Effect.timeoutOrElse({
+        duration: config.timeoutMs,
+        orElse: () =>
+          Effect.fail(
+            new ReviewTimeoutError({
+              timeoutMilliseconds: config.timeoutMs,
+            }),
+          ),
+      }),
+    );
   });

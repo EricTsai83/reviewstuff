@@ -219,6 +219,82 @@ describe("reviewstuff binary", () => {
     });
   });
 
+  test("review accepts config profiles and CLI selection overrides", async () => {
+    const cwd = await makeRepository();
+    await Bun.write(
+      `${cwd}/reviewstuff.config.json`,
+      JSON.stringify({
+        schemaVersion: 1,
+        review: {
+          profile: "quick",
+          engine: "configured-engine",
+          provider: "configured-provider",
+          model: "configured-model",
+          timeoutMs: 10_000,
+          concurrency: 1,
+        },
+      }),
+    );
+
+    const report = JSON.parse(
+      await runCli(
+        [
+          "review",
+          "--profile",
+          "standard",
+          "--engine",
+          "fake",
+          "--provider",
+          "fake",
+          "--model",
+          "fake-reviewer-v1",
+          "--timeout-ms",
+          "120000",
+          "--concurrency",
+          "2",
+          "--json",
+        ],
+        { cwd },
+      ),
+    ) as { schemaVersion: number };
+
+    expect(report.schemaVersion).toBe(2);
+  });
+
+  test("invalid config is rendered as a usage error without a stack trace", async () => {
+    const cwd = await makeRepository();
+    await Bun.write(
+      `${cwd}/reviewstuff.config.json`,
+      JSON.stringify({
+        schemaVersion: 1,
+        review: { profile: "thorough" },
+      }),
+    );
+
+    const result = await runCliExpectingFailure(["review"], { cwd });
+
+    expect(result.exitCode).toBe(1);
+    expect(result.stdout).toBe("");
+    expect(result.stderr).toContain(
+      "Invalid config file reviewstuff.config.json",
+    );
+    expect(result.stderr).not.toContain("ConfigFileInvalidError");
+    expect(result.stderr).not.toContain("at runReview");
+  });
+
+  test("unsupported engine selection fails instead of running the fake reviewer", async () => {
+    const cwd = await makeRepository();
+    const result = await runCliExpectingFailure(
+      ["review", "--engine", "openai", "--model", "gpt-example"],
+      { cwd },
+    );
+
+    expect(result.exitCode).toBe(1);
+    expect(result.stdout).toBe("");
+    expect(result.stderr).toContain("Unsupported review selection");
+    expect(result.stderr).toContain("This build supports engine=fake");
+  });
+
   test("default review includes staged, unstaged, and untracked text", async () => {
     const cwd = await makeRepository();
     await Bun.write(

@@ -1,6 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import { renderReviewError } from "../../src/commands/review-error-renderer";
 import {
+  ConfigFileInvalidError,
+  ConfigFileReadError,
+  UnsupportedReviewSelectionError,
+} from "../../src/config/config-service";
+import {
   GitChangedFileUnavailableError,
   GitCommandError,
   GitCommandOutputLimitError,
@@ -12,8 +17,44 @@ import {
   GitUnmergedPathsError,
   GitWorkingTreeUnavailableError,
 } from "../../src/git/git-service";
+import { ReviewTimeoutError } from "../../src/use-cases/run-review";
 
 describe("renderReviewError", () => {
+  test.each([
+    [
+      new ConfigFileReadError({
+        path: "reviewstuff.config.json",
+        cause: undefined,
+      }),
+      "Unable to read config file reviewstuff.config.json.",
+    ],
+    [
+      new ConfigFileInvalidError({
+        path: "reviewstuff.config.json",
+        message: "Invalid value\nat review.timeoutMs",
+      }),
+      "Invalid config file reviewstuff.config.json: Invalid value\\u000aat review.timeoutMs",
+    ],
+    [
+      new UnsupportedReviewSelectionError({
+        engine: "openai",
+        provider: "openai",
+        model: "gpt-example",
+      }),
+      "Unsupported review selection: engine=openai, provider=openai, model=gpt-example. This build supports engine=fake, provider=fake, model=fake-reviewer-v1.",
+    ],
+  ])("renders config failures without causes or stack traces", (error, message) => {
+    expect(renderReviewError(error)).toBe(message);
+  });
+
+  test("renders review timeout failures", () => {
+    expect(
+      renderReviewError(
+        new ReviewTimeoutError({ timeoutMilliseconds: 30_000 }),
+      ),
+    ).toBe("Review timed out after 30s.");
+  });
+
   test.each([
     [
       "index-locked",
