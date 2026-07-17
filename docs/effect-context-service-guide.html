@@ -1,0 +1,1174 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="從 Shape、Service key、runtime identity、Layer 到 Effect.provide，完整理解 Effect Context.Service 的用途與實際用法。">
+  <title>Effect Context.Service 實用指南：從服務契約到依賴注入</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --clay: #D97757;
+      --slate: #141413;
+      --ivory: #FAF9F5;
+      --oat: #E3DACC;
+      --white: #FFFFFF;
+      --gray-100: #F0EEE6;
+      --gray-300: #D1CFC5;
+      --gray-500: #87867F;
+      --gray-700: #3D3D3A;
+      --warning: #C78E3F;
+      --sage: #e2ede5;
+      --sage-dark: #34634c;
+      --blue: #e4ebf0;
+      --blue-dark: #3b6077;
+      --space-sm: 8px;
+      --space-md: 12px;
+      --space-lg: 16px;
+      --space-xl: 24px;
+      --space-2xl: 32px;
+      --space-3xl: 48px;
+      --radius-sm: 4px;
+      --radius-md: 8px;
+      --radius-lg: 12px;
+      --content-width: 68ch;
+    }
+
+    * { box-sizing: border-box; }
+
+    html {
+      scroll-behavior: smooth;
+      scroll-padding-top: 24px;
+      background: var(--ivory);
+    }
+
+    body {
+      margin: 0;
+      color: var(--slate);
+      background: var(--ivory);
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 16px;
+      font-weight: 430;
+      line-height: 1.55;
+      letter-spacing: 0;
+    }
+
+    main {
+      max-width: var(--content-width);
+      margin: 0 auto;
+      padding: var(--space-3xl) var(--space-xl);
+    }
+
+    article { min-width: 0; }
+
+    h1, h2, h3 {
+      margin-top: 0;
+      color: var(--slate);
+      letter-spacing: -0.024em;
+      text-wrap: balance;
+    }
+
+    h1 {
+      max-width: none;
+      margin-bottom: var(--space-lg);
+      font-size: 1.8rem;
+      font-weight: 720;
+      line-height: 1.18;
+      overflow-wrap: normal;
+    }
+
+    h2 {
+      margin: var(--space-3xl) 0 var(--space-lg);
+      padding-top: var(--space-xl);
+      border-top: 1px solid var(--oat);
+      font-size: 1.22rem;
+      font-weight: 700;
+      line-height: 1.25;
+    }
+
+    h3 {
+      margin: 38px 0 14px;
+      font-size: 1rem;
+      font-weight: 700;
+      line-height: 1.35;
+    }
+
+    p { margin: 0 0 19px; }
+
+    p,
+    ul,
+    ol,
+    .deck,
+    .callout,
+    table,
+    pre { max-width: var(--content-width); }
+
+    .deck {
+      max-width: 62ch;
+      margin-bottom: var(--space-2xl);
+      color: var(--gray-700);
+      font-size: 1.08rem;
+      line-height: 1.72;
+    }
+
+    a {
+      color: var(--clay);
+      text-decoration-thickness: 1px;
+      text-underline-offset: 3px;
+    }
+
+    .toc {
+      margin: 0 0 var(--space-3xl);
+      padding: 18px 22px;
+      background: var(--white);
+      border: 1px solid var(--oat);
+      border-left: 4px solid var(--clay);
+      border-radius: var(--radius-md);
+    }
+
+    .toc strong { display: block; margin-bottom: 7px; font-size: 0.82rem; letter-spacing: 0.06em; }
+    .toc ol { margin: 0; padding-left: 1.25rem; columns: 2; column-gap: 32px; }
+    .toc li { margin: 4px 0; break-inside: avoid; }
+    .toc a { color: var(--gray-700); text-decoration: none; }
+    .toc a:hover { color: var(--clay); text-decoration: underline; }
+
+    code {
+      padding: 0.08em 0.28em;
+      color: #342d28;
+      background: var(--gray-100);
+      border: 1px solid var(--oat);
+      border-radius: var(--radius-sm);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 0.88em;
+      overflow-wrap: anywhere;
+    }
+
+    pre {
+      position: relative;
+      width: 100%;
+      margin: var(--space-lg) 0 var(--space-xl);
+      overflow: hidden;
+      color: #d8d4ca;
+      background: #11110f;
+      border: 1px solid #26241f;
+      border-radius: var(--radius-md);
+    }
+
+    pre .label {
+      display: none;
+    }
+
+    pre code {
+      display: block;
+      padding: 18px 64px 18px 22px;
+      color: inherit;
+      background: transparent;
+      border: 0;
+      border-radius: 0;
+      overflow-x: auto;
+      white-space: pre;
+      font-size: 0.875rem;
+      font-weight: 400;
+      line-height: 1.62;
+      overflow-wrap: normal;
+      tab-size: 2;
+      scrollbar-width: none;
+    }
+
+    pre code::-webkit-scrollbar { width: 0; height: 0; }
+    pre code .k { color: #ff946e; font-weight: 400; }
+    pre code .s { color: #8fb86a; }
+    pre code .n,
+    pre code .p { color: #d8d4ca; }
+    pre code .c { color: #858177; font-style: italic; }
+    pre code .f { color: #cfc6a2; }
+    pre code .t { color: #cfc6a2; font-weight: 400; }
+    pre code .o { color: #ff946e; }
+
+    .copy-code {
+      position: absolute;
+      top: 9px;
+      right: 9px;
+      z-index: 1;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 30px;
+      height: 30px;
+      padding: 0;
+      color: rgba(250, 249, 245, 0.72);
+      background: rgba(250, 249, 245, 0.06);
+      border: 1px solid rgba(250, 249, 245, 0.14);
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+    }
+
+    .copy-code:hover,
+    .copy-code:focus-visible {
+      color: var(--ivory);
+      background: rgba(250, 249, 245, 0.12);
+      border-color: rgba(250, 249, 245, 0.28);
+      outline: none;
+    }
+
+    .copy-code.copied {
+      color: #b8d99a;
+      background: rgba(143, 184, 106, 0.14);
+      border-color: rgba(143, 184, 106, 0.42);
+    }
+
+    .copy-code svg {
+      width: 13px;
+      height: 13px;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 1.8;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      pointer-events: none;
+    }
+
+    .code-scrollbar {
+      position: absolute;
+      right: 0;
+      bottom: 0;
+      left: 0;
+      height: 3px;
+      background: rgba(250, 249, 245, 0.1);
+      border-radius: 999px;
+      cursor: pointer;
+    }
+
+    .code-scrollbar.hidden { display: none; }
+
+    .code-scrollbar-thumb {
+      height: 100%;
+      background: rgba(255, 148, 110, 0.82);
+      border-radius: inherit;
+      transform: translateX(0);
+      cursor: grab;
+    }
+
+    .code-scrollbar-thumb:active { cursor: grabbing; }
+
+    .callout {
+      margin: 26px 0;
+      padding: 19px 22px;
+      background: var(--gray-100);
+      border: 1px solid var(--oat);
+      border-left: 4px solid var(--clay);
+      border-radius: 0 var(--radius-md) var(--radius-md) 0;
+    }
+
+    .callout.tip {
+      background: var(--sage);
+      border-left-color: var(--sage-dark);
+    }
+
+    .callout p:last-child,
+    .callout ul:last-child { margin-bottom: 0; }
+
+    .callout-title {
+      display: block;
+      margin-bottom: 5px;
+      font-weight: 740;
+    }
+
+    .term-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+      margin: 26px 0;
+    }
+
+    .term {
+      padding: 18px;
+      background: var(--white);
+      border: 1px solid var(--oat);
+      border-radius: var(--radius-md);
+    }
+
+    .term dt { margin-bottom: 6px; color: var(--clay); font-weight: 760; }
+    .term dd { margin: 0; color: var(--gray-700); font-size: 0.9rem; }
+
+    .anatomy {
+      margin: 26px 0;
+      padding: 22px;
+      background: var(--white);
+      border: 1px solid var(--oat);
+      border-radius: var(--radius-lg);
+    }
+
+    .anatomy-line {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 7px;
+      align-items: center;
+      margin-bottom: 18px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: clamp(0.75rem, 2.4vw, 0.9rem);
+    }
+
+    .anatomy-line span { padding: 7px 9px; border-radius: var(--radius-sm); }
+    .anatomy-line .plain { padding-inline: 0; }
+    .anatomy-line .shape { color: var(--blue-dark); background: var(--blue); }
+    .anatomy-line .calls { color: #7d492b; background: #f1e3d3; }
+    .anatomy-line .identity { color: var(--sage-dark); background: var(--sage); }
+
+    .anatomy-legend {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+      color: var(--gray-700);
+      font-size: 0.82rem;
+      line-height: 1.5;
+    }
+
+    .anatomy-legend strong { display: block; margin-bottom: 2px; color: var(--slate); }
+
+    .table-wrap {
+      width: 100%;
+      margin: 26px 0;
+      overflow-x: auto;
+      background: var(--white);
+      border: 1px solid var(--oat);
+      border-radius: var(--radius-md);
+    }
+
+    table { width: 100%; border-collapse: collapse; font-size: 0.88rem; line-height: 1.55; }
+    th, td { padding: 12px 14px; border-bottom: 1px solid var(--oat); text-align: left; vertical-align: top; }
+    th { color: var(--gray-700); background: var(--gray-100); font-size: 0.74rem; letter-spacing: 0.04em; }
+    tr:last-child td { border-bottom: 0; }
+
+    .flow-figure {
+      margin: 30px 0;
+      padding: 20px;
+      background: var(--white);
+      border: 1px solid var(--oat);
+      border-radius: var(--radius-lg);
+    }
+
+    .flow-figure svg {
+      display: block;
+      width: 100%;
+      height: auto;
+    }
+
+    .flow-figure .flow-mobile { display: none; }
+
+    .flow-node rect {
+      fill: var(--white);
+      stroke: var(--oat);
+      stroke-width: 1.5;
+    }
+
+    .flow-node.emphasis rect { fill: var(--sage); stroke: #a9c5b3; }
+    .flow-node.type rect { fill: var(--blue); stroke: #b6ccd9; }
+
+    .flow-node text {
+      fill: var(--slate);
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 14px;
+      font-weight: 700;
+    }
+
+    .flow-node .flow-note {
+      fill: var(--gray-700);
+      font-size: 11px;
+      font-weight: 520;
+    }
+
+    .flow-arrow {
+      fill: none;
+      stroke: var(--clay);
+      stroke-width: 2;
+      marker-end: url(#service-flow-arrow-desktop);
+    }
+
+    .flow-mobile .flow-arrow { marker-end: url(#service-flow-arrow-mobile); }
+
+    figcaption {
+      margin-top: 12px;
+      color: var(--gray-700);
+      font-size: 0.82rem;
+      text-align: center;
+    }
+
+    .steps {
+      margin: 28px 0;
+      padding: 0;
+      list-style: none;
+      counter-reset: step;
+    }
+
+    .steps li {
+      position: relative;
+      min-height: 42px;
+      margin-bottom: 18px;
+      padding: 1px 0 0 54px;
+      counter-increment: step;
+    }
+
+    .steps li::before {
+      content: counter(step);
+      position: absolute;
+      top: 0;
+      left: 0;
+      display: grid;
+      width: 36px;
+      height: 36px;
+      place-items: center;
+      color: white;
+      background: var(--clay);
+      border-radius: 50%;
+      font-size: 0.78rem;
+      font-weight: 800;
+    }
+
+    .steps strong { display: block; margin-bottom: 3px; }
+
+    .type-change {
+      display: grid;
+      grid-template-columns: 1fr auto 1fr;
+      gap: 12px;
+      align-items: stretch;
+      margin: 26px 0;
+    }
+
+    .type-state {
+      padding: 17px;
+      background: var(--white);
+      border: 1px solid var(--oat);
+      border-radius: var(--radius-md);
+    }
+
+    .type-state small { display: block; margin-bottom: 7px; color: var(--gray-500); font-size: 0.72rem; font-weight: 740; letter-spacing: 0.05em; }
+    .type-state code { display: block; line-height: 1.55; }
+    .type-arrow { display: grid; place-items: center; color: var(--clay); font-weight: 800; }
+
+    .checklist {
+      margin: 26px 0;
+      padding: 20px 22px;
+      background: var(--sage);
+      border: 1px solid #bdd3c5;
+      border-radius: var(--radius-md);
+    }
+
+    .checklist strong { display: block; margin-bottom: 8px; }
+    .checklist ul { margin: 0; }
+
+    ul, ol { padding-left: 1.35rem; }
+    li { margin-bottom: 7px; }
+
+    .references {
+      margin-top: var(--space-3xl);
+      padding-top: var(--space-xl);
+      color: var(--gray-700);
+      border-top: 1px solid var(--oat);
+      font-size: 0.875rem;
+    }
+
+    .references h2 { margin-top: 0; padding-top: 0; border-top: 0; }
+
+    @media (max-width: 640px) {
+      body { font-size: 15px; }
+      main { padding: var(--space-xl); }
+      h1 { font-size: 1.65rem; }
+      .toc ol { columns: 1; }
+      .term-grid, .anatomy-legend { grid-template-columns: 1fr; }
+      .anatomy { padding: 18px; }
+      .flow-figure { padding: 14px; }
+      .flow-figure .flow-desktop { display: none; }
+      .flow-figure .flow-mobile { display: block; }
+      .type-change { grid-template-columns: 1fr; }
+      .type-arrow { transform: rotate(90deg); }
+      pre code { font-size: 0.8125rem; line-height: 1.5; }
+      p code,
+      li code,
+      td code { font-size: 0.9em; }
+      table,
+      .deck,
+      .references { font-size: 0.875rem; }
+      th, td { min-width: 145px; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <article>
+      <h1>Effect <code>Context.Service</code> 實用指南</h1>
+      <p class="deck">這篇文章以 Effect 4 的 class-style API 為準，用一個 Git 服務貫穿完整流程：先用 <code>Shape</code> 定義服務能做什麼，再建立 Effect 可識別的服務 key，最後用 Layer 提供實作。目標不是只看懂宣告語法，而是能獨立寫出、使用與測試一個 Context Service。</p>
+
+      <nav class="toc" aria-label="文章目錄">
+        <strong>閱讀路徑</strong>
+        <ol>
+          <li><a href="#problem">它解決什麼問題</a></li>
+          <li><a href="#terms">四個必要角色</a></li>
+          <li><a href="#declaration">拆解服務宣告</a></li>
+          <li><a href="#extends">extends 繼承什麼</a></li>
+          <li><a href="#consume">在程式中索取服務</a></li>
+          <li><a href="#provide">建立並提供實作</a></li>
+          <li><a href="#test">替換測試實作</a></li>
+          <li><a href="#mistakes">常見誤解</a></li>
+        </ol>
+      </nav>
+
+      <div class="callout">
+        <span class="callout-title">先確認 Effect 版本</span>
+        <p>本文使用 Effect 4 的 <code>Context.Service</code>。較早版本的文件與程式碼常使用 <code>Context.Tag</code>；兩者共享「key 對應 implementation」的心智模型，但 API 與型別寫法不應直接混用。</p>
+      </div>
+
+      <section id="problem">
+        <h2>Context Service 解決的是「依賴從哪裡來」</h2>
+        <p>一般函式如果需要 Git 功能，最直接的做法是把一個物件當參數傳入。這本身沒有錯，但當同一份依賴需要穿過很多層函式，或正式環境與測試需要不同實作時，手動傳遞會逐漸變得繁瑣。</p>
+
+        <p>以下片段視為同一個 TypeScript 模組，使用 Effect 4 的模組化 imports：</p>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">import</span> <span class="o">*</span> <span class="k">as</span> <span class="t">Context</span> <span class="k">from</span> <span class="s">"effect/Context"</span>
+<span class="k">import</span> <span class="o">*</span> <span class="k">as</span> <span class="t">Effect</span> <span class="k">from</span> <span class="s">"effect/Effect"</span>
+<span class="k">import</span> <span class="o">*</span> <span class="k">as</span> <span class="t">Layer</span> <span class="k">from</span> <span class="s">"effect/Layer"</span>
+
+interface <span class="t">GitError</span> <span class="o">{</span>
+  readonly _tag<span class="o">:</span> <span class="s">"GitError"</span>
+  readonly message<span class="o">:</span> string
+<span class="o">}</span>
+
+interface <span class="t">GitServiceShape</span> <span class="o">{</span>
+  readonly getDiff<span class="o">:</span> <span class="o">(</span><span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span> <span class="t">Effect</span><span class="o">.</span><span class="p">Effect</span><span class="o">&lt;</span>string<span class="o">&gt;</span>
+<span class="o">}</span>
+
+<span class="k">const</span> review <span class="o">=</span> <span class="o">(</span>
+  git<span class="o">:</span> <span class="t">GitServiceShape</span><span class="o">,</span>
+<span class="o">)</span><span class="o">:</span> <span class="t">Effect</span><span class="o">.</span><span class="p">Effect</span><span class="o">&lt;</span>string<span class="o">&gt;</span> <span class="o">=</span><span class="o">&gt;</span> git<span class="o">.</span><span class="p">getDiff</span><span class="o">(</span><span class="o">)</span></code></pre>
+
+        <p>Effect 的 Context Service 把這件事改成「宣告需求，稍後組裝」：核心程式只表示自己需要 Git 服務，不決定服務如何建立。應用程式入口再提供正式 Layer，測試則可提供假 Layer。</p>
+
+        <div class="callout tip">
+          <span class="callout-title">核心心智模型</span>
+          <p><code>Context.Service</code> 建立的是一個服務 key。程式用 key 索取依賴；Context 用 key 找到對應的 service implementation；Layer 則負責把 implementation 放進 Context。</p>
+        </div>
+      </section>
+
+      <section id="terms">
+        <h2>先分清四個角色</h2>
+        <p>Effect 的文件與社群常同時使用 key、tag、service、implementation、Layer 等詞。先把責任分開，比背語法重要。</p>
+
+        <dl class="term-grid">
+          <div class="term">
+            <dt>Shape</dt>
+            <dd>服務契約。描述取得服務後有哪些方法，以及每個方法的 Effect 成功值與錯誤型別。</dd>
+          </div>
+          <div class="term">
+            <dt>Service key / Tag</dt>
+            <dd>查詢服務用的識別物。本文使用 class-style <code>Context.Service</code> 建立它。</dd>
+          </div>
+          <div class="term">
+            <dt>Service implementation</dt>
+            <dd>真正執行工作的物件。它必須符合 Shape，但不必是 <code>GitService</code> class 的 instance。</dd>
+          </div>
+          <div class="term">
+            <dt>Layer</dt>
+            <dd>建立並提供服務的配方。可管理建構依賴、錯誤與資源生命週期。</dd>
+          </div>
+        </dl>
+
+        <p>Context 可以先概念化為一張型別安全的對照表：</p>
+
+        <pre class="language-typescript"><span class="label">概念模型</span><code><span class="t">Context</span> <span class="o">{</span>
+  <span class="s">"reviewstuff/GitService"</span> <span class="o">=</span><span class="o">&gt;</span> gitServiceImplementation
+<span class="o">}</span></code></pre>
+
+        <p>這不是在描述 Effect 內部實作一定是一個普通 JavaScript <code>Map</code>，而是用來理解查找關係：同一個 runtime identity 對應同一個服務槽位。</p>
+      </section>
+
+      <section id="declaration">
+        <h2>用三層拆解 <code>Context.Service</code> 宣告</h2>
+        <p>以下 class 的目的不是建立一般的 <code>GitService</code> 業務物件，而是建立一個 Effect 可以識別、索取與注入的服務 key：</p>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">class</span> <span class="t">GitService</span> <span class="k">extends</span> <span class="t">Context</span><span class="o">.</span><span class="p">Service</span><span class="o">&lt;</span><span class="t">GitService</span><span class="o">,</span> <span class="t">GitServiceShape</span><span class="o">&gt;</span><span class="o">(</span><span class="o">)</span><span class="o">(</span>
+  <span class="s">"reviewstuff/GitService"</span><span class="o">,</span>
+<span class="o">)</span> <span class="o">{</span><span class="o">}</span></code></pre>
+
+        <div class="anatomy">
+          <div class="anatomy-line" aria-label="Context Service 語法分區">
+            <span class="plain">Context.Service</span>
+            <span class="shape">&lt;GitService, GitServiceShape&gt;</span>
+            <span class="calls">()</span>
+            <span class="identity">(&quot;reviewstuff/GitService&quot;)</span>
+          </div>
+          <div class="anatomy-legend">
+            <div><strong>型別層</strong><span>依賴識別型別與服務內容。</span></div>
+            <div><strong>第一次呼叫</strong><span>選擇 class-style，取回一個「建立 class 的函式」。</span></div>
+            <div><strong>第二次呼叫</strong><span>把 identity 傳給該函式，取回一個 class。</span></div>
+          </div>
+        </div>
+
+        <h3>factory 函式到底是什麼？</h3>
+        <p><em>Factory function</em> 中文常譯為「工廠函式」。它不是 JavaScript 關鍵字，也不是 Effect 專屬型別；它只是一個普通函式的角色名稱：<strong>這個函式的主要工作，是根據輸入建立並回傳某個東西。</strong></p>
+
+        <p>最常見的是建立物件：</p>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">const</span> makeUser <span class="o">=</span> <span class="o">(</span>name<span class="o">:</span> string<span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span> <span class="o">{</span>
+  <span class="k">return</span> <span class="o">{</span> name <span class="o">}</span>
+<span class="o">}</span>
+
+<span class="k">const</span> eric <span class="o">=</span> <span class="f">makeUser</span><span class="o">(</span><span class="s">"Eric"</span><span class="o">)</span>
+<span class="c">// eric 是新建立的物件：{ name: "Eric" }</span></code></pre>
+
+        <p><code>makeUser</code> 被稱為 factory，不是因為它有特殊語法，而是因為它負責「生產物件」。同樣地，如果一個函式負責建立並回傳 class，就可稱為 <em>class factory</em>：</p>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">const</span> makeBaseClass <span class="o">=</span> <span class="o">(</span>serviceId<span class="o">:</span> string<span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span> <span class="o">{</span>
+  <span class="k">return</span> <span class="k">class</span> <span class="o">{</span>
+    static readonly id <span class="o">=</span> serviceId
+  <span class="o">}</span>
+<span class="o">}</span>
+
+<span class="k">const</span> <span class="t">GitServiceBase</span> <span class="o">=</span> <span class="f">makeBaseClass</span><span class="o">(</span>
+  <span class="s">"reviewstuff/GitService"</span><span class="o">,</span>
+<span class="o">)</span>
+<span class="c">// GitServiceBase 是一個 class，不是它的 instance</span>
+
+<span class="k">class</span> <span class="t">GitService</span> <span class="k">extends</span> <span class="t">GitServiceBase</span> <span class="o">{</span><span class="o">}</span></code></pre>
+
+        <div class="callout tip">
+          <span class="callout-title">factory、class 與 instance 是三個不同角色</span>
+          <p><code>makeBaseClass</code> 是 factory 函式；<code>GitServiceBase</code> 是它回傳的 class；只有呼叫 <code>new GitServiceBase()</code> 才會得到 instance。Effect 這裡需要的是中間那個 class，因為 <code>extends</code> 後面必須是一個 class constructor。</p>
+        </div>
+
+        <p>套回 <code>Context.Service</code>：第一組 <code>()</code> 回傳的函式會接收 service identity，然後建立可被繼承的 base class。因為它負責「建立 class」，所以本文把它稱為 <strong>class factory</strong>。</p>
+
+        <h3>先回答最卡的問題：為什麼有兩組 <code>()</code>？</h3>
+        <p>先暫時忘記 Effect。JavaScript 的函式可以回傳另一個函式，因此下面的 <code>makeGreeter()(&quot;Eric&quot;)</code> 完全是普通的兩次函式呼叫：</p>
+
+        <pre class="language-typescript"><span class="label">JavaScript</span><code><span class="k">const</span> makeGreeter <span class="o">=</span> <span class="o">(</span><span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span> <span class="o">{</span>
+  <span class="k">return</span> <span class="o">(</span>name<span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span> <span class="s">`Hello, ${name}`</span>
+<span class="o">}</span>
+
+<span class="k">const</span> greet <span class="o">=</span> <span class="f">makeGreeter</span><span class="o">(</span><span class="o">)</span> <span class="c">// 第一次呼叫：得到內層函式</span>
+<span class="k">const</span> message <span class="o">=</span> <span class="f">greet</span><span class="o">(</span><span class="s">"Eric"</span><span class="o">)</span> <span class="c">// 第二次呼叫：呼叫內層函式</span>
+
+<span class="c">// 合併寫法：</span>
+<span class="k">const</span> sameMessage <span class="o">=</span> <span class="f">makeGreeter</span><span class="o">(</span><span class="o">)</span><span class="o">(</span><span class="s">"Eric"</span><span class="o">)</span></code></pre>
+
+        <p><code>Context.Service</code> 使用同一種「函式回傳函式」的形式。把長語法拆成變數，就能看到兩組括號各自呼叫了誰：</p>
+
+        <pre class="language-typescript"><span class="label">概念展開</span><code><span class="c">// 第一次 ()：呼叫 Context.Service</span>
+<span class="c">// 回傳值是一個「等待 identity」的 factory 函式</span>
+<span class="k">const</span> makeGitServiceClass <span class="o">=</span>
+  <span class="t">Context</span><span class="o">.</span><span class="p">Service</span><span class="o">&lt;</span><span class="t">GitService</span><span class="o">,</span> <span class="t">GitServiceShape</span><span class="o">&gt;</span><span class="o">(</span><span class="o">)</span>
+
+<span class="c">// 第二次 ("...")：呼叫上一步得到的 factory</span>
+<span class="c">// 回傳值才是可以放在 extends 後面的 class</span>
+<span class="k">const</span> <span class="t">GitServiceBase</span> <span class="o">=</span> <span class="f">makeGitServiceClass</span><span class="o">(</span>
+  <span class="s">"reviewstuff/GitService"</span><span class="o">,</span>
+<span class="o">)</span>
+
+<span class="k">class</span> <span class="t">GitService</span> <span class="k">extends</span> <span class="t">GitServiceBase</span> <span class="o">{</span><span class="o">}</span></code></pre>
+
+        <p>所以連在一起時，應該由左到右讀：</p>
+
+        <pre><span class="label">閱讀順序</span><code>Context.Service&lt;GitService, GitServiceShape&gt;()
+//                                            ↑
+//                         呼叫 Context.Service，得到 factory
+
+Context.Service&lt;GitService, GitServiceShape&gt;()(
+  "reviewstuff/GitService",
+)
+//                                              ↑
+//                         呼叫 factory，得到 base class</code></pre>
+
+        <h3>為什麼 Effect 要把 API 設計成兩階段？</h3>
+        <p>因為 Effect 4 的 <code>Context.Service</code> 同時支援兩種用法。呼叫方式就是它用來區分模式的訊號：</p>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>寫法</th><th>回傳結果</th><th>能放在 <code>extends</code> 後嗎？</th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>Context.Service&lt;Shape&gt;(&quot;id&quot;)</code></td>
+                <td>function-style service key</td>
+                <td>不能；它不是 class constructor</td>
+              </tr>
+              <tr>
+                <td><code>Context.Service&lt;Self, Shape&gt;()</code></td>
+                <td>等待 identity 的 class factory</td>
+                <td>還不能；factory 尚未產生 class</td>
+              </tr>
+              <tr>
+                <td><code>Context.Service&lt;Self, Shape&gt;()(&quot;id&quot;)</code></td>
+                <td>class-style service key，也是一個可繼承的 class</td>
+                <td>可以</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p>換句話說，第一組空的 <code>()</code> 並不是「什麼都沒做」。它明確告訴 TypeScript：「我要使用 class-style 版本」，並回傳下一階段的 factory。第二組 <code>(&quot;id&quot;)</code> 才把執行期資料交給 factory。</p>
+
+        <div class="callout tip">
+          <span class="callout-title">這是 API 的設計，不是依賴注入的自然定律</span>
+          <p>Effect 理論上可以設計成其他函式名稱或其他參數形式。現在需要兩組括號，是因為同一個 <code>Context.Service</code> 要同時服務 function-style 與 class-style，而且第二階段還能從字串推導出精確的 identity 型別。</p>
+        </div>
+
+        <h3>第一層：Shape 定義真正提供的功能</h3>
+        <p><code>GitServiceShape</code> 是服務契約，角色和一般 TypeScript interface 相同。它只描述能力，不決定能力如何實作。</p>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code>interface <span class="t">GitServiceShape</span> <span class="o">{</span>
+  readonly getDiff<span class="o">:</span> <span class="o">(</span><span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span> <span class="t">Effect</span><span class="o">.</span><span class="p">Effect</span><span class="o">&lt;</span>string<span class="o">&gt;</span>
+  readonly commit<span class="o">:</span> <span class="o">(</span>
+    message<span class="o">:</span> string<span class="o">,</span>
+  <span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span> <span class="t">Effect</span><span class="o">.</span><span class="p">Effect</span><span class="o">&lt;</span>void<span class="o">,</span> <span class="t">GitError</span><span class="o">&gt;</span>
+<span class="o">}</span></code></pre>
+
+        <p>這個 Shape 表示：取出 Git 服務後，可以呼叫 <code>getDiff</code> 與 <code>commit</code>。其中 <code>commit</code> 的 typed error 是 <code>GitError</code>。</p>
+
+        <h3>第二層：兩個泛型連接 key 與內容</h3>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="t">Context</span><span class="o">.</span><span class="p">Service</span><span class="o">&lt;</span>
+  <span class="t">GitService</span><span class="o">,</span>      <span class="c">// 環境中用來識別依賴的 self type</span>
+  <span class="t">GitServiceShape</span>  <span class="c">// 從 Context 取出後得到的內容</span>
+<span class="o">&gt;</span><span class="o">(</span><span class="o">)</span></code></pre>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>型別參數</th><th>回答的問題</th><th>在 Effect 型別中的作用</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><code>GitService</code></td><td>程式缺少哪一項依賴？</td><td>出現在 <code>Effect&lt;A, E, GitService&gt;</code></td></tr>
+              <tr><td><code>GitServiceShape</code></td><td>取出服務後能做什麼？</td><td>決定 <code>yield* GitService</code> 的結果型別</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p>第一個 <code>GitService</code> 是 class 自己，也就是 self type。它讓 Effect 可以在第三個型別參數中精確表示「這段程式仍需要 GitService」。第二個泛型則保證實際注入的物件符合契約。</p>
+
+        <h3>第三層：字串是執行期識別碼</h3>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="o">(</span><span class="s">"reviewstuff/GitService"</span><span class="o">)</span></code></pre>
+
+        <p>泛型會在編譯後消失，所以 Context 還需要一個 runtime identity 才能找到正確槽位。具體來說，生成的 service key 會把這個字串保存在 <code>key</code> 屬性；Context 在執行期使用的是這個字串，而不是 class 名稱或 class 物件本身。</p>
+
+        <pre class="language-typescript"><span class="label">概念模型</span><code><span class="t">GitService</span><span class="o">.</span><span class="p">key</span> <span class="o">===</span> <span class="s">"reviewstuff/GitService"</span>
+
+<span class="c">// Context 內部可以概念化為：</span>
+<span class="k">new</span> <span class="t">Map</span><span class="o">(</span><span class="o">[</span>
+  <span class="o">[</span><span class="s">"reviewstuff/GitService"</span><span class="o">,</span> gitServiceImplementation<span class="o">]</span><span class="o">,</span>
+<span class="o">]</span><span class="o">)</span></code></pre>
+
+        <p>因此 <code>yield* GitService</code> 並不是按照 <code>GitService</code> 這個 JavaScript class 的名稱尋找服務；它最終會拿 <code>GitService.key</code> 去目前的 Context 查詢。這個字串只需要在可能被組裝進同一個 Context 的範圍內保持唯一，常見格式是「套件或專案名稱／服務名稱」。</p>
+
+        <div class="callout">
+          <span class="callout-title">字串衝突不是單純的命名問題</span>
+          <p>如果兩個無關服務使用同一個 identity，Effect 會把它們視為同一個 Context 槽位。Effect 不會因為兩個 class 名稱不同，就自動替它們建立兩個槽位。</p>
+        </div>
+
+        <pre class="language-typescript"><span class="label">衝突範例</span><code><span class="k">class</span> <span class="t">GitService</span> <span class="k">extends</span> <span class="t">Context</span><span class="o">.</span><span class="p">Service</span><span class="o">&lt;</span>
+  <span class="t">GitService</span><span class="o">,</span>
+  <span class="o">{</span> readonly getDiff<span class="o">:</span> <span class="o">(</span><span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span> string <span class="o">}</span>
+<span class="o">&gt;</span><span class="o">(</span><span class="o">)</span><span class="o">(</span><span class="s">"app/Service"</span><span class="o">)</span> <span class="o">{</span><span class="o">}</span>
+
+<span class="k">class</span> <span class="t">MailService</span> <span class="k">extends</span> <span class="t">Context</span><span class="o">.</span><span class="p">Service</span><span class="o">&lt;</span>
+  <span class="t">MailService</span><span class="o">,</span>
+  <span class="o">{</span> readonly send<span class="o">:</span> <span class="o">(</span><span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span> string <span class="o">}</span>
+<span class="o">&gt;</span><span class="o">(</span><span class="o">)</span><span class="o">(</span><span class="s">"app/Service"</span><span class="o">)</span> <span class="o">{</span><span class="o">}</span>
+
+<span class="t">Object</span><span class="o">.</span><span class="p">is</span><span class="o">(</span><span class="t">GitService</span><span class="o">,</span> <span class="t">MailService</span><span class="o">)</span> <span class="c">// false：兩個不同的 class</span>
+<span class="t">GitService</span><span class="o">.</span><span class="p">key</span> <span class="o">===</span> <span class="t">MailService</span><span class="o">.</span><span class="p">key</span> <span class="c">// 但執行期槽位相同</span></code></pre>
+
+        <p>如果再把兩個 Layer 合併，Effect 不會拋出「duplicate service key」錯誤；同一個字串最後只能保留一個 implementation。以 <code>Layer.mergeAll(gitLayer, mailLayer)</code> 為例，後面的 <code>mailLayer</code> 會覆蓋同名槽位，所以透過兩個 key 查詢都會得到 Mail implementation：</p>
+
+        <pre class="language-typescript"><span class="label">衝突結果</span><code><span class="k">const</span> git <span class="o">=</span> <span class="k">yield</span><span class="o">*</span> <span class="t">GitService</span>
+<span class="k">const</span> mail <span class="o">=</span> <span class="k">yield</span><span class="o">*</span> <span class="t">MailService</span>
+
+<span class="t">Object</span><span class="o">.</span><span class="p">is</span><span class="o">(</span>git<span class="o">,</span> mail<span class="o">)</span> <span class="c">// true：兩次查詢命中同一個槽位</span>
+git<span class="o">.</span><span class="p">getDiff</span><span class="o">(</span><span class="o">)</span> <span class="c">// TypeError：實際取得的物件只有 send</span></code></pre>
+
+        <p>如果兩個 implementation 剛好有相同的方法名稱，程式甚至可能不會立刻出錯，而是默默呼叫到錯誤的實作。這種情況比立即出現 <code>TypeError</code> 更難追查。</p>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>組裝方式</th><th>同一 identity 出現多次時</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><code>Context.add(context, key, service)</code></td><td>新加入的 service 取代原值</td></tr>
+              <tr><td><code>Context.merge(first, second)</code></td><td><code>second</code> 的同名 service 勝出</td></tr>
+              <tr><td><code>Context.mergeAll(first, second, last)</code></td><td>最後出現的同名 service 勝出</td></tr>
+              <tr><td><code>Layer.mergeAll(firstLayer, lastLayer)</code></td><td>建好 Context 後依相同規則合併，後面的同名 service 勝出</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="callout tip">
+          <span class="callout-title">實務上的命名原則</span>
+          <p>使用帶命名空間且穩定的字串，例如 <code>reviewstuff/GitService</code>、<code>reviewstuff/MailService</code> 或 <code>@my-company/payment/Logger</code>。同一個 identity 應只代表同一份服務契約；不要把它當成單純的除錯標籤。</p>
+        </div>
+      </section>
+
+      <section id="extends">
+        <h2><code>extends</code> 到底繼承了什麼？</h2>
+        <p><code>extends</code> 右邊不一定只能寫一個既有 class 名稱；也可以寫一個最後會算出 class constructor 的表達式。這裡的整段兩階段呼叫，最後剛好回傳一個 class：</p>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">class</span> <span class="t">GitService</span> <span class="k">extends</span> <span class="o">(</span>
+  <span class="t">Context</span><span class="o">.</span><span class="p">Service</span><span class="o">&lt;</span><span class="t">GitService</span><span class="o">,</span> <span class="t">GitServiceShape</span><span class="o">&gt;</span><span class="o">(</span><span class="o">)</span><span class="o">(</span>
+    <span class="s">"reviewstuff/GitService"</span><span class="o">,</span>
+  <span class="o">)</span>
+<span class="o">)</span> <span class="o">{</span><span class="o">}</span></code></pre>
+
+        <p>括號只是把 <code>extends</code> 右邊的範圍標示得更清楚。JavaScript 會先算出 <code>Context.Service&lt;...&gt;()(&quot;...&quot;)</code> 的結果，再讓 <code>GitService</code> 繼承那個結果。</p>
+
+        <p>那個生成的 base class 帶有 Effect service key 所需的執行期行為與型別資訊。它不是 Git 的正式實作，因此 <code>GitService</code> 也不是在繼承 <code>getDiff</code> 或 <code>commit</code>；這些方法的 implementation 仍由 Layer 提供。</p>
+
+        <div class="callout">
+          <span class="callout-title">為什麼 class body 是空的？</span>
+          <p>因為這個 class 的主要角色是 key，而不是 implementation。空的 <code>{}</code> 不代表服務沒有功能；功能定義在 Shape，實作則存在於 Layer 提供的物件中。</p>
+        </div>
+      </section>
+
+      <section id="consume">
+        <h2>在程式中索取服務</h2>
+        <p>class-style service key 本身可以被 Effect <code>yield*</code>。下面的程式不建立 Git 服務，而是從目前 Context 取得與 <code>GitService</code> 對應的 implementation。</p>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">const</span> program <span class="o">=</span> <span class="t">Effect</span><span class="o">.</span><span class="p">gen</span><span class="o">(</span><span class="k">function</span><span class="o">*</span> <span class="o">(</span><span class="o">)</span> <span class="o">{</span>
+  <span class="k">const</span> git <span class="o">=</span> <span class="k">yield</span><span class="o">*</span> <span class="t">GitService</span>
+  <span class="k">const</span> diff <span class="o">=</span> <span class="k">yield</span><span class="o">*</span> git<span class="o">.</span><span class="p">getDiff</span><span class="o">(</span><span class="o">)</span>
+
+  <span class="k">return</span> diff
+<span class="o">}</span><span class="o">)</span></code></pre>
+
+        <p>TypeScript 知道 <code>git</code> 符合 <code>GitServiceShape</code>，因此可以呼叫 <code>getDiff</code>。同時，由於還沒有提供實作，<code>program</code> 的環境型別保留 <code>GitService</code>：</p>
+
+        <pre><span class="label">推導出的概念型別</span><code>Effect.Effect&lt;string, never, GitService&gt;</code></pre>
+
+        <p><code>Effect.Effect&lt;A, E, R&gt;</code> 的三個參數可讀成：</p>
+
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>參數</th><th>意義</th><th>本例</th></tr></thead>
+            <tbody>
+              <tr><td><code>A</code></td><td>成功值</td><td><code>string</code></td></tr>
+              <tr><td><code>E</code></td><td>預期錯誤</td><td><code>never</code></td></tr>
+              <tr><td><code>R</code></td><td>尚未提供的環境需求</td><td><code>GitService</code></td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="callout tip">
+          <span class="callout-title">把 R 當成待辦清單</span>
+          <p><code>GitService</code> 出現在第三個參數不是錯誤，而是編譯器可檢查的組裝資訊：程式能被執行以前，還要提供這項依賴。</p>
+        </div>
+      </section>
+
+      <section id="provide">
+        <h2>用 Layer 建立並提供實作</h2>
+        <p>對於不需要額外建構依賴或資源管理的簡單服務，可以用 <code>Layer.succeed</code> 直接提供一個符合 Shape 的物件。</p>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">const</span> <span class="t">GitServiceLive</span> <span class="o">=</span> <span class="t">Layer</span><span class="o">.</span><span class="p">succeed</span><span class="o">(</span><span class="t">GitService</span><span class="o">,</span> <span class="o">{</span>
+  getDiff<span class="o">:</span> <span class="o">(</span><span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span> <span class="t">Effect</span><span class="o">.</span><span class="p">succeed</span><span class="o">(</span><span class="s">"example diff"</span><span class="o">)</span><span class="o">,</span>
+  commit<span class="o">:</span> <span class="o">(</span>message<span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span>
+    <span class="t">Effect</span><span class="o">.</span><span class="p">log</span><span class="o">(</span><span class="s">`commit: ${message}`</span><span class="o">)</span><span class="o">,</span>
+<span class="o">}</span><span class="o">)</span></code></pre>
+
+        <p><code>Layer.succeed</code> 的第一個參數指出要填入哪個服務槽位；第二個參數是 implementation。TypeScript 會檢查物件是否符合 <code>GitServiceShape</code>。</p>
+
+        <p>接著用 <code>Effect.provide</code> 將 Layer 接到程式：</p>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">const</span> runnable <span class="o">=</span> program<span class="o">.</span><span class="p">pipe</span><span class="o">(</span>
+  <span class="t">Effect</span><span class="o">.</span><span class="p">provide</span><span class="o">(</span><span class="t">GitServiceLive</span><span class="o">)</span><span class="o">,</span>
+<span class="o">)</span>
+
+<span class="t">Effect</span><span class="o">.</span><span class="p">runPromise</span><span class="o">(</span>runnable<span class="o">)</span></code></pre>
+
+        <div class="type-change" aria-label="提供 Layer 前後的型別變化">
+          <div class="type-state">
+            <small>提供前</small>
+            <code>Effect&lt;string, never, GitService&gt;</code>
+          </div>
+          <div class="type-arrow" aria-hidden="true">→</div>
+          <div class="type-state">
+            <small>提供後</small>
+            <code>Effect&lt;string, never, never&gt;</code>
+          </div>
+        </div>
+
+        <p>最後的 <code>never</code> 表示這個小範例已沒有尚未提供的環境需求，因此可交給 <code>Effect.runPromise</code> 執行。</p>
+
+        <p>整個關係可以畫成：</p>
+
+        <figure class="flow-figure">
+          <svg class="flow-desktop" role="img" aria-labelledby="service-flow-title-desktop service-flow-desc-desktop" viewBox="0 0 920 230">
+            <title id="service-flow-title-desktop">Context Service 的依賴注入流程</title>
+            <desc id="service-flow-desc-desktop">Shape 定義能力，GitService 作為服務 key；程式索取 key，Layer 提供實作，最後由 Effect.provide 組裝成 runnable。</desc>
+            <defs>
+              <marker id="service-flow-arrow-desktop" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--clay)"></path>
+              </marker>
+            </defs>
+
+            <g class="flow-node type">
+              <rect x="20" y="77" width="130" height="76" rx="9"></rect>
+              <text x="85" y="108" text-anchor="middle">Shape</text>
+              <text class="flow-note" x="85" y="131" text-anchor="middle">定義能力</text>
+            </g>
+            <path class="flow-arrow" d="M 150 115 H 205"></path>
+
+            <g class="flow-node emphasis">
+              <rect x="205" y="77" width="145" height="76" rx="9"></rect>
+              <text x="277.5" y="108" text-anchor="middle">GitService</text>
+              <text class="flow-note" x="277.5" y="131" text-anchor="middle">服務 key</text>
+            </g>
+            <path class="flow-arrow" d="M 350 99 C 392 99 390 53 430 53"></path>
+            <path class="flow-arrow" d="M 350 131 C 392 131 390 177 430 177"></path>
+
+            <g class="flow-node">
+              <rect x="430" y="17" width="155" height="72" rx="9"></rect>
+              <text x="507.5" y="47" text-anchor="middle">GitServiceLive</text>
+              <text class="flow-note" x="507.5" y="69" text-anchor="middle">Layer 提供實作</text>
+            </g>
+            <g class="flow-node">
+              <rect x="430" y="141" width="155" height="72" rx="9"></rect>
+              <text x="507.5" y="171" text-anchor="middle">program</text>
+              <text class="flow-note" x="507.5" y="193" text-anchor="middle">索取依賴</text>
+            </g>
+
+            <path class="flow-arrow" d="M 585 53 C 625 53 623 99 660 99"></path>
+            <path class="flow-arrow" d="M 585 177 C 625 177 623 131 660 131"></path>
+            <g class="flow-node emphasis">
+              <rect x="660" y="77" width="135" height="76" rx="9"></rect>
+              <text x="727.5" y="108" text-anchor="middle">provide</text>
+              <text class="flow-note" x="727.5" y="131" text-anchor="middle">組裝</text>
+            </g>
+            <path class="flow-arrow" d="M 795 115 H 835"></path>
+            <g class="flow-node">
+              <rect x="835" y="77" width="75" height="76" rx="9"></rect>
+              <text x="872.5" y="108" text-anchor="middle">run</text>
+              <text class="flow-note" x="872.5" y="131" text-anchor="middle">執行</text>
+            </g>
+          </svg>
+
+          <svg class="flow-mobile" role="img" aria-labelledby="service-flow-title-mobile service-flow-desc-mobile" viewBox="0 0 360 660">
+            <title id="service-flow-title-mobile">Context Service 的依賴注入流程，行動版</title>
+            <desc id="service-flow-desc-mobile">Shape 定義能力，GitService 作為服務 key；Layer 與程式分別提供實作與索取依賴，最後由 Effect.provide 組裝並執行。</desc>
+            <defs>
+              <marker id="service-flow-arrow-mobile" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--clay)"></path>
+              </marker>
+            </defs>
+
+            <g class="flow-node type">
+              <rect x="95" y="10" width="170" height="68" rx="9"></rect>
+              <text x="180" y="38" text-anchor="middle">Shape</text>
+              <text class="flow-note" x="180" y="59" text-anchor="middle">定義能力</text>
+            </g>
+            <path class="flow-arrow" d="M 180 78 V 115"></path>
+
+            <g class="flow-node emphasis">
+              <rect x="95" y="115" width="170" height="68" rx="9"></rect>
+              <text x="180" y="143" text-anchor="middle">GitService</text>
+              <text class="flow-note" x="180" y="164" text-anchor="middle">服務 key</text>
+            </g>
+            <path class="flow-arrow" d="M 145 183 C 145 215 86 213 86 245"></path>
+            <path class="flow-arrow" d="M 215 183 C 215 215 274 213 274 245"></path>
+
+            <g class="flow-node">
+              <rect x="10" y="245" width="152" height="78" rx="9"></rect>
+              <text x="86" y="276" text-anchor="middle">GitServiceLive</text>
+              <text class="flow-note" x="86" y="299" text-anchor="middle">Layer 提供實作</text>
+            </g>
+            <g class="flow-node">
+              <rect x="198" y="245" width="152" height="78" rx="9"></rect>
+              <text x="274" y="276" text-anchor="middle">program</text>
+              <text class="flow-note" x="274" y="299" text-anchor="middle">索取依賴</text>
+            </g>
+            <path class="flow-arrow" d="M 86 323 C 86 367 145 359 145 405"></path>
+            <path class="flow-arrow" d="M 274 323 C 274 367 215 359 215 405"></path>
+
+            <g class="flow-node emphasis">
+              <rect x="95" y="405" width="170" height="68" rx="9"></rect>
+              <text x="180" y="433" text-anchor="middle">Effect.provide</text>
+              <text class="flow-note" x="180" y="454" text-anchor="middle">組裝依賴</text>
+            </g>
+            <path class="flow-arrow" d="M 180 473 V 515"></path>
+
+            <g class="flow-node">
+              <rect x="95" y="515" width="170" height="68" rx="9"></rect>
+              <text x="180" y="543" text-anchor="middle">runnable</text>
+              <text class="flow-note" x="180" y="564" text-anchor="middle">環境需求已滿足</text>
+            </g>
+            <path class="flow-arrow" d="M 180 583 V 620"></path>
+            <text x="180" y="648" text-anchor="middle" fill="var(--clay)" font-size="13" font-weight="700">Effect.runPromise</text>
+          </svg>
+          <figcaption>key 是兩條路徑的交會點：program 用它提出需求，Layer 用它提供實作，<code>Effect.provide</code> 再把兩者接起來。</figcaption>
+        </figure>
+
+        <h3>當服務本身也有依賴</h3>
+        <p>如果 Git 服務需要 command runner、設定或其他服務，就改用 <code>Layer.effect</code>，在建立 implementation 時索取那些依賴。以下假設 <code>CommandRunner</code> 提供 <code>runGit</code>，其成功值是指令輸出字串：</p>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">const</span> <span class="t">GitServiceLive</span> <span class="o">=</span> <span class="t">Layer</span><span class="o">.</span><span class="p">effect</span><span class="o">(</span>
+  <span class="t">GitService</span><span class="o">,</span>
+  <span class="t">Effect</span><span class="o">.</span><span class="p">gen</span><span class="o">(</span><span class="k">function</span><span class="o">*</span> <span class="o">(</span><span class="o">)</span> <span class="o">{</span>
+    <span class="k">const</span> runner <span class="o">=</span> <span class="k">yield</span><span class="o">*</span> <span class="t">CommandRunner</span>
+
+    <span class="k">return</span> <span class="o">{</span>
+      getDiff<span class="o">:</span> <span class="o">(</span><span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span> runner<span class="o">.</span><span class="p">runGit</span><span class="o">(</span><span class="o">[</span><span class="s">"diff"</span><span class="o">]</span><span class="o">)</span><span class="o">,</span>
+      commit<span class="o">:</span> <span class="o">(</span>message<span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span>
+        runner<span class="o">.</span><span class="p">runGit</span><span class="o">(</span><span class="o">[</span><span class="s">"commit"</span><span class="o">,</span> <span class="s">"-m"</span><span class="o">,</span> message<span class="o">]</span><span class="o">)</span><span class="o">.</span><span class="p">pipe</span><span class="o">(</span>
+          <span class="t">Effect</span><span class="o">.</span><span class="p">asVoid</span><span class="o">,</span>
+        <span class="o">)</span><span class="o">,</span>
+    <span class="o">}</span>
+  <span class="o">}</span><span class="o">)</span><span class="o">,</span>
+<span class="o">)</span></code></pre>
+
+        <p>這時 Layer 不只「裝一個物件」，也描述了建立 Git 服務本身需要 <code>CommandRunner</code>。更上層的組裝仍能從 Layer 型別看出尚缺哪些依賴。</p>
+      </section>
+
+      <section id="test">
+        <h2>測試時替換實作，不修改核心程式</h2>
+        <p>依賴注入最直接的價值，是正式環境和測試可以針對同一個 key 提供不同 implementation。測試不必執行真正的 Git 指令：</p>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">const</span> <span class="t">GitServiceTest</span> <span class="o">=</span> <span class="t">Layer</span><span class="o">.</span><span class="p">succeed</span><span class="o">(</span><span class="t">GitService</span><span class="o">,</span> <span class="o">{</span>
+  getDiff<span class="o">:</span> <span class="o">(</span><span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span> <span class="t">Effect</span><span class="o">.</span><span class="p">succeed</span><span class="o">(</span><span class="s">"fake diff"</span><span class="o">)</span><span class="o">,</span>
+  commit<span class="o">:</span> <span class="o">(</span><span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span> <span class="t">Effect</span><span class="o">.</span><span class="p">void</span><span class="o">,</span>
+<span class="o">}</span><span class="o">)</span>
+
+<span class="k">const</span> result <span class="o">=</span> <span class="k">await</span> program<span class="o">.</span><span class="p">pipe</span><span class="o">(</span>
+  <span class="t">Effect</span><span class="o">.</span><span class="p">provide</span><span class="o">(</span><span class="t">GitServiceTest</span><span class="o">)</span><span class="o">,</span>
+  <span class="t">Effect</span><span class="o">.</span><span class="p">runPromise</span><span class="o">,</span>
+<span class="o">)</span></code></pre>
+
+        <p><code>program</code> 不知道自己拿到的是正式或測試實作。它只依賴 <code>GitService</code> key 與 <code>GitServiceShape</code> 契約，因此不需加入 test flag，也不需 mock 全域函式。</p>
+      </section>
+
+      <section id="mistakes">
+        <h2>常見誤解與判斷方式</h2>
+
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>誤解</th><th>正確理解</th></tr></thead>
+            <tbody>
+              <tr><td><code>yield* GitService</code> 會建立 class instance</td><td>它會從目前 Context 取出符合 Shape 的 implementation。</td></tr>
+              <tr><td>方法應該寫在空的 class body</td><td>class 是 key；方法契約在 Shape，方法實作由 Layer 提供。</td></tr>
+              <tr><td>字串只是除錯標籤</td><td>它是 runtime identity，無關服務不可共用。</td></tr>
+              <tr><td><code>Effect&lt;A, E, GitService&gt;</code> 表示執行失敗</td><td>它表示環境需求尚未提供，是可組裝的程式契約。</td></tr>
+              <tr><td><code>Context.Service</code> 自己包含正式實作</td><td>它建立 service key；implementation 是另一個物件。</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="checklist">
+          <strong>建立一個 Context Service 時，依序確認</strong>
+          <ul>
+            <li>Shape 是否只描述呼叫端真正需要的能力？</li>
+            <li>runtime identity 是否穩定且全域唯一？</li>
+            <li>核心程式是否只索取 key，而不偷偷建立正式實作？</li>
+            <li>Layer 提供的物件是否符合 Shape？</li>
+            <li>測試是否能用同一個 key 提供簡單替身？</li>
+          </ul>
+        </div>
+      </section>
+
+      <section id="conclusion">
+        <h2>把整段宣告讀成一句白話</h2>
+        <p>以下程式：</p>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">class</span> <span class="t">GitService</span> <span class="k">extends</span> <span class="t">Context</span><span class="o">.</span><span class="p">Service</span><span class="o">&lt;</span><span class="t">GitService</span><span class="o">,</span> <span class="t">GitServiceShape</span><span class="o">&gt;</span><span class="o">(</span><span class="o">)</span><span class="o">(</span>
+  <span class="s">"reviewstuff/GitService"</span><span class="o">,</span>
+<span class="o">)</span> <span class="o">{</span><span class="o">}</span></code></pre>
+
+        <p>可以讀成：</p>
+
+        <blockquote class="callout">
+          <p>建立一個名為 <code>reviewstuff/GitService</code> 的 Effect 服務 key；程式以 <code>GitService</code> 表示它需要這項依賴，而注入的 implementation 必須符合 <code>GitServiceShape</code>。</p>
+        </blockquote>
+
+        <p>真正值得記住的不是 class factory 語法，而是責任分工：<strong>Shape 定義能力、key 表示需求、Layer 提供實作、<code>Effect.provide</code> 完成組裝。</strong>一旦這四個角色分清楚，Context Service 就不再是一段神秘的 class 寫法，而是一套可由型別檢查的依賴注入流程。</p>
+      </section>
+
+      <section class="references" aria-labelledby="references-title">
+        <h2 id="references-title">參考資料</h2>
+        <ul>
+          <li><a href="https://effect-ts.github.io/effect/effect/Context.ts.html">Effect Context API</a>：Context 的依賴注入模型，以及服務識別 key 與 implementation 的對應關係。</li>
+        </ul>
+      </section>
+    </article>
+  </main>
+  <script>
+    const copyIcon = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="10" height="10" rx="2"></rect><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"></path></svg>';
+    const checkIcon = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"></path></svg>';
+
+    function copyText(text) {
+      if (navigator.clipboard && window.isSecureContext) {
+        return navigator.clipboard.writeText(text);
+      }
+
+      const textarea = document.createElement('textarea');
+      textarea.value = text;
+      textarea.style.position = 'fixed';
+      textarea.style.opacity = '0';
+      document.body.append(textarea);
+      textarea.select();
+      document.execCommand('copy');
+      textarea.remove();
+      return Promise.resolve();
+    }
+
+    document.querySelectorAll('pre').forEach((pre) => {
+      const code = pre.querySelector('code');
+      if (!code) return;
+
+      const button = document.createElement('button');
+      button.className = 'copy-code';
+      button.type = 'button';
+      button.setAttribute('aria-label', '複製程式碼');
+      button.innerHTML = copyIcon;
+      button.addEventListener('click', async () => {
+        await copyText(code.textContent || '');
+        button.classList.add('copied');
+        button.setAttribute('aria-label', '已複製');
+        button.innerHTML = checkIcon;
+        window.setTimeout(() => {
+          button.classList.remove('copied');
+          button.setAttribute('aria-label', '複製程式碼');
+          button.innerHTML = copyIcon;
+        }, 1400);
+      });
+      pre.append(button);
+
+      const track = document.createElement('div');
+      const thumb = document.createElement('div');
+      track.className = 'code-scrollbar';
+      thumb.className = 'code-scrollbar-thumb';
+      track.setAttribute('aria-hidden', 'true');
+      track.append(thumb);
+      pre.append(track);
+
+      const syncScrollbar = () => {
+        const visibleRatio = code.clientWidth / code.scrollWidth;
+        track.classList.toggle('hidden', visibleRatio >= 1);
+        const thumbWidth = Math.max(36, track.clientWidth * visibleRatio);
+        const maxThumbX = track.clientWidth - thumbWidth;
+        const maxScroll = code.scrollWidth - code.clientWidth;
+        const thumbX = maxScroll > 0 ? (code.scrollLeft / maxScroll) * maxThumbX : 0;
+        thumb.style.width = `${thumbWidth}px`;
+        thumb.style.transform = `translateX(${thumbX}px)`;
+      };
+
+      code.addEventListener('scroll', syncScrollbar, { passive: true });
+      window.addEventListener('resize', syncScrollbar, { passive: true });
+      track.addEventListener('pointerdown', (event) => {
+        const rect = track.getBoundingClientRect();
+        const ratio = Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width));
+        code.scrollLeft = ratio * (code.scrollWidth - code.clientWidth);
+      });
+      syncScrollbar();
+    });
+  </script>
+</body>
+</html>
