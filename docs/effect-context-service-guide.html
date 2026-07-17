@@ -579,7 +579,7 @@ interface <span class="t">GitServiceShape</span> <span class="o">{</span>
         <p>Context 可以先概念化為一張型別安全的對照表：</p>
 
         <pre class="language-typescript"><span class="label">概念模型</span><code><span class="t">Context</span> <span class="o">{</span>
-  <span class="s">"reviewstuff/GitService"</span> <span class="o">=</span><span class="o">&gt;</span> gitServiceImplementation
+  <span class="s">"@acme/source-control/GitService"</span> <span class="o">=</span><span class="o">&gt;</span> gitServiceImplementation
 <span class="o">}</span></code></pre>
 
         <p>這不是在描述 Effect 內部實作一定是一個普通 JavaScript <code>Map</code>，而是用來理解查找關係：同一個 runtime identity 對應同一個服務槽位。</p>
@@ -590,7 +590,7 @@ interface <span class="t">GitServiceShape</span> <span class="o">{</span>
         <p>以下 class 的目的不是建立一般的 <code>GitService</code> 業務物件，而是建立一個 Effect 可以識別、索取與注入的服務 key：</p>
 
         <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">class</span> <span class="t">GitService</span> <span class="k">extends</span> <span class="t">Context</span><span class="o">.</span><span class="p">Service</span><span class="o">&lt;</span><span class="t">GitService</span><span class="o">,</span> <span class="t">GitServiceShape</span><span class="o">&gt;</span><span class="o">(</span><span class="o">)</span><span class="o">(</span>
-  <span class="s">"reviewstuff/GitService"</span><span class="o">,</span>
+  <span class="s">"@acme/source-control/GitService"</span><span class="o">,</span>
 <span class="o">)</span> <span class="o">{</span><span class="o">}</span></code></pre>
 
         <div class="anatomy">
@@ -598,7 +598,7 @@ interface <span class="t">GitServiceShape</span> <span class="o">{</span>
             <span class="plain">Context.Service</span>
             <span class="shape">&lt;GitService, GitServiceShape&gt;</span>
             <span class="calls">()</span>
-            <span class="identity">(&quot;reviewstuff/GitService&quot;)</span>
+            <span class="identity">(&quot;@acme/source-control/GitService&quot;)</span>
           </div>
           <div class="anatomy-legend">
             <div><strong>型別層</strong><span>依賴識別型別與服務內容。</span></div>
@@ -628,7 +628,7 @@ interface <span class="t">GitServiceShape</span> <span class="o">{</span>
 <span class="o">}</span>
 
 <span class="k">const</span> <span class="t">GitServiceBase</span> <span class="o">=</span> <span class="f">makeBaseClass</span><span class="o">(</span>
-  <span class="s">"reviewstuff/GitService"</span><span class="o">,</span>
+  <span class="s">"@acme/source-control/GitService"</span><span class="o">,</span>
 <span class="o">)</span>
 <span class="c">// GitServiceBase 是一個 class，不是它的 instance</span>
 
@@ -664,7 +664,7 @@ interface <span class="t">GitServiceShape</span> <span class="o">{</span>
 <span class="c">// 第二次 ("...")：呼叫上一步得到的 factory</span>
 <span class="c">// 回傳值才是可以放在 extends 後面的 class</span>
 <span class="k">const</span> <span class="t">GitServiceBase</span> <span class="o">=</span> <span class="f">makeGitServiceClass</span><span class="o">(</span>
-  <span class="s">"reviewstuff/GitService"</span><span class="o">,</span>
+  <span class="s">"@acme/source-control/GitService"</span><span class="o">,</span>
 <span class="o">)</span>
 
 <span class="k">class</span> <span class="t">GitService</span> <span class="k">extends</span> <span class="t">GitServiceBase</span> <span class="o">{</span><span class="o">}</span></code></pre>
@@ -676,7 +676,7 @@ interface <span class="t">GitServiceShape</span> <span class="o">{</span>
 //                         呼叫 Context.Service，得到 factory
 
 Context.Service&lt;GitService, GitServiceShape&gt;()(
-  "reviewstuff/GitService",
+  "@acme/source-control/GitService",
 )
 //                                              ↑
 //                         呼叫 factory，得到 base class</code></pre>
@@ -751,15 +751,15 @@ Context.Service&lt;GitService, GitServiceShape&gt;()(
 
         <h3>第三層：字串是執行期識別碼</h3>
 
-        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="o">(</span><span class="s">"reviewstuff/GitService"</span><span class="o">)</span></code></pre>
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="o">(</span><span class="s">"@acme/source-control/GitService"</span><span class="o">)</span></code></pre>
 
         <p>泛型會在編譯後消失，所以 Context 還需要一個 runtime identity 才能找到正確槽位。具體來說，生成的 service key 會把這個字串保存在 <code>key</code> 屬性；Context 在執行期使用的是這個字串，而不是 class 名稱或 class 物件本身。</p>
 
-        <pre class="language-typescript"><span class="label">概念模型</span><code><span class="t">GitService</span><span class="o">.</span><span class="p">key</span> <span class="o">===</span> <span class="s">"reviewstuff/GitService"</span>
+        <pre class="language-typescript"><span class="label">概念模型</span><code><span class="t">GitService</span><span class="o">.</span><span class="p">key</span> <span class="o">===</span> <span class="s">"@acme/source-control/GitService"</span>
 
 <span class="c">// Context 內部可以概念化為：</span>
 <span class="k">new</span> <span class="t">Map</span><span class="o">(</span><span class="o">[</span>
-  <span class="o">[</span><span class="s">"reviewstuff/GitService"</span><span class="o">,</span> gitServiceImplementation<span class="o">]</span><span class="o">,</span>
+  <span class="o">[</span><span class="s">"@acme/source-control/GitService"</span><span class="o">,</span> gitServiceImplementation<span class="o">]</span><span class="o">,</span>
 <span class="o">]</span><span class="o">)</span></code></pre>
 
         <p>因此 <code>yield* GitService</code> 並不是按照 <code>GitService</code> 這個 JavaScript class 的名稱尋找服務；它最終會拿 <code>GitService.key</code> 去目前的 Context 查詢。這個字串只需要在可能被組裝進同一個 Context 的範圍內保持唯一，常見格式是「套件或專案名稱／服務名稱」。</p>
@@ -808,7 +808,7 @@ git<span class="o">.</span><span class="p">getDiff</span><span class="o">(</span
 
         <div class="callout tip">
           <span class="callout-title">實務上的命名原則</span>
-          <p>使用帶命名空間且穩定的字串，例如 <code>reviewstuff/GitService</code>、<code>reviewstuff/MailService</code> 或 <code>@my-company/payment/Logger</code>。同一個 identity 應只代表同一份服務契約；不要把它當成單純的除錯標籤。</p>
+          <p>使用帶命名空間且穩定的字串，例如 <code>@acme/source-control/GitService</code> 或 <code>@acme/payment/Logger</code>。同一個 identity 應只代表同一份服務契約；不要把它當成單純的除錯標籤。</p>
         </div>
       </section>
 
@@ -818,7 +818,7 @@ git<span class="o">.</span><span class="p">getDiff</span><span class="o">(</span
 
         <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">class</span> <span class="t">GitService</span> <span class="k">extends</span> <span class="o">(</span>
   <span class="t">Context</span><span class="o">.</span><span class="p">Service</span><span class="o">&lt;</span><span class="t">GitService</span><span class="o">,</span> <span class="t">GitServiceShape</span><span class="o">&gt;</span><span class="o">(</span><span class="o">)</span><span class="o">(</span>
-    <span class="s">"reviewstuff/GitService"</span><span class="o">,</span>
+    <span class="s">"@acme/source-control/GitService"</span><span class="o">,</span>
   <span class="o">)</span>
 <span class="o">)</span> <span class="o">{</span><span class="o">}</span></code></pre>
 
@@ -1079,13 +1079,13 @@ git<span class="o">.</span><span class="p">getDiff</span><span class="o">(</span
         <p>以下程式：</p>
 
         <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">class</span> <span class="t">GitService</span> <span class="k">extends</span> <span class="t">Context</span><span class="o">.</span><span class="p">Service</span><span class="o">&lt;</span><span class="t">GitService</span><span class="o">,</span> <span class="t">GitServiceShape</span><span class="o">&gt;</span><span class="o">(</span><span class="o">)</span><span class="o">(</span>
-  <span class="s">"reviewstuff/GitService"</span><span class="o">,</span>
+  <span class="s">"@acme/source-control/GitService"</span><span class="o">,</span>
 <span class="o">)</span> <span class="o">{</span><span class="o">}</span></code></pre>
 
         <p>可以讀成：</p>
 
         <blockquote class="callout">
-          <p>建立一個名為 <code>reviewstuff/GitService</code> 的 Effect 服務 key；程式以 <code>GitService</code> 表示它需要這項依賴，而注入的 implementation 必須符合 <code>GitServiceShape</code>。</p>
+          <p>建立一個名為 <code>@acme/source-control/GitService</code> 的 Effect 服務 key；程式以 <code>GitService</code> 表示它需要這項依賴，而注入的 implementation 必須符合 <code>GitServiceShape</code>。</p>
         </blockquote>
 
         <p>真正值得記住的不是 class factory 語法，而是責任分工：<strong>Shape 定義能力、key 表示需求、Layer 提供實作、<code>Effect.provide</code> 完成組裝。</strong>一旦這四個角色分清楚，Context Service 就不再是一段神秘的 class 寫法，而是一套可由型別檢查的依賴注入流程。</p>

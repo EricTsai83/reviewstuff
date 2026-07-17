@@ -3,6 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="從零設計 Bun CLI 的建置與執行架構，釐清 effect/unstable/cli、ChildProcess、BunServices、smoke test 與 production release 的責任邊界。">
   <title>Effect、Bun 與 CLI Build Script 的責任分層</title>
   <style>
     :root {
@@ -391,31 +392,31 @@
   <main>
     <article>
       <h1>Effect、Bun 與 CLI Build Script 的責任分層</h1>
-      <p class="deck">一個 Bun 專案裡同時看到 <code>@effect/cli</code>、<code>@effect/platform/Command</code>、<code>FileSystem</code> 和 Node-compatible <code>fs</code> 時，最容易混淆的是它們到底在負責哪一層。這篇文章把這些邊界拆開，讓 build script 和產品 CLI 的設計意圖變得清楚。</p>
+      <p class="deck">設計 Bun CLI 時，<code>effect/unstable/cli</code>、Effect Platform 的 process／filesystem service、Bun compiler 與 release script 各自負責不同邊界。這篇文章從零建立心智模型，並整理可上線的建置、驗證與發佈原則。</p>
 
-      <h2>這支 build script 在做什麼</h2>
-      <p><code>scripts/build-bun.mjs</code> 是專案的 build wrapper。它不是產品功能本身，而是用來產生可執行檔，並確認產物能正常啟動。</p>
+      <h2>一個可靠的 build wrapper 應做什麼</h2>
+      <p>build wrapper 不屬於產品的業務功能；它負責以可重現的參數產生 executable，並在發佈前快速驗證產物。以下用一個名為 <code>toolbox</code> 的通用 CLI 示範。</p>
 
       <p>它的流程很短：</p>
       <ol>
         <li>建立 <code>dist/</code> 目錄。</li>
-        <li>執行 <code>bun build src/cli.ts --compile --target=bun-darwin-arm64 --outfile=dist/reviewstuff</code>。</li>
-        <li>執行 <code>./dist/reviewstuff --version</code>。</li>
-        <li>執行 <code>./dist/reviewstuff --help</code>。</li>
+        <li>以明確的 entry point、target 與輸出名稱執行 Bun compiler。</li>
+        <li>執行 <code>./dist/toolbox --version</code>。</li>
+        <li>執行 <code>./dist/toolbox --help</code>。</li>
       </ol>
 
-      <pre class="language-shell"><span class="label">Shell</span><code><span class="sh-command">bun</span> build src/cli.ts \
+      <pre class="language-shell"><span class="label">Shell</span><code><span class="sh-command">bun</span> build cli/main.ts \
   <span class="sh-flag">--compile</span> <span class="sh-command">\</span>
   <span class="sh-flag">--target=bun-darwin-arm64</span> <span class="sh-command">\</span>
-  <span class="sh-flag">--outfile=dist/reviewstuff</span>
+  <span class="sh-flag">--outfile=dist/toolbox</span>
 
-<span class="sh-command">./dist/reviewstuff</span> <span class="sh-flag">--version</span>
-<span class="sh-command">./dist/reviewstuff</span> <span class="sh-flag">--help</span></code></pre>
+<span class="sh-command">./dist/toolbox</span> <span class="sh-flag">--version</span>
+<span class="sh-command">./dist/toolbox</span> <span class="sh-flag">--help</span></code></pre>
 
       <p>最後兩個 command 是 smoke test。它們不是完整測試，只是確保 binary 至少能啟動、能印版本、能印 help。任何步驟 exit code 不是 <code>0</code>，script 就會設定 <code>process.exitCode = 1</code>。</p>
 
-      <h2>兩個 Command 不是同一件事</h2>
-      <p><code>@effect/cli</code> 和 <code>@effect/platform/Command</code> 都有 <code>Command</code> 這個名稱，但它們的抽象層不同。</p>
+      <h2>CLI Command 與 ChildProcess 不是同一件事</h2>
+      <p><code>effect/unstable/cli/Command</code> 與 <code>effect/unstable/process/ChildProcess</code> 都與 command 有關，但抽象層完全不同。</p>
 
       <div class="table-scroll">
         <table>
@@ -424,21 +425,21 @@
               <th>套件</th>
               <th>負責的問題</th>
               <th>類似概念</th>
-              <th>在這個專案的位置</th>
+              <th>典型位置</th>
             </tr>
           </thead>
           <tbody>
             <tr>
-              <td><code>@effect/cli</code></td>
+              <td><code>effect/unstable/cli</code></td>
               <td>定義 CLI 的使用者介面：subcommand、option、argument、help、version、validation。</td>
               <td>CLI parser / command definition</td>
-              <td><code>src/cli.ts</code></td>
+              <td><code>cli/main.ts</code></td>
             </tr>
             <tr>
-              <td><code>@effect/platform/Command</code></td>
+              <td><code>effect/unstable/process/ChildProcess</code></td>
               <td>從程式裡執行外部程序，並處理 argv、env、stdout、stderr、exit code。</td>
               <td><code>child_process.spawn</code>、<code>Bun.spawn</code>、<code>Bun.$</code></td>
-              <td><code>scripts/build-bun.mjs</code></td>
+              <td><code>scripts/build.ts</code></td>
             </tr>
           </tbody>
         </table>
@@ -446,8 +447,8 @@
 
       <figure class="flow-figure">
         <svg role="img" aria-labelledby="flow-title flow-desc" viewBox="0 0 760 330">
-          <title id="flow-title">Effect CLI Command 與 Effect Platform Command 的責任邊界</title>
-          <desc id="flow-desc">Effect CLI Command 定義使用者介面，Effect Platform Command 執行外部程序，BunContext 提供 runtime service。</desc>
+          <title id="flow-title">Effect CLI Command 與 Effect ChildProcess 的責任邊界</title>
+          <desc id="flow-desc">Effect CLI Command 定義使用者介面，Effect ChildProcess 執行外部程序，BunServices 提供 runtime service。</desc>
           <defs>
             <marker id="flow-arrowhead" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
               <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--clay)"></path>
@@ -457,12 +458,12 @@
           <g class="flow-node">
             <rect x="24" y="34" width="174" height="72" rx="8"></rect>
             <text x="111" y="65" text-anchor="middle">使用者輸入</text>
-            <text class="flow-note" x="111" y="87" text-anchor="middle">reviewstuff --help</text>
+            <text class="flow-note" x="111" y="87" text-anchor="middle">toolbox --help</text>
           </g>
           <path class="flow-arrow" d="M 206 70 H 274" marker-end="url(#flow-arrowhead)"></path>
           <g class="flow-node">
             <rect x="282" y="34" width="174" height="72" rx="8"></rect>
-            <text x="369" y="65" text-anchor="middle">@effect/cli</text>
+            <text x="369" y="65" text-anchor="middle">effect/unstable/cli</text>
             <text class="flow-note" x="369" y="87" text-anchor="middle">Command</text>
           </g>
           <path class="flow-arrow" d="M 464 70 H 532" marker-end="url(#flow-arrowhead)"></path>
@@ -475,13 +476,13 @@
           <g class="flow-node">
             <rect x="24" y="160" width="174" height="72" rx="8"></rect>
             <text x="111" y="191" text-anchor="middle">build script</text>
-            <text class="flow-note" x="111" y="213" text-anchor="middle">scripts/build-bun.mjs</text>
+            <text class="flow-note" x="111" y="213" text-anchor="middle">scripts/build.ts</text>
           </g>
           <path class="flow-arrow" d="M 206 196 H 274" marker-end="url(#flow-arrowhead)"></path>
           <g class="flow-node">
             <rect x="282" y="160" width="174" height="72" rx="8"></rect>
-            <text x="369" y="191" text-anchor="middle">@effect/platform</text>
-            <text class="flow-note" x="369" y="213" text-anchor="middle">Command</text>
+            <text x="369" y="191" text-anchor="middle">effect/unstable/process</text>
+            <text class="flow-note" x="369" y="213" text-anchor="middle">ChildProcess</text>
           </g>
           <path class="flow-arrow" d="M 464 196 H 532" marker-end="url(#flow-arrowhead)"></path>
           <g class="flow-node">
@@ -492,7 +493,7 @@
 
           <g class="flow-node">
             <rect x="24" y="264" width="174" height="48" rx="8"></rect>
-            <text x="111" y="294" text-anchor="middle">BunContext.layer</text>
+            <text x="111" y="294" text-anchor="middle">BunServices.layer</text>
           </g>
           <path class="flow-arrow" d="M 198 288 C 244 288 246 218 274 205" marker-end="url(#flow-arrowhead)"></path>
           <path class="flow-arrow" d="M 198 288 H 274" marker-end="url(#flow-arrowhead)"></path>
@@ -501,15 +502,15 @@
             <text x="369" y="294" text-anchor="middle">FileSystem / Path</text>
           </g>
         </svg>
-        <figcaption>同名的 <code>Command</code> 分別位在 CLI 解析層與外部程序執行層。</figcaption>
+        <figcaption><code>Command</code> 定義 CLI；<code>ChildProcess</code> 描述要啟動的外部程序。</figcaption>
       </figure>
 
-      <p>簡化成一句話：<code>@effect/cli Command</code> 定義「這支 CLI 接受什麼指令」；<code>@effect/platform/Command</code> 負責「從程式裡呼叫另一個外部指令」。</p>
+      <p>簡化成一句話：<code>effect/unstable/cli Command</code> 定義「這支 CLI 接受什麼指令」；<code>effect/unstable/process/ChildProcess</code> 負責「從程式裡呼叫另一個外部指令」。</p>
 
       <h2>為什麼 Bun runtime 會看到 Node FS</h2>
       <p>這裡有兩個事實要分開看。</p>
 
-      <p>第一，Effect 有平台抽象與平台實作的設計。<code>@effect/platform</code> 定義 <code>FileSystem</code>、<code>Command</code>、<code>Path</code> 等 service；<code>@effect/platform-bun</code> 則提供 Bun runtime 的 layer。</p>
+      <p>第一，Effect 4 將跨平台契約放在 <code>effect</code> 套件，例如 <code>FileSystem</code>、<code>Path</code> 與 unstable process API；<code>@effect/platform-bun</code> 則提供 Bun 的具體 Layer，其中 <code>BunServices.layer</code> 包含 <code>ChildProcessSpawner</code>。</p>
 
       <p>第二，Bun 本身也支援 Node-compatible API。Bun 官方推薦用 <code>Bun.file</code> 和 <code>Bun.write</code> 做高效讀寫，但對 <code>mkdir</code>、<code>readdir</code> 這類操作，官方文件也會指向 Bun 對 <code>node:fs</code> 的相容實作。也就是說，在 Bun 裡使用 <code>node:fs/promises</code> 不代表程式跑到 Node runtime；它仍然是在 Bun runtime 裡使用 Bun 實作的 Node-compatible API。</p>
 
@@ -520,14 +521,14 @@
 
       <p>因此，如果 <code>@effect/platform-bun</code> 的 <code>FileSystem</code> 內部重用 node-shared implementation，這不一定是設計錯誤。它更像是 Effect 在不同 JavaScript runtime 之間共用成熟檔案系統實作的取捨。</p>
 
-      <h2>目前設計合理嗎</h2>
-      <p>它是合理的，但對一支 build script 來說偏重。判斷標準取決於你想讓 scripts 承擔什麼角色。</p>
+      <h2>build script 要不要使用 Effect？</h2>
+      <p>兩種做法都合理；選擇取決於腳本是否需要結構化錯誤、資源管理、重試、併行或可替換的 service。只有幾個線性步驟時，直接使用 Bun API 通常更容易維護。</p>
 
       <h3>保留 Effect 寫法的理由</h3>
       <ul>
-        <li>整個專案都用 Effect，build script 也維持同一套錯誤處理與 platform abstraction。</li>
-        <li>執行外部程序時使用 <code>@effect/platform/Command</code>，避免散落 <code>child_process</code>、<code>Bun.spawn</code> 或 shell string。</li>
-        <li><code>FileSystem</code>、<code>CommandExecutor</code> 等 service 都由 <code>BunContext.layer</code> 提供，抽象邊界一致。</li>
+        <li>團隊希望 build 與產品程式共用同一套錯誤處理與 platform abstraction。</li>
+        <li>執行外部程序時使用 <code>effect/unstable/process/ChildProcess</code>，避免散落 <code>child_process</code>、<code>Bun.spawn</code> 或 shell string。</li>
+        <li><code>FileSystem</code>、<code>ChildProcessSpawner</code> 等 service 都由 <code>BunServices.layer</code> 提供，抽象邊界一致。</li>
       </ul>
 
       <h3>簡化成 Bun script 的理由</h3>
@@ -543,18 +544,28 @@
 
 <span class="k">await</span> <span class="f">mkdir</span><span class="o">(</span><span class="s">"dist"</span><span class="o">,</span> <span class="o">{</span> recursive<span class="o">:</span> <span class="n">true</span> <span class="o">}</span><span class="o">)</span><span class="o">;</span>
 
-<span class="k">await</span> <span class="t">Bun</span><span class="o">.</span><span class="p">$</span><span class="s">`bun build src/cli.ts --compile --target=bun-darwin-arm64 --outfile=dist/reviewstuff`</span><span class="o">;</span>
-<span class="k">await</span> <span class="t">Bun</span><span class="o">.</span><span class="p">$</span><span class="s">`./dist/reviewstuff --version`</span><span class="o">;</span>
-<span class="k">await</span> <span class="t">Bun</span><span class="o">.</span><span class="p">$</span><span class="s">`./dist/reviewstuff --help`</span><span class="o">;</span></code></pre>
+<span class="k">await</span> <span class="t">Bun</span><span class="o">.</span><span class="p">$</span><span class="s">`bun build cli/main.ts --compile --target=bun-darwin-arm64 --outfile=dist/toolbox`</span><span class="o">;</span>
+<span class="k">await</span> <span class="t">Bun</span><span class="o">.</span><span class="p">$</span><span class="s">`./dist/toolbox --version`</span><span class="o">;</span>
+<span class="k">await</span> <span class="t">Bun</span><span class="o">.</span><span class="p">$</span><span class="s">`./dist/toolbox --help`</span><span class="o">;</span></code></pre>
 
       <div class="callout">
         <p>實務建議：產品 CLI 與核心 runtime code 可以繼續用 Effect abstraction；單純 build script 是否也要用 Effect，取決於你是否重視一致性勝過腳本本身的簡潔性。</p>
       </div>
 
+      <h2>做到 production ready</h2>
+      <ul>
+        <li><strong>建置可重現：</strong>鎖定 Bun 與依賴版本，target 不靠開發機自動猜測；每個 OS／architecture 產物分開命名。</li>
+        <li><strong>避免 shell injection：</strong>動態參數優先使用 argv API；若使用 tagged template shell，仍要確認插值的 escaping 規則。</li>
+        <li><strong>驗證真實產物：</strong>在乾淨環境執行 <code>--help</code>、<code>--version</code> 與一條無破壞性的代表性命令，並檢查 exit code、stdout、stderr。</li>
+        <li><strong>保留可觀測性：</strong>失敗訊息應指出階段、command、target 與 exit code；token、簽章金鑰與完整環境變數必須遮蔽。</li>
+        <li><strong>供應鏈與發佈：</strong>產生 checksum／簽章，保存 build provenance，從 CI 的 immutable artifact 發佈，而不是在 release job 重新建置。</li>
+      </ul>
+      <p>測試分三層：CLI parser 的純解析測試、build wrapper 以 fake process runner 驗證 argv 與失敗傳播、以及 CI 對編譯後 binary 的少量 smoke test。這能在不讓測試全面依賴真實 compiler 的前提下，仍覆蓋發佈風險。</p>
+
       <h2>讀這類檔案時的判斷規則</h2>
       <ul>
-        <li>看到 <code>@effect/cli</code>，先問：這裡是不是在定義使用者能輸入什麼？</li>
-        <li>看到 <code>@effect/platform/Command</code>，先問：這裡是不是在呼叫另一個 executable？</li>
+        <li>看到 <code>effect/unstable/cli</code>，先問：這裡是不是在定義使用者能輸入什麼？</li>
+        <li>看到 <code>effect/unstable/process/ChildProcess</code>，先問：這裡是不是在呼叫另一個 executable？</li>
         <li>看到 <code>FileSystem</code>，先問：這是平台抽象，還是某個 runtime 的具體 FS API？</li>
         <li>看到 <code>node:fs</code> 出現在 Bun 專案，不要立刻判定為錯；先確認它是 runtime 相容 API、套件內部實作，還是專案直接耦合。</li>
         <li>build script 的「最佳」通常不是最抽象，而是最容易維護、失敗時最容易除錯。</li>

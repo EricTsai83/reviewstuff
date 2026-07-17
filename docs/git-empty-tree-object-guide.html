@@ -557,25 +557,23 @@
         <h2>安全且不過度設計的實作方式</h2>
         <p>實務上可以先確認 <code>HEAD</code> 是否真的指向 commit：</p>
         <pre class="language-shell"><span class="label">Shell</span><code><span class="sh-command">git</span> rev-parse <span class="sh-flag">--verify</span> <span class="sh-flag">--quiet</span> <span class="sh-string">'HEAD^{commit}'</span></code></pre>
-        <p>成功時使用 <code>HEAD</code>。若 exit code 明確表示名稱不存在，才讓 Git 依目前 repository 的 object format 計算 empty tree：</p>
-        <pre class="language-shell"><span class="label">Shell</span><code><span class="sh-command">git</span> hash-object <span class="sh-flag">-t</span> tree /dev/null</code></pre>
-        <p><code>-t tree</code> 指定 object type；<code>/dev/null</code> 提供零 bytes payload。命令沒有 <code>-w</code>，所以只計算 ID，不會把 object 寫入 object database，也不會建立 branch 或 commit。</p>
+        <p>成功時使用 <code>HEAD</code>。若 exit code 明確表示名稱不存在，才讓 Git 依該 repository 的 object format 計算 empty tree。以下透過空 stdin 傳入零 bytes，Unix 與 Windows 的程序 API 都能採用同一策略：</p>
+        <pre class="language-shell"><span class="label">Shell</span><code><span class="sh-command">printf</span> <span class="sh-string">''</span> | <span class="sh-command">git</span> hash-object <span class="sh-flag">-t</span> tree <span class="sh-flag">--stdin</span></code></pre>
+        <p><code>-t tree</code> 指定 object type；<code>--stdin</code> 接收零 bytes payload。命令沒有 <code>-w</code>，所以只計算 ID，不會把 object 寫入 object database，也不會建立 branch 或 commit。</p>
 
-        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">const</span> headCommitVerification <span class="o">=</span> <span class="k">yield</span><span class="o">*</span> <span class="f">executeGit</span><span class="o">(</span>
-  runner<span class="o">,</span>
-  <span class="s">"resolve review base"</span><span class="o">,</span>
+        <pre class="language-typescript"><span class="label">TypeScript pseudocode</span><code><span class="k">const</span> head <span class="o">=</span> <span class="k">await</span> <span class="f">runGit</span><span class="o">(</span>
   <span class="o">[</span><span class="s">"rev-parse"</span><span class="o">,</span> <span class="s">"--verify"</span><span class="o">,</span> <span class="s">"--quiet"</span><span class="o">,</span> <span class="s">"HEAD^{commit}"</span><span class="o">]</span><span class="o">,</span>
-  <span class="n">1_024</span><span class="o">,</span>
-  repositoryRoot<span class="o">,</span>
+  <span class="o">{</span> cwd<span class="o">:</span> repositoryRoot<span class="o">,</span> timeoutMs<span class="o">:</span> <span class="n">5_000</span> <span class="o">}</span><span class="o">,</span>
 <span class="o">)</span><span class="o">;</span>
 
-<span class="k">if</span> <span class="o">(</span>headCommitVerification<span class="o">.</span><span class="p">exitCode</span> <span class="o">!</span><span class="o">=</span><span class="o">=</span> <span class="n">0</span> <span class="o">&amp;</span><span class="o">&amp;</span> headCommitVerification<span class="o">.</span><span class="p">exitCode</span> <span class="o">!</span><span class="o">=</span><span class="o">=</span> <span class="n">1</span><span class="o">)</span> <span class="o">{</span>
-  <span class="k">return</span> <span class="k">yield</span><span class="o">*</span> <span class="f">makeGitCommandError</span><span class="o">(</span><span class="s">"resolve review base"</span><span class="o">,</span> headCommitVerification<span class="o">)</span><span class="o">;</span>
-<span class="o">}</span>
+<span class="k">if</span> <span class="o">(</span>head<span class="o">.</span><span class="p">exitCode</span> <span class="o">=</span><span class="o">=</span><span class="o">=</span> <span class="n">0</span><span class="o">)</span> <span class="k">return</span> <span class="s">"HEAD"</span><span class="o">;</span>
+<span class="k">if</span> <span class="o">(</span>head<span class="o">.</span><span class="p">exitCode</span> <span class="o">!</span><span class="o">=</span><span class="o">=</span> <span class="n">1</span><span class="o">)</span> <span class="k">throw</span> <span class="f">classifyGitFailure</span><span class="o">(</span>head<span class="o">)</span><span class="o">;</span>
 
-<span class="k">const</span> reviewBase <span class="o">=</span> headCommitVerification<span class="o">.</span><span class="p">exitCode</span> <span class="o">=</span><span class="o">=</span><span class="o">=</span> <span class="n">0</span>
-  <span class="o">?</span> <span class="s">"HEAD"</span>
-  <span class="o">:</span> <span class="k">yield</span><span class="o">*</span> <span class="f">resolveEmptyTreeObjectId</span><span class="o">(</span>runner<span class="o">,</span> repositoryRoot<span class="o">)</span><span class="o">;</span></code></pre>
+<span class="k">const</span> emptyTree <span class="o">=</span> <span class="k">await</span> <span class="f">runGit</span><span class="o">(</span>
+  <span class="o">[</span><span class="s">"hash-object"</span><span class="o">,</span> <span class="s">"-t"</span><span class="o">,</span> <span class="s">"tree"</span><span class="o">,</span> <span class="s">"--stdin"</span><span class="o">]</span><span class="o">,</span>
+  <span class="o">{</span> cwd<span class="o">:</span> repositoryRoot<span class="o">,</span> stdin<span class="o">:</span> <span class="k">new</span> <span class="f">Uint8Array</span><span class="o">(</span><span class="n">0</span><span class="o">)</span> <span class="o">}</span><span class="o">,</span>
+<span class="o">)</span><span class="o">;</span>
+<span class="k">return</span> <span class="f">requireObjectId</span><span class="o">(</span>emptyTree<span class="o">)</span><span class="o">;</span></code></pre>
 
         <h3>為什麼動態計算比寫死 SHA-1 常數好？</h3>
         <div class="table-wrap">
@@ -603,10 +601,10 @@
           </table>
         </div>
 
-        <p>第三種做法在一般 CLI 或 code-review 工具裡是平衡的選擇：額外 command 只會發生在第一個 commit 之前，沒有引入新的 object abstraction、cache 或 hashing implementation。</p>
+        <p>第三種做法在一般 CLI 或 code-review 工具裡是平衡的選擇：額外 command 只會發生在第一個 commit 之前，沒有引入另一套 hashing implementation。Production 實作仍應限制 timeout 與輸出大小，驗證 stdout 是該 repository object format 的合法 Object ID，並保留非預期 exit code。</p>
 
         <div class="callout">
-          <p><strong>平台邊界：</strong><code>/dev/null</code> 是 Unix 路徑。如果工具需要完整支援 Windows，command runner 應支援空 stdin，並改用 <code>git hash-object -t tree --stdin</code>。這是跨平台需求出現時才需要處理的演進，不必為目前不存在的需求先擴張架構。</p>
+          <p><strong>平台邊界：</strong><code>/dev/null</code> 只適用 Unix。若工具宣稱跨平台，command runner 應從一開始就能傳入空 stdin；這也比依賴 shell pipeline 更容易測試，並能避免 quoting 與平台 shell 差異。</p>
         </div>
       </section>
 
@@ -624,7 +622,7 @@
       <section class="sources">
         <h2>延伸閱讀</h2>
         <ul>
-          <li><a href="https://git-scm.com/docs/gitformat-loose/2.52.0.html">Git 官方文件：Loose object format</a>——包含 object header 與 SHA-256 empty tree 範例。</li>
+          <li><a href="https://git-scm.com/docs/gitformat-loose">Git 官方文件：Loose object format</a>——包含 object header 與 SHA-256 empty tree 範例。</li>
           <li><a href="https://git-scm.com/docs/git-hash-object.html">Git 官方文件：git hash-object</a>——說明 object type、stdin 與 <code>-w</code> 行為。</li>
           <li><a href="https://git-scm.com/docs/git-rev-parse.html">Git 官方文件：git rev-parse</a>——說明 <code>--verify</code>、peeling syntax 與 object format。</li>
           <li><a href="https://git-scm.com/docs/user-manual">Git User Manual：Object database</a>——介紹 blob、tree、commit 與 content-addressed storage。</li>

@@ -470,12 +470,14 @@ identity<span class="o">&lt;</span>string<span class="o">&gt;</span><span class=
 
         <p><code>Context.Service</code> 也是相同道理：</p>
 
-        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="t">Context</span><span class="o">.</span><span class="p">Service</span><span class="o">&lt;</span><span class="t">GitService</span><span class="o">,</span> <span class="t">ServiceShape</span><span class="o">&gt;</span><span class="o">(</span><span class="o">)</span></code></pre>
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="t">Context</span><span class="o">.</span><span class="p">Service</span><span class="o">&lt;</span><span class="t">GitService</span><span class="o">,</span> <span class="t">ServiceShape</span><span class="o">&gt;</span><span class="o">(</span><span class="o">)</span><span class="o">(</span><span class="s">"app/GitService"</span><span class="o">)</span></code></pre>
 
         <ul>
           <li><code>GitService</code> 填入服務識別型別的位置。</li>
           <li><code>ServiceShape</code> 填入服務內容型別的位置。</li>
         </ul>
+
+        <p>最後的字串是 runtime key，不是第三個泛型。這是 Effect <code>4.0.0-beta.98</code> 的 class-style service 兩階段呼叫：第一對括號固定型別，第二對括號提供執行時識別名稱。</p>
 
         <p>雖然 Effect 的服務語法看起來比較密集，但泛型本身沒有改變：仍然只是把具體型別填進程式庫預留的位置。</p>
       </section>

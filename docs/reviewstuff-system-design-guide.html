@@ -3,10 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta
-      name="description"
-      content="從一次 code review 的完整資料流，學會設計本機 AI code review CLI 的 module boundary、service contract、adapter 與 composition root。"
-    />
+    <meta name="description" content="從一次 code review 的完整資料流，學會設計本機 AI code review CLI 的 module boundary、service contract、adapter、測試與 production guardrails。" />
     <title>一步一步設計本機 AI Code Review CLI</title>
     <style>
       :root {
@@ -361,6 +358,8 @@
             <li><a href="#composition">在入口完成組裝</a></li>
             <li><a href="#failures">把失敗也放回正確邊界</a></li>
             <li><a href="#growth">讓架構自然長大</a></li>
+            <li><a href="#testing">建立分層測試策略</a></li>
+            <li><a href="#production">補齊 production guardrails</a></li>
           </ol>
         </nav>
 
@@ -368,7 +367,7 @@
           <h2>先從一個使用者動作開始</h2>
           <p>假設使用者在專案目錄執行：</p>
 
-          <pre class="language-shell"><span class="label">Shell</span><code><span class="sh-command">reviewstuff</span> review</code></pre>
+          <pre class="language-shell"><span class="label">Shell</span><code><span class="sh-command">reviewctl</span> review</code></pre>
 
           <p>
             他期待的不是「執行幾個 shell commands」，而是一個完整結果：程式找出目前的程式碼變更，交給 reviewer 分析，再把 findings 顯示出來。若沒有變更，就清楚告知；若外部工具失敗，也要說明失敗發生在哪裡。
@@ -658,6 +657,35 @@
           <div class="callout">
             <p><strong>判斷架構是否站穩：</strong>換 provider 時主要改 engine adapter；改 review 順序時主要改 use case；改終端呈現時主要改 renderer。三種變更不應互相拖動。</p>
           </div>
+        </section>
+
+        <section id="testing">
+          <h2>用測試驗證規則，也驗證 adapters 沒有說謊</h2>
+          <p>可替換架構只有在接縫可被驗證時才有價值。測試應按責任分層，而不是所有案例都啟動真正的 Git 與 AI provider：</p>
+          <ul>
+            <li><strong>Domain tests：</strong>用純資料驗證 finding schema、去重、排序與 severity 規則。</li>
+            <li><strong>Use-case tests：</strong>提供 in-memory Git、Engine 與 Storage fakes，驗證 no-change 短路、保存時機、錯誤政策與取消傳遞。</li>
+            <li><strong>Contract tests：</strong>同一組行為規格跑過 fake 與 production adapter，例如路徑正規化、空 diff、錯誤分類，避免 fake 和真實實作語意分岔。</li>
+            <li><strong>Integration tests：</strong>在暫存 repository 執行真實 Git adapter；對 provider 使用受控 HTTP stub 驗證 request、response decode、timeout 與 rate-limit mapping。</li>
+            <li><strong>少量端到端測試：</strong>確認 CLI flags、composition root、輸出 schema 與 exit code 接通。</li>
+          </ul>
+          <p>Architecture test 可以禁止 use case import provider SDK、禁止 domain import filesystem，卻無法證明 service contract 的語意良好；它是 guardrail，不是設計推理的替代品。</p>
+        </section>
+
+        <section id="production">
+          <h2>Production-ready 不只是「能呼叫模型」</h2>
+          <div class="table-wrap"><table>
+            <thead><tr><th>風險</th><th>必要設計</th><th>觀測訊號</th></tr></thead>
+            <tbody>
+              <tr><td>超大 diff／prompt</td><td>檔案與 byte 上限、binary 排除、chunking、token budget</td><td>截斷率、輸入大小、token 使用量</td></tr>
+              <tr><td>卡住的 subprocess／provider</td><td>deadline、取消、bounded concurrency、確實終止 child process</td><td>latency、timeout、仍存活程序數</td></tr>
+              <tr><td>暫時性外部失敗</td><td>只對 idempotent 操作做 bounded retry、backoff 與 jitter</td><td>retry 次數、429／5xx 比率</td></tr>
+              <tr><td>不可信模型輸出</td><td>schema decode、大小限制、未知欄位政策；禁止直接執行模型文字</td><td>decode failure、被丟棄 findings</td></tr>
+              <tr><td>敏感程式碼外洩</td><td>明確 consent、secret redaction、provider policy、log scrubbing</td><td>redaction 數、資料傳送目的地</td></tr>
+              <tr><td>session 損壞</td><td>versioned schema、atomic write、retention、migration 與 recovery</td><td>write failure、migration failure</td></tr>
+            </tbody>
+          </table></div>
+          <p>JSON／NDJSON 輸出要有穩定 schema version；human renderer 可以演進文字，但 machine-readable contract 必須有相容政策。CLI 也應定義穩定 exit code，讓 CI 能區分「有 finding」、「工具失敗」與「沒有可 review 內容」。</p>
         </section>
 
         <section class="closing" id="rules">

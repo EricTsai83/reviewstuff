@@ -178,7 +178,7 @@
           <li><a href="#mental-model">先建立工具箱心智模型</a></li>
           <li><a href="#comparison">比較星號與具名匯入</a></li>
           <li><a href="#effect">看 Effect 為什麼特別適合這種寫法</a></li>
-          <li><a href="#t3">理解 T3 Code 的混合策略</a></li>
+          <li><a href="#t3">理解混合 import 策略</a></li>
           <li><a href="#rules">用簡單規則做選擇</a></li>
         </ol>
       </nav>
@@ -303,8 +303,8 @@
       </section>
 
       <section id="t3">
-        <h2>T3 Code 並沒有把星號當成鐵律</h2>
-        <p>T3 Code 的實際策略是混合使用：核心 Effect 模組大多保留 namespace；聚合入口、CLI 定義與測試 helper 則常採 named import。</p>
+        <h2>不必把星號當成鐵律</h2>
+        <p>成熟的 TypeScript 程式通常混合使用兩種形式：核心 Effect 模組保留 namespace；聚合入口、CLI 定義與測試 helper 則可採 named import。標準不是「全案只能選一種」，而是呼叫處是否清楚且同類檔案是否一致。</p>
 
         <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="c">// 一組完整 API：保留 namespace</span>
 <span class="k">import</span> <span class="o">*</span> <span class="k">as</span> <span class="t">Effect</span> <span class="k">from</span> <span class="s">"effect/Effect"</span><span class="o">;</span>
@@ -315,7 +315,7 @@
 <span class="k">import</span> <span class="o">{</span> <span class="t">Argument</span><span class="o">,</span> <span class="t">Command</span><span class="o">,</span> <span class="t">Flag</span> <span class="o">}</span> <span class="k">from</span> <span class="s">"effect/unstable/cli"</span><span class="o">;</span>
 <span class="k">import</span> <span class="o">{</span> <span class="t">ChildProcess</span> <span class="o">}</span> <span class="k">from</span> <span class="s">"effect/unstable/process"</span><span class="o">;</span></code></pre>
 
-        <p>更重要的是，同一個 T3 Code 程式庫裡也可以看到兩種 ChildProcess 寫法：</p>
+        <p>同一個公開 API 也可能有兩種合法匯入方式：</p>
 
         <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="c">// 從聚合入口取得一個名為 ChildProcess 的子模組</span>
 <span class="k">import</span> <span class="o">{</span> <span class="t">ChildProcess</span> <span class="o">}</span> <span class="k">from</span> <span class="s">"effect/unstable/process"</span><span class="o">;</span>
@@ -348,8 +348,8 @@
           <p><strong>對小型 Effect 專案的實用預設：</strong>看到 <code>effect/Effect</code>、<code>effect/Data</code>、<code>effect/FileSystem</code> 這種直接子模組路徑時，先使用 <code>import * as</code>；看到 <code>effect/unstable/cli</code>、<code>effect/unstable/process</code> 這種聚合入口時，再考慮 named import。</p>
         </aside>
 
-        <h3>原始範例可以怎麼整理</h3>
-        <p>下面這組 import 已經符合 Effect 常見風格。若希望靠近 T3 Code 的混合策略，唯一值得考慮的簡化是讓 <code>ChildProcess</code> 從聚合入口進來：</p>
+        <h3>一份一致的 Effect import 範例</h3>
+        <p>下面示範核心模組使用 namespace，而聚合入口只取一個角色清楚的子模組：</p>
 
         <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">import</span> <span class="o">*</span> <span class="k">as</span> <span class="t">BunRuntime</span> <span class="k">from</span> <span class="s">"@effect/platform-bun/BunRuntime"</span><span class="o">;</span>
 <span class="k">import</span> <span class="o">*</span> <span class="k">as</span> <span class="t">BunServices</span> <span class="k">from</span> <span class="s">"@effect/platform-bun/BunServices"</span><span class="o">;</span>
@@ -374,12 +374,11 @@
       </section>
 
       <footer class="sources">
-        <h2>參考原始碼</h2>
+        <h2>版本與查核</h2>
         <ul>
-          <li><a href="https://github.com/pingdotgg/t3code/blob/ecb35f75839925dd1ac6f854efeef5c9e291d11b/scripts/dev-runner.ts">T3 Code：dev-runner.ts</a> — 在同一檔案展示 namespace 與 named import。</li>
-          <li><a href="https://github.com/pingdotgg/t3code/blob/ecb35f75839925dd1ac6f854efeef5c9e291d11b/apps/server/src/processRunner.ts">T3 Code：processRunner.ts</a> — 展示直接匯入 ChildProcess 子模組。</li>
+          <li>本文範例以 <code>effect@4.0.0-beta.98</code> 的公開 module export 為準。</li>
+          <li>匯入路徑屬於 API 契約；升級 major／beta 版本時應以套件 exports 與 TypeScript typecheck 重新確認。</li>
         </ul>
-        <p>連結固定在 2026-07-15 的原始碼版本，避免日後主分支變動造成範例漂移。</p>
       </footer>
     </article>
   </main>

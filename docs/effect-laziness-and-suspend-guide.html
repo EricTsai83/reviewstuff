@@ -3,6 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="以執行時間軸與通用範例理解 Effect 的 lazy 語意，以及 succeed、sync、suspend、遞迴、錯誤處理、效能與測試的正確邊界。">
   <title>Effect 的延遲執行：從 lazy 到 Effect.suspend</title>
   <style>
     :root {
@@ -631,7 +632,7 @@ console<span class="o">.</span><span class="p">log</span><span class="o">(</span
         <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">const</span> countdown <span class="o">=</span> <span class="o">(</span>n<span class="o">:</span> number<span class="o">)</span><span class="o">:</span> <span class="t">Effect</span><span class="o">.</span><span class="p">Effect</span><span class="o">&lt;</span>void<span class="o">&gt;</span> <span class="o">=</span><span class="o">&gt;</span>
   n <span class="o">&lt;</span><span class="o">=</span> <span class="n">0</span>
     <span class="o">?</span> <span class="t">Effect</span><span class="o">.</span><span class="p">void</span>
-    <span class="o">:</span> <span class="t">Effect</span><span class="o">.</span><span class="p">zipRight</span><span class="o">(</span>
+    <span class="o">:</span> <span class="t">Effect</span><span class="o">.</span><span class="p">andThen</span><span class="o">(</span>
         <span class="t">Effect</span><span class="o">.</span><span class="p">log</span><span class="o">(</span>n<span class="o">)</span><span class="o">,</span>
         <span class="f">countdown</span><span class="o">(</span>n <span class="o">-</span> <span class="n">1</span><span class="o">)</span> <span class="c">// 立即呼叫</span>
       <span class="o">)</span>
@@ -639,14 +640,14 @@ console<span class="o">.</span><span class="p">log</span><span class="o">(</span
 <span class="k">const</span> program <span class="o">=</span> <span class="f">countdown</span><span class="o">(</span><span class="n">100_000</span><span class="o">)</span>
 <span class="c">// runtime 尚未開始，JavaScript 就可能 stack overflow</span></code></pre>
 
-        <p>為了呼叫 <code>Effect.zipRight</code>，JavaScript 必須先算出第二個參數，所以立即執行 <code>countdown(n - 1)</code>，再執行下一層，直到結束或耗盡 call stack。</p>
+        <p>為了呼叫 <code>Effect.andThen</code>，JavaScript 必須先算出第二個參數，所以立即執行 <code>countdown(n - 1)</code>，再執行下一層，直到結束或耗盡 call stack。</p>
 
         <h3>延遲版本：每次只建立下一層</h3>
 
         <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">const</span> countdown <span class="o">=</span> <span class="o">(</span>n<span class="o">:</span> number<span class="o">)</span><span class="o">:</span> <span class="t">Effect</span><span class="o">.</span><span class="p">Effect</span><span class="o">&lt;</span>void<span class="o">&gt;</span> <span class="o">=</span><span class="o">&gt;</span>
   n <span class="o">&lt;</span><span class="o">=</span> <span class="n">0</span>
     <span class="o">?</span> <span class="t">Effect</span><span class="o">.</span><span class="p">void</span>
-    <span class="o">:</span> <span class="t">Effect</span><span class="o">.</span><span class="p">zipRight</span><span class="o">(</span>
+    <span class="o">:</span> <span class="t">Effect</span><span class="o">.</span><span class="p">andThen</span><span class="o">(</span>
         <span class="t">Effect</span><span class="o">.</span><span class="p">log</span><span class="o">(</span>n<span class="o">)</span><span class="o">,</span>
         <span class="t">Effect</span><span class="o">.</span><span class="p">suspend</span><span class="o">(</span><span class="o">(</span><span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span> <span class="f">countdown</span><span class="o">(</span>n <span class="o">-</span> <span class="n">1</span><span class="o">)</span><span class="o">)</span>
       <span class="o">)</span></code></pre>
@@ -774,7 +775,16 @@ console<span class="o">.</span><span class="p">log</span><span class="o">(</span
       </section>
 
       <section id="decision-rules">
-        <h2>11. 實用判斷規則</h2>
+        <h2>11. Production 與測試注意事項</h2>
+        <ul>
+          <li><strong>先量測再最佳化：</strong><code>suspend</code> 會多一層 thunk；它是語意與 stack safety 工具，不是通用效能開關。</li>
+          <li><strong>避免隱藏昂貴建構：</strong>若 thunk 會反覆解析設定或配置大型結構，應明確決定每次執行重算、快取，或改由 Layer 管理生命週期。</li>
+          <li><strong>測試每次執行：</strong>以 counter 或 TestClock 證明 thunk 在建構時尚未執行，且同一個 Effect 每次 run 都會重新求值。</li>
+          <li><strong>測試 interruption：</strong>延遲建立的資源仍應使用 scoped API；不要以 <code>suspend</code> 取代 acquire／release。</li>
+          <li><strong>測試遞迴邊界：</strong>除了小輸入的結果，也用足以暴露同步 stack overflow 的深度驗證 stack safety。</li>
+        </ul>
+
+        <h2>12. 實用判斷規則</h2>
 
         <ol class="rules">
           <li><strong>已經有一個值：</strong>用 <code>Effect.succeed(value)</code>。</li>

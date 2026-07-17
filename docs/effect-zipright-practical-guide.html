@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="從需求出發，透過五個不同情境選擇 Effect、andThen、zipRight、tap 與 Effect.gen。">
-  <title>Effect 組合方式：五種需求，五個實務情境</title>
+  <meta name="description" content="以 Effect 4 的現行 API，從五種需求選擇 andThen、flatMap、tap 與 Effect.gen，理解順序、資料依賴與錯誤傳遞。">
+  <title>Effect 4 組合方式：andThen、flatMap、tap 與 gen</title>
   <style>
     :root {
       color-scheme: light;
@@ -307,7 +307,7 @@
 </head>
 <body>
   <main>
-    <h1>Effect 組合方式：五種需求，五個實務情境</h1>
+    <h1>Effect 4 組合方式：五種需求，五個實務情境</h1>
     <p class="deck">不要先背 API，再硬套進程式。先判斷你有幾個 Effect、要保留哪個結果、後續步驟是否依賴前面的值，再選擇最能表達意圖的組合方式。</p>
 
     <aside class="summary">
@@ -336,8 +336,8 @@
         </tr>
         <tr>
           <td>做 A、做 B，只要 B 的值</td>
-          <td><code>zipRight</code></td>
-          <td>明確表達保留右值的組合語意。</td>
+          <td><code>andThen</code></td>
+          <td>依序執行並保留下一步的成功值。</td>
         </tr>
         <tr>
           <td>成功後記錄，但保留 A 的值</td>
@@ -362,11 +362,11 @@
     <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">const</span> handleStart <span class="o">=</span> <span class="o">(</span><span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span>
   <span class="t">Console</span><span class="o">.</span><span class="p">log</span><span class="o">(</span><span class="s">"Service started"</span><span class="o">)</span></code></pre>
 
-    <p>這時加入 <code>Effect.void</code>、<code>zipRight</code> 或 <code>Effect.gen</code> 都只會增加讀者需要解開的結構：</p>
+    <p>這時加入 <code>Effect.void</code>、<code>andThen</code> 或 <code>Effect.gen</code> 都只會增加讀者需要解開的結構：</p>
 
     <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="c">// 可以執行，但沒有帶來額外語意</span>
 <span class="k">const</span> program <span class="o">=</span> <span class="t">Effect</span><span class="o">.</span><span class="p">void</span><span class="o">.</span><span class="p">pipe</span><span class="o">(</span>
-  <span class="t">Effect</span><span class="o">.</span><span class="p">zipRight</span><span class="o">(</span><span class="t">Console</span><span class="o">.</span><span class="p">log</span><span class="o">(</span><span class="s">"Service started"</span><span class="o">)</span><span class="o">)</span>
+  <span class="t">Effect</span><span class="o">.</span><span class="p">andThen</span><span class="o">(</span><span class="t">Console</span><span class="o">.</span><span class="p">log</span><span class="o">(</span><span class="s">"Service started"</span><span class="o">)</span><span class="o">)</span>
 <span class="o">)</span></code></pre>
 
     <p><strong>判斷重點：</strong>先數真正需要執行的 Effect。只有一個，就直接回傳或指定它；不要為了預留未來流程而先建立空的組合層。</p>
@@ -391,11 +391,17 @@
 
     <aside class="note"><strong>界線：</strong>若 B 需要使用 A 的成功值，不要把依賴藏在外部可變狀態裡。使用 <code>Effect.flatMap(value =&gt; ...)</code>，或在步驟增加時直接改用 <code>Effect.gen</code>。</aside>
 
+    <h3>當 B 依賴 A：使用 flatMap</h3>
+    <p>例如先取得使用者，再用其 id 讀取訂單。<code>flatMap</code> 的 callback 只會在第一步成功後收到 <code>User</code>，並回傳下一個 Effect：</p>
+    <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">const</span> orders <span class="o">=</span> <span class="f">loadUser</span><span class="o">(</span><span class="s">"user_123"</span><span class="o">)</span><span class="o">.</span><span class="p">pipe</span><span class="o">(</span>
+  <span class="t">Effect</span><span class="o">.</span><span class="p">flatMap</span><span class="o">(</span><span class="o">(</span>user<span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span> <span class="f">loadOrders</span><span class="o">(</span>user<span class="o">.</span><span class="p">id</span><span class="o">)</span><span class="o">)</span>
+<span class="o">)</span></code></pre>
+
     <h2>情境三：做 A、做 B，只保留 B 的值</h2>
     <p>讀取使用者之前先顯示載入訊息。訊息的結果是 <code>void</code>，真正要交給後續程式的是 <code>loadUser</code> 取得的 <code>User</code>。</p>
 
     <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">const</span> program <span class="o">=</span> <span class="t">Console</span><span class="o">.</span><span class="p">log</span><span class="o">(</span><span class="s">"Loading user..."</span><span class="o">)</span><span class="o">.</span><span class="p">pipe</span><span class="o">(</span>
-  <span class="t">Effect</span><span class="o">.</span><span class="p">zipRight</span><span class="o">(</span><span class="f">loadUser</span><span class="o">(</span><span class="s">"user_123"</span><span class="o">)</span><span class="o">)</span>
+  <span class="t">Effect</span><span class="o">.</span><span class="p">andThen</span><span class="o">(</span><span class="f">loadUser</span><span class="o">(</span><span class="s">"user_123"</span><span class="o">)</span><span class="o">)</span>
 <span class="o">)</span>
 
 <span class="c">// program 的成功值是 User，而不是 void</span></code></pre>
@@ -404,24 +410,24 @@
 
     <div class="equivalence">
       <pre class="language-typescript"><span class="label">TypeScript</span><code>left<span class="o">.</span><span class="p">pipe</span><span class="o">(</span>
-  <span class="t">Effect</span><span class="o">.</span><span class="p">zipRight</span><span class="o">(</span>right<span class="o">)</span>
+  <span class="t">Effect</span><span class="o">.</span><span class="p">andThen</span><span class="o">(</span>right<span class="o">)</span>
 <span class="o">)</span></code></pre>
       <span class="equals" aria-label="等同於">=</span>
-      <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="t">Effect</span><span class="o">.</span><span class="p">zipRight</span><span class="o">(</span>
+      <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="t">Effect</span><span class="o">.</span><span class="p">andThen</span><span class="o">(</span>
   left<span class="o">,</span>
   right
 <span class="o">)</span></code></pre>
     </div>
 
-    <p><code>zipRight</code> 的名字直接表達資料選擇：兩邊都執行，丟掉左值，留下右值。對熟悉 Effect 組合子的人，這個意圖很精確。</p>
+    <p>在 Effect 4，<code>andThen(right)</code> 會依序執行兩邊、丟掉左值，留下右邊 Effect 的成功值。若右側是一個 callback，callback 會收到左值；這讓同一個 operator 同時涵蓋固定下一步與依賴前值的下一步。</p>
 
-    <h3>它和 andThen 有什麼差別？</h3>
-    <p>當 <code>andThen</code> 右側直接接一個 Effect 時，兩者在這個例子的執行順序與結果型別可以相同。實務上可用閱讀意圖區分：</p>
+    <h3>為什麼有些舊文章寫 <code>zipRight</code>？</h3>
+    <p>Effect 3 的教材常用 <code>Effect.zipRight</code> 表達「兩邊依序執行，只保留右值」。目前本文對齊 Effect <code>4.0.0-beta.98</code>：<code>Effect</code> 模組已不匯出該 operator，固定的右側 Effect 應使用 <code>Effect.andThen(right)</code>。不要直接複製舊版範例。</p>
 
     <ul class="checklist">
-      <li>重點是「完成 A，然後做 B」：優先 <code>andThen</code>。</li>
-      <li>重點是「執行兩邊，但明確只留右值」：使用 <code>zipRight</code>。</li>
-      <li>團隊不熟悉組合子，且沒有強烈的值選擇需求：<code>andThen</code> 通常更友善。</li>
+      <li>右側是一個固定 Effect：<code>andThen(right)</code>。</li>
+      <li>右側必須使用左值：<code>andThen(value =&gt; next(value))</code> 或語意更聚焦的 <code>flatMap</code>。</li>
+      <li>兩者都會合併錯誤與環境需求；左側失敗時右側不會執行。</li>
     </ul>
 
     <h2>情境四：成功後記錄，但保留 A 的值</h2>
@@ -469,7 +475,7 @@
     <h2>把選擇縮成三個問題</h2>
     <ol class="sequence">
       <li><strong>有幾個 Effect？</strong>只有一個就直接使用；不要先建立假的組合。</li>
-      <li><strong>最後要保留哪個值？</strong>保留右值可用 <code>zipRight</code>，保留原值並附加觀察則用 <code>tap</code>。</li>
+      <li><strong>最後要保留哪個值？</strong>保留右值用 <code>andThen</code>，保留原值並附加觀察則用 <code>tap</code>。</li>
       <li><strong>後續是否需要前面的資料？</strong>簡單依賴可用 <code>flatMap</code>；中間值、分支或步驟變多時用 <code>Effect.gen</code>。</li>
     </ol>
 

@@ -4,6 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light dark">
+  <meta name="description" content="完整理解 Effect 4 Scope、acquireRelease、Effect.scoped 與 Scope.addFinalizer，確保資源在成功、失敗與中斷時都能清理。">
   <title>Effect Scope 與 Effect.scoped：資源生命週期完整教學</title>
   <style>
     :root {
@@ -939,7 +940,7 @@ program<span class="o">.</span><span class="p">pipe</span><span class="o">(</spa
 
         <ul>
           <li><code>Effect.acquireRelease</code>：把取得與釋放資源綁在一起。</li>
-          <li><code>Effect.addFinalizer</code>：直接向目前 Scope 登記清理工作。</li>
+          <li><code>Scope.addFinalizer(scope, finalizer)</code>：取得明確的 <code>Scope</code> 後，直接向它登記清理工作。</li>
           <li><code>Layer.scoped</code>：建立生命週期跟著 Layer 的服務。</li>
         </ul>
 

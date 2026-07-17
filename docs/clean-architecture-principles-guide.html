@@ -665,7 +665,7 @@ process<span class="o">.</span><span class="p">stdout</span><span class="o">.</s
           </table>
         </div>
 
-        <p>因此，<code>domain/</code> 裡目前只有 type 並不是問題。真正要問的是：這些 type 是否代表穩定的業務概念？是否被多個 application capability 共同使用？是否不帶特定框架、傳輸或儲存技術？如果答案是否定的，就應該留在真正擁有它的 feature。</p>
+        <p>因此，<code>domain/</code> 裡只有 type 並不是問題。真正要問的是：這些 type 是否代表穩定的業務概念？是否被多個 application capability 共同使用？是否不帶特定框架、傳輸或儲存技術？如果答案是否定的，就應該留在真正擁有它的 feature。</p>
         <p>當 domain 很簡單時，純資料結構加純函式完全可以成立，不必為了看起來「夠物件導向」而強迫每個模型變成 class。反過來，如果建立合法物件需要 validation，或狀態轉換必須維持 invariant，就應該把對應行為留在 domain boundary，而不是散落到 command 或 controller。</p>
       </section>
 

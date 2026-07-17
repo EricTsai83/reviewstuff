@@ -3,7 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>本機 CLI 開發流程：直接執行，不修改全域 PATH</title>
+  <meta name="description" content="建立不污染全域 PATH 的本機 CLI 開發、測試與發佈流程，並清楚分離開發 artifact 與正式安裝版本。">
+  <title>本機 CLI 開發流程：隔離執行、PATH 測試與正式發佈</title>
   <style>
     :root {
       color-scheme: light;
@@ -247,11 +248,11 @@
 <body>
   <main>
     <article>
-      <h1>本機 CLI 開發流程：直接執行，不修改全域 PATH</h1>
-      <p class="deck">reviewstuff 的開發版從專案內直接執行，不寫入使用者的 binary 目錄。這讓本機開發、PATH 與 production 安裝彼此獨立。</p>
+      <h1>本機 CLI 開發流程：隔離執行、PATH 測試與正式發佈</h1>
+      <p class="deck">開發版 CLI 應從 repository 內直接執行，不覆蓋使用者已安裝的指令。把日常試跑、PATH lookup 測試與 production 安裝拆開，能讓測試可重現，也避免開發 artifact 意外成為正式版本。</p>
 
       <div class="callout">
-        <p><strong>最短結論：</strong>平常開發使用 <code>bun run cli:local &lt;args&gt;</code>。它直接執行專案內的 compiled binary，不會改變電腦上的全域指令。</p>
+        <p><strong>最短結論：</strong>平常以相對路徑或 package script 執行 repository 內的 artifact；只有專門驗證安裝體驗時，才讓 shell 透過 PATH 尋找指令。</p>
       </div>
 
       <h2>1. 先理解三種執行方式</h2>
@@ -265,31 +266,31 @@
           <tbody>
             <tr>
               <td>直接指定專案內的檔案</td>
-              <td><code>./dist/reviewstuff --help</code></td>
+              <td><code>./dist/acme-cli --help</code></td>
               <td>Shell 直接執行這個檔案，不需要透過 PATH 尋找。指令結束後不會留下任何設定。</td>
             </tr>
             <tr>
               <td>只替這次指令暫時調整 PATH</td>
-              <td><code>PATH="/tmp/reviewstuff-bin:$PATH" reviewstuff --help</code></td>
-              <td>Shell 只在啟動這次 <code>reviewstuff</code> 時，把暫存目錄放在搜尋順序最前面。指令結束後，目前 terminal 的 PATH 仍是原來的值。</td>
+              <td><code>PATH="/tmp/acme-bin:$PATH" acme-cli --help</code></td>
+              <td>Shell 只在啟動這次 <code>acme-cli</code> 時，把暫存目錄放在搜尋順序最前面。指令結束後，目前 terminal 的 PATH 仍是原來的值。</td>
             </tr>
             <tr>
               <td>安裝到使用者的 PATH</td>
-              <td>檔案位於 <code>~/.local/bin/reviewstuff</code></td>
-              <td>只要 <code>~/.local/bin</code> 在 PATH 中，現在與之後開啟的 terminal 輸入 <code>reviewstuff</code> 時，都可能找到這個檔案。</td>
+              <td>檔案位於 <code>~/.local/bin/acme-cli</code></td>
+              <td>只要 <code>~/.local/bin</code> 在 PATH 中，現在與之後開啟的 terminal 輸入 <code>acme-cli</code> 時，都可能找到這個檔案。</td>
             </tr>
           </tbody>
         </table>
       </div>
 
       <div class="callout">
-        <p><strong>第二種的讀法：</strong><code>PATH="..." reviewstuff</code> 不是永久修改 PATH，而是「帶著這份臨時 PATH 執行一次 <code>reviewstuff</code>」。該程式啟動的子程式也會繼承它，但這次執行結束後，terminal 本身的 PATH 不會改變。</p>
+        <p><strong>第二種的讀法：</strong><code>PATH="..." acme-cli</code> 不是永久修改 PATH，而是「帶著這份臨時 PATH 執行一次 <code>acme-cli</code>」。該程式啟動的子程式也會繼承它，但這次執行結束後，terminal 本身的 PATH 不會改變。</p>
       </div>
 
       <p>平常只想確認「目前這份程式碼能不能跑」，第一種最直接。第二種適合專門測試 PATH lookup；第三種則是正式安裝產品的範圍，應由 Homebrew、release installer 或其他發佈方式負責。</p>
 
-      <h2>2. 現在的日常流程</h2>
-      <p>程式碼改變後，先產生最新的 compiled binary，再透過專案 script 執行：</p>
+      <h2>2. 建議的日常開發迴圈</h2>
+      <p>先用專案既有流程產生 artifact，再透過明確的 package script 執行。以下以 Bun 與名為 <code>acme-cli</code> 的示例程式說明；使用 pnpm 或其他工具時原則相同：</p>
 
       <pre class="language-shell"><span class="label">Shell</span><code><span class="sh-command">bun</span> run build
 <span class="sh-command">bun</span> run cli:local <span class="sh-flag">--help</span>
@@ -299,14 +300,14 @@
 
       <pre><span class="label">JSON</span><code>{
   "scripts": {
-    "cli:local": "./dist/reviewstuff"
+    "cli:local": "./dist/acme-cli"
   }
 }</code></pre>
 
-      <p>當你輸入 <code>bun run cli:local --help</code>，Bun 會執行專案內的 <code>dist/reviewstuff</code>，並把 <code>--help</code> 傳給它。這個過程不會搜尋、建立或刪除任何全域指令。</p>
+      <p>當你輸入 <code>bun run cli:local --help</code>，Bun 會執行專案內的 <code>dist/acme-cli</code>，並把 <code>--help</code> 傳給它。這個過程不會搜尋、建立或刪除任何全域指令。開發中若可直接執行 source entrypoint，也可另設快速迴圈；release 驗證仍應針對實際 artifact。</p>
 
       <h2>3. 為什麼直接執行是預設做法？</h2>
-      <p>日常開發的目標，是確認目前 repository 產生的 binary 能否正確執行。直接指定 <code>dist/reviewstuff</code>，會比要求 shell 透過 PATH 尋找指令更明確。</p>
+      <p>日常開發的目標，是確認這次 checkout 產生的 binary 能否正確執行。直接指定 <code>dist/acme-cli</code>，會比要求 shell 透過 PATH 尋找指令更明確。</p>
 
       <p>這個做法有幾個實際好處：</p>
       <ul>
@@ -340,19 +341,19 @@
       <pre class="language-shell"><span class="label">Shell</span><code><span class="sh-var">temp_bin="$(mktemp</span> <span class="sh-flag">-d)"</span>
 <span class="sh-command">trap</span> <span class="sh-string">'rm -rf "$temp_bin"'</span> EXIT
 
-<span class="sh-command">ln</span> <span class="sh-flag">-s</span> <span class="sh-string">"$PWD/dist/reviewstuff"</span> <span class="sh-string">"$temp_bin/reviewstuff"</span>
-<span class="sh-var">PATH="$temp_bin:$PATH"</span> <span class="sh-command">reviewstuff</span> <span class="sh-flag">--help</span></code></pre>
+<span class="sh-command">ln</span> <span class="sh-flag">-s</span> <span class="sh-string">"$PWD/dist/acme-cli"</span> <span class="sh-string">"$temp_bin/acme-cli"</span>
+<span class="sh-var">PATH="$temp_bin:$PATH"</span> <span class="sh-command">acme-cli</span> <span class="sh-flag">--help</span></code></pre>
 
-      <p>關鍵是 <code>PATH="$temp_bin:$PATH" reviewstuff --help</code>。這個 PATH 只套用在右邊那一次 <code>reviewstuff</code> 執行，不會改寫 shell 設定，也不會遮蔽之後正常使用的 production 版本。</p>
+      <p>關鍵是 <code>PATH="$temp_bin:$PATH" acme-cli --help</code>。這個 PATH 只套用在右邊那一次執行，不會改寫 shell 設定，也不會遮蔽之後正常使用的 production 版本。測試還應檢查 <code>command -v acme-cli</code> 的解析結果、exit code、stdout 與 stderr。</p>
 
       <h2>6. Production 安裝應該放在哪裡？</h2>
       <p>Production 安裝是另一個產品問題，通常還包含版本、更新、checksum、codesign、uninstall 和發佈來源。它不應依賴開發 repository 裡的一條 symlink。</p>
 
-      <p>對 reviewstuff 而言，未來可以由 release artifact 與 Homebrew workflow 負責。這樣使用者安裝的 <code>reviewstuff</code> 有明確版本，而開發者執行的則永遠是目前 repository 的 <code>dist/reviewstuff</code>。</p>
+      <p>Production pipeline 應從固定 commit 建立不可變 artifact，產生 checksum／SBOM，完成平台簽章與 provenance，再由 package manager 或 installer 安裝。Upgrade 與 uninstall 也要有明確契約；不要把 repository 內的 symlink 當作發佈機制。</p>
 
       <h2>7. 最後的判斷規則</h2>
       <ul>
-        <li>只想跑目前程式碼：用 <code>bun run cli:local &lt;args&gt;</code>。</li>
+        <li>只想跑這次 checkout：用 <code>bun run cli:local &lt;args&gt;</code>。</li>
         <li>想確認 binary 本身：用現有的 CLI e2e tests。</li>
         <li>想測 PATH lookup：在測試內使用暫存目錄與 process-scoped PATH。</li>
         <li>想讓一般使用者安裝：建立正式 release 與 package-manager 流程。</li>
@@ -363,12 +364,14 @@
         <p><strong>設計原則：</strong>開發工具越少修改使用者環境，越不容易和 production 安裝互相干擾。沒有具體需求時，直接執行專案內 binary 就是最穩定的預設。</p>
       </div>
 
-      <section class="sources" aria-label="專案對照">
-        <h2>專案中的對照位置</h2>
+      <section class="sources" aria-label="Production readiness 清單">
+        <h2>8. Production readiness 清單</h2>
         <ul>
-          <li><code>package.json</code>：定義 <code>cli:local</code>。</li>
-          <li><code>test/e2e/cli.e2e.test.ts</code>：直接驗證 compiled binary。</li>
-          <li><code>plans/003-local-cli-workflow.md</code>：記錄這套開發與安裝分離的決策。</li>
+          <li>在乾淨環境測試 install、upgrade、downgrade 與 uninstall，並涵蓋 shell cache（例如 <code>hash -r</code>）行為。</li>
+          <li>驗證支援平台的 executable bit、shebang、codesign／notarization、checksum 與最低 runtime 版本。</li>
+          <li>所有測試使用隔離的 HOME、PATH 與設定目錄，避免讀到開發者電腦上的正式版本。</li>
+          <li>Release artifact 可重現、可追溯到 commit，且下載失敗或驗證失敗時不覆蓋可用版本。</li>
+          <li>Telemetry 與 crash report 預設不收集敏感 argument、環境變數或工作目錄內容。</li>
         </ul>
       </section>
     </article>

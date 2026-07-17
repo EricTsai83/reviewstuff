@@ -3,6 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="比較 Effect 中一般 Error 與 Data.TaggedError，學會建模可預期失敗、使用 catchTag、保留 defect，並建立 production-ready 的錯誤與測試邊界。">
   <title>為什麼 Effect 裡 tagged error 比 new Error 更好</title>
   <style>
     :root {
@@ -335,7 +336,7 @@
   <main>
     <article>
       <h1>為什麼 Effect 裡 tagged error 比 new Error 更好</h1>
-      <p class="deck">這篇文章說明一個小修改背後的設計理由：為什麼在 Effect 程式裡，把 <code>Effect.fail(new Error(...))</code> 改成 <code>Data.TaggedError</code> 不是只是為了消 warning，而是讓失敗型別更清楚、更可組合。</p>
+      <p class="deck">在 Effect 程式裡，<code>Data.TaggedError</code> 能把可預期的失敗建模成清楚、可組合的領域契約。本篇從一般 <code>Error</code> 出發，完整說明何時值得使用 tagged error，以及如何處理、測試與上線。</p>
 
       <h2>問題不在「能不能丟錯誤」</h2>
       <p>在一般 TypeScript 裡，寫 <code>new Error("message")</code> 很自然。它能攜帶訊息，也能被 <code>try/catch</code> 抓到。可是 Effect 的錯誤模型不是只有「丟出例外」這件事。Effect 會把失敗放進型別裡，形成一個 failure channel。</p>
@@ -344,8 +345,8 @@
 
       <p>中間的 <code>Failure</code> 很重要。它不是註解，而是型別系統會追蹤的失敗資料。當你把泛用的 <code>Error</code> 放進去，Effect 只能知道「這裡可能失敗成某種 Error」，但不知道這個錯誤在 domain 裡代表什麼。</p>
 
-      <h2>原本的寫法</h2>
-      <p>原本的程式在 command 失敗時建立一個一般 <code>Error</code>：</p>
+      <h2>起點：只有一般 Error 的寫法</h2>
+      <p>假設一個通用的 command runner 在子程序失敗時建立一般 <code>Error</code>：</p>
 
       <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">const</span> run <span class="o">=</span> <span class="o">(</span>command<span class="o">:</span> string<span class="o">,</span> args<span class="o">:</span> <span class="t">ReadonlyArray</span><span class="o">&lt;</span>string<span class="o">&gt;</span><span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span>
   <span class="t">Effect</span><span class="o">.</span><span class="p">gen</span><span class="o">(</span><span class="k">function</span><span class="o">*</span> <span class="o">(</span><span class="o">)</span> <span class="o">{</span>
@@ -362,7 +363,7 @@
 
       <p>這段可以運作，但它把錯誤壓扁成 <code>Error</code>。如果之後還有其他失敗也用 <code>Error</code>，failure channel 裡就會混在一起：build command 失敗、檔案系統錯誤、未知例外，都可能長得像 <code>Error</code>。</p>
 
-      <h2>修改後的寫法</h2>
+      <h2>把可預期失敗建模成領域資料</h2>
       <p>修改後先定義一個有名字的錯誤型別：</p>
 
       <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">import</span> <span class="o">{</span> <span class="t">Data</span><span class="o">,</span> <span class="t">Effect</span> <span class="o">}</span> <span class="k">from</span> <span class="s">"effect"</span><span class="o">;</span>
@@ -536,8 +537,15 @@
         <p>實務規則可以很簡單：如果錯誤是你自己的程式邏輯預期會產生的失敗，用 tagged error；如果錯誤是不可預期的外部例外，才保留或包裝原本的 <code>Error</code>。</p>
       </div>
 
-      <h2>回到這次修改</h2>
-      <p>這次修改比較好的地方是，它把「build command 執行失敗」從一個泛用訊息，升級成一個明確的失敗型別。現在程式不只是說「發生 Error」，而是說「這是一個 CommandFailedError」。這讓 Effect 的型別推導、diagnostic、後續錯誤處理都有更清楚的基礎。</p>
+      <h2>Production readiness 與測試</h2>
+      <p>正式環境中的錯誤型別應攜帶可供程式判斷的欄位，例如 command、argv、exit code 與可安全揭露的 stderr 摘要；不要只留下必須解析的 message。敏感的環境變數、token 與完整命令列則不應直接寫入錯誤或 log。</p>
+      <ul>
+        <li>單元測試每個錯誤建構後的 <code>_tag</code> 與欄位，不要只比對 message。</li>
+        <li>測試 <code>catchTag</code> 只攔截指定變體，其他錯誤仍留在 failure channel。</li>
+        <li>在 CLI／HTTP 邊界測試錯誤到 exit code／status code 的映射。</li>
+        <li>保留未預期 defect 的 cause 與 stack；不要把所有 defect 都偽裝成可恢復的 tagged error。</li>
+      </ul>
+      <p>完成這些邊界後，<code>CommandFailedError</code> 才不只是較漂亮的型別，而是 observability、重試策略與使用者訊息都能依賴的穩定契約。</p>
 
       <p>所以這不是為了迎合工具提示，而是工具提示指出了一個真實設計問題：failure channel 裡的錯誤應該盡量保留語意，而不是全部退化成 <code>Error</code>。</p>
 

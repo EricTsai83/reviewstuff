@@ -3,7 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>@effect/cli：Args、Options 與 ValidationError 的使用邊界</title>
+  <meta name="description" content="以 Effect 4 的 effect/unstable/cli 學習 Argument、Flag、CliError、業務錯誤邊界，以及可上線的驗證與測試策略。">
+  <title>Effect 4 CLI：Argument、Flag 與 CliError 的使用邊界</title>
   <style>
     :root {
       color-scheme: light;
@@ -389,16 +390,16 @@
 <body>
   <main>
     <article>
-      <h1>@effect/cli：Args、Options 與 ValidationError 的使用邊界</h1>
-      <p class="deck">這篇整理 <code>@effect/cli</code> 裡最容易混淆的三件事：什麼值該放在 <code>Args</code>，什麼值該放在 <code>Options</code>，以及 <code>ValidationError</code> 到底代表哪一層的錯誤。</p>
+      <h1>Effect 4 CLI：Argument、Flag 與 CliError 的使用邊界</h1>
+      <p class="deck">這篇整理 <code>effect/unstable/cli</code> 裡最容易混淆的三件事：什麼值該放在 <code>Argument</code>，什麼值該放在 <code>Flag</code>，以及 <code>CliError</code> 到底代表哪一層的錯誤。</p>
 
       <h2>先建立心智模型</h2>
-      <p><code>Command</code> 定義一個動作，<code>Args</code> 是這個動作要操作的主要對象，<code>Options</code> 是操作方式的設定。<code>ValidationError</code> 則是 parser 在執行 handler 之前，判定命令列輸入不合法時使用的錯誤。</p>
+      <p><code>Command</code> 定義一個動作，<code>Argument</code> 是這個動作要操作的主要對象，<code>Flag</code> 是操作方式的設定。<code>CliError</code> 則是 parser 在執行 handler 之前，判定命令列輸入不合法時使用的錯誤。</p>
 
       <figure class="flow-figure">
         <svg role="img" aria-labelledby="cli-flow-title cli-flow-desc" viewBox="0 0 760 250">
           <title id="cli-flow-title">CLI 輸入責任分界</title>
-          <desc id="cli-flow-desc">Command 代表動作，Args 代表主要對象，Options 代表行為設定，解析失敗會形成 ValidationError。</desc>
+          <desc id="cli-flow-desc">Command 代表動作，Argument 代表主要對象，Flag 代表行為設定，解析失敗會形成 CliError。</desc>
           <defs>
             <marker id="cli-flow-arrowhead" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
               <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--clay)"></path>
@@ -414,20 +415,20 @@
 
           <g class="flow-node">
             <rect x="255" y="38" width="150" height="70" rx="8"></rect>
-            <text class="flow-label" x="330" y="69" text-anchor="middle">Args</text>
+            <text class="flow-label" x="330" y="69" text-anchor="middle">Argument</text>
             <text class="flow-note" x="330" y="91" text-anchor="middle">主要對象</text>
           </g>
           <path class="flow-arrow" d="M 413 73 H 476" marker-end="url(#cli-flow-arrowhead)"></path>
 
           <g class="flow-node">
             <rect x="486" y="38" width="150" height="70" rx="8"></rect>
-            <text class="flow-label" x="561" y="69" text-anchor="middle">Options</text>
+            <text class="flow-label" x="561" y="69" text-anchor="middle">Flag</text>
             <text class="flow-note" x="561" y="91" text-anchor="middle">行為設定</text>
           </g>
 
           <g class="flow-node">
             <rect x="274" y="162" width="212" height="70" rx="8"></rect>
-            <text class="flow-label" x="380" y="193" text-anchor="middle">ValidationError</text>
+            <text class="flow-label" x="380" y="193" text-anchor="middle">CliError</text>
             <text class="flow-note" x="380" y="215" text-anchor="middle">parser 層錯誤</text>
           </g>
 
@@ -448,11 +449,11 @@
             <text x="562" y="166" text-anchor="middle">解析失敗</text>
           </g>
         </svg>
-        <figcaption>先分清動作、主要對象與設定；只有解析階段失敗才屬於 <code>ValidationError</code>。</figcaption>
+        <figcaption>先分清動作、主要對象與設定；只有解析階段失敗才屬於 <code>CliError</code>。</figcaption>
       </figure>
 
-      <h2>Args 什麼時候用</h2>
-      <p><code>Args</code> 適合放「指令語意中的核心名詞」。如果沒有這個值，command 通常不知道自己要操作誰。</p>
+      <h2>Argument 什麼時候用</h2>
+      <p><code>Argument</code> 適合放「指令語意中的核心名詞」。如果沒有這個值，command 通常不知道自己要操作誰。</p>
       <ul>
         <li>必填的主要輸入，例如 <code>&lt;file&gt;</code>、<code>&lt;repository&gt;</code>、<code>&lt;user-id&gt;</code>。</li>
         <li>自然語序上像受詞的值，例如 <code>delete 123</code>、<code>clone repo</code>。</li>
@@ -460,21 +461,21 @@
         <li>可重複的主要目標，例如 <code>git add &lt;pathspec...&gt;</code>。</li>
       </ul>
 
-      <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">import</span> <span class="o">{</span> <span class="t">Args</span><span class="o">,</span> <span class="t">Command</span> <span class="o">}</span> <span class="k">from</span> <span class="s">"@effect/cli"</span>
+      <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">import</span> <span class="o">{</span> <span class="t">Argument</span><span class="o">,</span> <span class="t">Command</span> <span class="o">}</span> <span class="k">from</span> <span class="s">"effect/unstable/cli"</span>
 <span class="k">import</span> <span class="o">{</span> <span class="t">Console</span> <span class="o">}</span> <span class="k">from</span> <span class="s">"effect"</span>
 
-<span class="k">const</span> file <span class="o">=</span> <span class="t">Args</span><span class="o">.</span><span class="p">file</span><span class="o">(</span><span class="o">{</span> name<span class="o">:</span> <span class="s">"file"</span> <span class="o">}</span><span class="o">)</span>
+<span class="k">const</span> file <span class="o">=</span> <span class="t">Argument</span><span class="o">.</span><span class="p">file</span><span class="o">(</span><span class="s">"file"</span><span class="o">,</span> <span class="o">{</span> mustExist<span class="o">:</span> <span class="n">true</span> <span class="o">}</span><span class="o">)</span>
 
 <span class="k">const</span> command <span class="o">=</span> <span class="t">Command</span><span class="o">.</span><span class="p">make</span><span class="o">(</span><span class="s">"cat"</span><span class="o">,</span> <span class="o">{</span> file <span class="o">}</span><span class="o">,</span> <span class="o">(</span><span class="o">{</span> file <span class="o">}</span><span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span>
   <span class="t">Console</span><span class="o">.</span><span class="p">log</span><span class="o">(</span><span class="s">`Reading ${file}`</span><span class="o">)</span>
 <span class="o">)</span></code></pre>
 
-      <p>這個例子裡，檔案是 <code>cat</code> 的主要對象，所以用 <code>Args</code>。對應的命令會長得像：</p>
+      <p>這個例子裡，檔案是 <code>cat</code> 的主要對象，所以用 <code>Argument</code>。對應的命令會長得像：</p>
 
       <pre class="language-shell"><span class="label">Shell</span><code><span class="sh-command">bun</span> cat.ts ./README.md</code></pre>
 
-      <h2>Options 什麼時候用</h2>
-      <p><code>Options</code> 適合放 modifier、設定、模式或開關。這些值會影響 command 怎麼做事，但通常不是 command 的主要操作對象。</p>
+      <h2>Flag 什麼時候用</h2>
+      <p><code>Flag</code> 適合放 modifier、設定、模式或開關。這些值會影響 command 怎麼做事，但通常不是 command 的主要操作對象。</p>
       <ul>
         <li>可選設定，例如 <code>--port 3000</code>、<code>--format json</code>。</li>
         <li>boolean 開關，例如 <code>--verbose</code>、<code>--dry-run</code>。</li>
@@ -483,23 +484,23 @@
         <li>安全性或破壞性操作的確認，例如 <code>--force</code>、<code>--yes</code>。</li>
       </ul>
 
-      <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">import</span> <span class="o">{</span> <span class="t">Command</span><span class="o">,</span> <span class="t">Options</span> <span class="o">}</span> <span class="k">from</span> <span class="s">"@effect/cli"</span>
+      <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">import</span> <span class="o">{</span> <span class="t">Command</span><span class="o">,</span> <span class="t">Flag</span> <span class="o">}</span> <span class="k">from</span> <span class="s">"effect/unstable/cli"</span>
 <span class="k">import</span> <span class="o">{</span> <span class="t">Console</span> <span class="o">}</span> <span class="k">from</span> <span class="s">"effect"</span>
 
-<span class="k">const</span> port <span class="o">=</span> <span class="t">Options</span><span class="o">.</span><span class="p">integer</span><span class="o">(</span><span class="s">"port"</span><span class="o">)</span><span class="o">.</span><span class="p">pipe</span><span class="o">(</span>
-  <span class="t">Options</span><span class="o">.</span><span class="p">withDefault</span><span class="o">(</span><span class="n">3000</span><span class="o">)</span>
+<span class="k">const</span> port <span class="o">=</span> <span class="t">Flag</span><span class="o">.</span><span class="p">integer</span><span class="o">(</span><span class="s">"port"</span><span class="o">)</span><span class="o">.</span><span class="p">pipe</span><span class="o">(</span>
+  <span class="t">Flag</span><span class="o">.</span><span class="p">withDefault</span><span class="o">(</span><span class="n">3000</span><span class="o">)</span>
 <span class="o">)</span>
 
-<span class="k">const</span> verbose <span class="o">=</span> <span class="t">Options</span><span class="o">.</span><span class="p">boolean</span><span class="o">(</span><span class="s">"verbose"</span><span class="o">)</span><span class="o">.</span><span class="p">pipe</span><span class="o">(</span>
-  <span class="t">Options</span><span class="o">.</span><span class="p">withAlias</span><span class="o">(</span><span class="s">"v"</span><span class="o">)</span><span class="o">,</span>
-  <span class="t">Options</span><span class="o">.</span><span class="p">withDefault</span><span class="o">(</span><span class="n">false</span><span class="o">)</span>
+<span class="k">const</span> verbose <span class="o">=</span> <span class="t">Flag</span><span class="o">.</span><span class="p">boolean</span><span class="o">(</span><span class="s">"verbose"</span><span class="o">)</span><span class="o">.</span><span class="p">pipe</span><span class="o">(</span>
+  <span class="t">Flag</span><span class="o">.</span><span class="p">withAlias</span><span class="o">(</span><span class="s">"v"</span><span class="o">)</span><span class="o">,</span>
+  <span class="t">Flag</span><span class="o">.</span><span class="p">withDefault</span><span class="o">(</span><span class="n">false</span><span class="o">)</span>
 <span class="o">)</span>
 
 <span class="k">const</span> command <span class="o">=</span> <span class="t">Command</span><span class="o">.</span><span class="p">make</span><span class="o">(</span><span class="s">"server"</span><span class="o">,</span> <span class="o">{</span> port<span class="o">,</span> verbose <span class="o">}</span><span class="o">,</span> <span class="o">(</span><span class="o">{</span> port<span class="o">,</span> verbose <span class="o">}</span><span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span>
   <span class="t">Console</span><span class="o">.</span><span class="p">log</span><span class="o">(</span><span class="s">`Starting on ${port}; verbose=${verbose}`</span><span class="o">)</span>
 <span class="o">)</span></code></pre>
 
-      <p>這裡 <code>server</code> 不需要一個主要受詞也能成立，<code>port</code> 和 <code>verbose</code> 都是在描述 server 如何啟動，所以用 <code>Options</code>。</p>
+      <p>這裡 <code>server</code> 不需要一個主要受詞也能成立，<code>port</code> 和 <code>verbose</code> 都是在描述 server 如何啟動，所以用 <code>Flag</code>。</p>
 
       <h2>快速判斷表</h2>
       <table>
@@ -513,88 +514,85 @@
         <tbody>
           <tr>
             <td>拿掉這個值後，指令還知道要操作誰嗎？</td>
-            <td>不知道就用 <code>Args</code></td>
+            <td>不知道就用 <code>Argument</code></td>
             <td><code>delete 123</code></td>
           </tr>
           <tr>
             <td>這個值只是改變操作模式嗎？</td>
-            <td>用 <code>Options</code></td>
+            <td>用 <code>Flag</code></td>
             <td><code>delete 123 --force</code></td>
           </tr>
           <tr>
             <td>順序本身有語意嗎？</td>
-            <td>用 <code>Args</code></td>
+            <td>用 <code>Argument</code></td>
             <td><code>copy source target</code></td>
           </tr>
           <tr>
             <td>有多種查詢方式，需要標明欄位嗎？</td>
-            <td>用 <code>Options</code></td>
+            <td>用 <code>Flag</code></td>
             <td><code>user find --email a@example.com</code></td>
           </tr>
           <tr>
             <td>是危險行為的確認或模式開關嗎？</td>
-            <td>用 <code>Options</code></td>
+            <td>用 <code>Flag</code></td>
             <td><code>deploy ./dist --dry-run</code></td>
           </tr>
         </tbody>
       </table>
 
       <div class="callout">
-        <p>一句話版本：<code>Args</code> 是 command 的名詞，<code>Options</code> 是 command 的形容詞、副詞或設定。</p>
+        <p>一句話版本：<code>Argument</code> 是 command 的名詞，<code>Flag</code> 是 command 的形容詞、副詞或設定。</p>
       </div>
 
-      <h2>ValidationError 是什麼</h2>
-      <p><code>ValidationError</code> 是 <code>@effect/cli</code> 的 parser 層錯誤。它描述的是「命令列輸入格式不合法」，而不是「業務邏輯執行失敗」。</p>
+      <h2>CliError 是什麼</h2>
+      <p><code>CliError</code> 是 <code>effect/unstable/cli</code> 的 parser 層錯誤。它描述的是「命令列輸入格式不合法」，而不是「業務邏輯執行失敗」。</p>
       <p>它通常發生在 handler 執行之前。常見情境包括缺少必要 argument、option 值型別錯誤、option 後面少了值、subcommand 不存在，或 shell-style flag 寫法不合法。</p>
 
-      <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">const</span> port <span class="o">=</span> <span class="t">Options</span><span class="o">.</span><span class="p">integer</span><span class="o">(</span><span class="s">"port"</span><span class="o">)</span>
+      <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">const</span> port <span class="o">=</span> <span class="t">Flag</span><span class="o">.</span><span class="p">integer</span><span class="o">(</span><span class="s">"port"</span><span class="o">)</span>
 
 <span class="k">const</span> command <span class="o">=</span> <span class="t">Command</span><span class="o">.</span><span class="p">make</span><span class="o">(</span><span class="s">"server"</span><span class="o">,</span> <span class="o">{</span> port <span class="o">}</span><span class="o">,</span> <span class="o">(</span><span class="o">{</span> port <span class="o">}</span><span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span>
   <span class="t">Console</span><span class="o">.</span><span class="p">log</span><span class="o">(</span><span class="s">`Starting on ${port}`</span><span class="o">)</span>
 <span class="o">)</span></code></pre>
 
-      <p>如果使用者輸入 <code>--port abc</code>，這不是合法整數，parser 會得到 <code>InvalidValue</code> 類型的 <code>ValidationError</code>。</p>
+      <p>如果使用者輸入 <code>--port abc</code>，這不是合法整數，parser 會得到 <code>InvalidValue</code> 類型的 <code>CliError</code>。</p>
 
       <pre class="language-shell"><span class="label">Shell</span><code><span class="sh-command">bun</span> server.ts <span class="sh-flag">--port</span> abc</code></pre>
 
-      <h2>什麼時候自己接觸 ValidationError</h2>
-      <p>大多數情況下不用手動建立 <code>ValidationError</code>。只要把 command 交給 <code>Command.run</code>，<code>@effect/cli</code> 就會處理 help、version 與 parser error 的輸出。</p>
+      <h2>什麼時候自己接觸 CliError</h2>
+      <p>大多數情況下不用手動建立 <code>CliError</code>。只要把 command 交給 <code>Command.run</code>，<code>effect/unstable/cli</code> 就會處理 help、version 與 parser error 的輸出。</p>
 
-      <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">import</span> <span class="o">{</span> <span class="t">Command</span> <span class="o">}</span> <span class="k">from</span> <span class="s">"@effect/cli"</span>
-<span class="k">import</span> <span class="o">{</span> <span class="t">NodeContext</span><span class="o">,</span> <span class="t">NodeRuntime</span> <span class="o">}</span> <span class="k">from</span> <span class="s">"@effect/platform-node"</span>
-<span class="k">import</span> <span class="o">{</span> <span class="t">Effect</span> <span class="o">}</span> <span class="k">from</span> <span class="s">"effect"</span>
+      <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">import</span> <span class="o">*</span> <span class="k">as</span> <span class="t">BunRuntime</span> <span class="k">from</span> <span class="s">"@effect/platform-bun/BunRuntime"</span>
+<span class="k">import</span> <span class="o">*</span> <span class="k">as</span> <span class="t">BunServices</span> <span class="k">from</span> <span class="s">"@effect/platform-bun/BunServices"</span>
+<span class="k">import</span> <span class="o">{</span> <span class="t">Command</span> <span class="o">}</span> <span class="k">from</span> <span class="s">"effect/unstable/cli"</span>
+<span class="k">import</span> <span class="o">*</span> <span class="k">as</span> <span class="t">Effect</span> <span class="k">from</span> <span class="s">"effect/Effect"</span>
 
-<span class="k">const</span> cli <span class="o">=</span> <span class="t">Command</span><span class="o">.</span><span class="p">run</span><span class="o">(</span>command<span class="o">,</span> <span class="o">{</span>
-  name<span class="o">:</span> <span class="s">"My CLI"</span><span class="o">,</span>
-  version<span class="o">:</span> <span class="s">"v1.0.0"</span>
-<span class="o">}</span><span class="o">)</span>
-
-<span class="f">cli</span><span class="o">(</span>process<span class="o">.</span><span class="p">argv</span><span class="o">)</span><span class="o">.</span><span class="p">pipe</span><span class="o">(</span>
-  <span class="t">Effect</span><span class="o">.</span><span class="p">provide</span><span class="o">(</span><span class="t">NodeContext</span><span class="o">.</span><span class="p">layer</span><span class="o">)</span><span class="o">,</span>
-  <span class="t">NodeRuntime</span><span class="o">.</span><span class="p">runMain</span>
+<span class="t">Command</span><span class="o">.</span><span class="p">run</span><span class="o">(</span>command<span class="o">,</span> <span class="o">{</span> version<span class="o">:</span> <span class="s">"1.0.0"</span> <span class="o">}</span><span class="o">)</span><span class="o">.</span><span class="p">pipe</span><span class="o">(</span>
+  <span class="t">Effect</span><span class="o">.</span><span class="p">provide</span><span class="o">(</span><span class="t">BunServices</span><span class="o">.</span><span class="p">layer</span><span class="o">)</span><span class="o">,</span>
+  <span class="t">BunRuntime</span><span class="o">.</span><span class="p">runMain</span><span class="o">,</span>
 <span class="o">)</span></code></pre>
 
-      <p>你會主動碰到它，通常是因為要自訂錯誤輸出，或在 <code>Args.mapEffect</code>、<code>Options.mapEffect</code> 裡做更細的輸入驗證。</p>
+      <p>你會主動碰到它，通常是因為要自訂錯誤輸出，或在 <code>Argument.mapEffect</code>、<code>Flag.mapEffect</code> 裡做更細的輸入驗證。</p>
 
-      <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">import</span> <span class="o">{</span> <span class="t">HelpDoc</span><span class="o">,</span> <span class="t">Options</span><span class="o">,</span> <span class="t">ValidationError</span> <span class="o">}</span> <span class="k">from</span> <span class="s">"@effect/cli"</span>
+      <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">import</span> <span class="o">{</span> <span class="t">CliError</span><span class="o">,</span> <span class="t">Flag</span> <span class="o">}</span> <span class="k">from</span> <span class="s">"effect/unstable/cli"</span>
 <span class="k">import</span> <span class="o">{</span> <span class="t">Effect</span> <span class="o">}</span> <span class="k">from</span> <span class="s">"effect"</span>
 
-<span class="k">const</span> port <span class="o">=</span> <span class="t">Options</span><span class="o">.</span><span class="p">integer</span><span class="o">(</span><span class="s">"port"</span><span class="o">)</span><span class="o">.</span><span class="p">pipe</span><span class="o">(</span>
-  <span class="t">Options</span><span class="o">.</span><span class="p">mapEffect</span><span class="o">(</span><span class="o">(</span>port<span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span>
+<span class="k">const</span> port <span class="o">=</span> <span class="t">Flag</span><span class="o">.</span><span class="p">integer</span><span class="o">(</span><span class="s">"port"</span><span class="o">)</span><span class="o">.</span><span class="p">pipe</span><span class="o">(</span>
+  <span class="t">Flag</span><span class="o">.</span><span class="p">mapEffect</span><span class="o">(</span><span class="o">(</span>port<span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span>
     port <span class="o">&gt;</span><span class="o">=</span> <span class="n">1</span> <span class="o">&amp;</span><span class="o">&amp;</span> port <span class="o">&lt;</span><span class="o">=</span> <span class="n">65535</span>
       <span class="o">?</span> <span class="t">Effect</span><span class="o">.</span><span class="p">succeed</span><span class="o">(</span>port<span class="o">)</span>
       <span class="o">:</span> <span class="t">Effect</span><span class="o">.</span><span class="p">fail</span><span class="o">(</span>
-          <span class="t">ValidationError</span><span class="o">.</span><span class="p">invalidValue</span><span class="o">(</span>
-            <span class="t">HelpDoc</span><span class="o">.</span><span class="p">p</span><span class="o">(</span><span class="s">"port must be between 1 and 65535"</span><span class="o">)</span>
-          <span class="o">)</span>
+          <span class="k">new</span> <span class="t">CliError</span><span class="o">.</span><span class="p">InvalidValue</span><span class="o">(</span><span class="o">{</span>
+            option<span class="o">:</span> <span class="s">"port"</span><span class="o">,</span> value<span class="o">:</span> <span class="t">String</span><span class="o">(</span>port<span class="o">)</span><span class="o">,</span>
+            expected<span class="o">:</span> <span class="s">"integer between 1 and 65535"</span><span class="o">,</span> kind<span class="o">:</span> <span class="s">"flag"</span>
+          <span class="o">}</span><span class="o">)</span>
         <span class="o">)</span>
   <span class="o">)</span>
 <span class="o">)</span></code></pre>
 
-      <p>這種錯誤仍然是 CLI 輸入不合法，所以用 <code>ValidationError</code> 合理。</p>
+      <p>這種錯誤仍然是 CLI 輸入不合法，所以用 <code>CliError</code> 合理。</p>
 
-      <h2>不要把業務錯誤塞進 ValidationError</h2>
-      <p>如果 command line 長得合法，但執行時失敗，那是 application 或 domain error，不是 <code>ValidationError</code>。</p>
+      <h2>不要把業務錯誤塞進 CliError</h2>
+      <p>如果 command line 長得合法，但執行時失敗，那是 application 或 domain error，不是 <code>CliError</code>。</p>
 
       <table>
         <thead>
@@ -606,7 +604,7 @@
         <tbody>
           <tr>
             <td><code>user delete</code> 少了 <code>&lt;id&gt;</code></td>
-            <td><code>ValidationError</code></td>
+            <td><code>CliError</code></td>
           </tr>
           <tr>
             <td><code>user delete 123</code>，但 user <code>123</code> 不存在</td>
@@ -614,7 +612,7 @@
           </tr>
           <tr>
             <td><code>deploy --env stagingg ./dist</code>，但 env 只能是 <code>dev</code> 或 <code>prod</code></td>
-            <td><code>ValidationError</code></td>
+            <td><code>CliError</code></td>
           </tr>
           <tr>
             <td><code>deploy --env prod ./dist</code>，但 API 回 403</td>
@@ -626,17 +624,26 @@
       <h2>實作時的簡單規則</h2>
       <ol>
         <li>先寫 command 的自然語句：例如「deploy 這個資料夾到某個環境」。</li>
-        <li>把主要名詞放進 <code>Args</code>：例如 <code>deploy &lt;directory&gt;</code>。</li>
-        <li>把模式與設定放進 <code>Options</code>：例如 <code>--env production</code>、<code>--dry-run</code>。</li>
-        <li>輸入長得不合法時，讓 parser 或自訂 parser 回 <code>ValidationError</code>。</li>
+        <li>把主要名詞放進 <code>Argument</code>：例如 <code>deploy &lt;directory&gt;</code>。</li>
+        <li>把模式與設定放進 <code>Flag</code>：例如 <code>--env production</code>、<code>--dry-run</code>。</li>
+        <li>輸入長得不合法時，讓 parser 或自訂 parser 回 <code>CliError</code>。</li>
         <li>輸入合法但執行失敗時，回自己的 domain error。</li>
       </ol>
+
+      <h2>Production readiness 與測試</h2>
+      <ul>
+        <li>把固定集合建模成 <code>Flag.choice</code>／<code>Argument.choice</code>，不要在 handler 裡用字串比較補做 parser 工作。</li>
+        <li>密鑰使用 redacted parameter 或環境／config provider，錯誤與 help 不可回顯 secret。</li>
+        <li>以 <code>Command.runWith(command, { version })</code> 傳入 argv，測試成功、缺值、未知 flag、<code>--help</code> 與 <code>--version</code>，不必啟動 subprocess。</li>
+        <li>handler 的 domain error 另做單元測試；最外層再測它們如何映射到訊息與 exit code。</li>
+        <li><code>effect/unstable/cli</code> 明確是 unstable API；升級 Effect 時應重新 typecheck 並查閱變更。</li>
+      </ul>
 
       <section class="sources">
         <h2>參考</h2>
         <ul>
-          <li><code>@effect/cli</code> 本機快取原始碼版本：<code>0.75.2</code>。</li>
-          <li>主要 API：<code>Command</code>、<code>Args</code>、<code>Options</code>、<code>ValidationError</code>。</li>
+          <li>本文 API 依據 <code>effect@4.0.0-beta.98</code> 的 <code>effect/unstable/cli</code>。</li>
+          <li>主要 API：<code>Command</code>、<code>Argument</code>、<code>Flag</code>、<code>CliError</code>。</li>
         </ul>
       </section>
     </article>

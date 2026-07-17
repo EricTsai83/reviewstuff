@@ -3,7 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>git-errors.ts：Git 錯誤模型與觸發情境</title>
+  <meta name="description" content="從系統設計角度建立可操作的 Git 錯誤分類：前置條件、指令結果、程序基礎設施、資料一致性與 production-ready 防護。">
+  <title>Git 錯誤模型：從程序失敗到可操作的產品訊息</title>
   <style>
     :root {
       color-scheme: light;
@@ -534,15 +535,15 @@
 <body>
   <main>
     <article>
-      <h1><code>git-errors.ts</code>：Git 錯誤模型與觸發情境</h1>
-      <p class="deck">這個檔案定義 <code>GitService</code> 對外暴露的 typed error。它的重點不是把所有失敗都叫做「Git error」，而是保留失敗發生在哪一層，讓 CLI 可以給出不同訊息，也讓 Effect 程式能用 <code>catchTags</code> 精準處理。</p>
+      <h1>Git 錯誤模型：從程序失敗到可操作的產品訊息</h1>
+      <p class="deck">不要把所有失敗都壓成「Git error」。Production-ready 設計要保留失敗層次、操作名稱、可重試性與安全 metadata，讓 CLI、API 與 worker 能給出正確處置，也讓 typed program 做 exhaustive handling。</p>
 
       <nav aria-label="本文目錄">
         <strong>閱讀路徑</strong>
         <ul>
           <li><a href="#hierarchy">展開 Git error 的型別層級</a></li>
           <li><a href="#mental-model">先用四層模型判斷錯誤</a></li>
-          <li><a href="#errors">逐一理解九種 error</a></li>
+          <li><a href="#errors">逐一理解十種參考 error</a></li>
           <li><a href="#mapping">理解兩個轉譯函式</a></li>
           <li><a href="#boundaries">釐清容易混淆的邊界</a></li>
         </ul>
@@ -550,7 +551,7 @@
 
       <section id="hierarchy">
         <h2>從 <code>GitError</code> 展開完整錯誤層級</h2>
-        <p><code>GitError</code> 是九種 tagged error 的 union。程式先以 <code>_tag</code> 判斷是哪一種 error；選到特定 tag 後，只有三種 error 還需要第二層 discriminator：兩種使用 <code>failure</code>，一種使用 <code>phase</code>。點擊節點可以展開或收合欄位。</p>
+        <p>以下以十種 tagged error 建立一套參考 taxonomy。程式先以 <code>_tag</code> 判斷 variant；選到特定 tag 後，只有少數 error 還需要第二層 discriminator，例如 <code>failure</code> 或 <code>phase</code>。實際類別名稱可調整，但各層語意不應被合併。</p>
 
         <figure class="error-hierarchy" aria-labelledby="hierarchy-caption">
           <div class="hierarchy-root">
@@ -657,6 +658,13 @@
                   <p class="metadata"><strong>metadata</strong>：<code>operation</code>、<code>outputBytes</code></p>
                 </div>
               </details>
+
+              <details class="tag-node">
+                <summary><span class="discriminator">_tag</span><code>GitUnmergedPathsError</code></summary>
+                <div class="tag-body">
+                  <p class="metadata"><strong>metadata</strong>：排序、去重後的 <code>paths</code></p>
+                </div>
+              </details>
             </section>
           </div>
 
@@ -667,7 +675,7 @@
 
       <section id="mental-model">
         <h2>先用四層模型判斷錯誤</h2>
-        <p>讀這個檔案最有效的方式，是先問：「程式有沒有取得完整的 <code>CommandResult</code>？」一個完整結果包含 <code>stdout</code>、<code>stderr</code> 與 <code>exitCode</code>。這個問題能先把 command failure 與執行環境 failure 分開。</p>
+        <p>設計 taxonomy 時先問：「程式有沒有取得完整的 <code>CommandResult</code>？」一個完整結果包含 <code>stdout</code>、<code>stderr</code> 與 <code>exitCode</code>。這個問題能先把 command failure 與執行環境 failure 分開。</p>
 
         <div class="table-wrap">
           <table>
@@ -696,8 +704,8 @@
               </tr>
               <tr>
                 <td>領域一致性</td>
-                <td>Git 有回覆，但資料格式不合法，或列出的變更檔案在稍後讀取時已不可用</td>
-                <td><code>GitInvalidOutputError</code>、<code>GitChangedFileUnavailableError</code></td>
+                <td>Git 有回覆，但資料格式不合法、存在未解衝突，或列出的變更檔案稍後已不可用</td>
+                <td><code>GitInvalidOutputError</code>、<code>GitUnmergedPathsError</code>、<code>GitChangedFileUnavailableError</code></td>
               </tr>
             </tbody>
           </table>
@@ -718,11 +726,12 @@
   <span class="o">|</span> <span class="t">GitCommandTimeoutError</span>
   <span class="o">|</span> <span class="t">GitCommandOutputLimitError</span>
   <span class="o">|</span> <span class="t">GitChangedFileUnavailableError</span>
-  <span class="o">|</span> <span class="t">GitInvalidOutputError</span><span class="o">;</span></code></pre>
+  <span class="o">|</span> <span class="t">GitInvalidOutputError</span>
+  <span class="o">|</span> <span class="t">GitUnmergedPathsError</span><span class="o">;</span></code></pre>
       </section>
 
       <section id="errors">
-        <h2>九種 error 各自代表什麼</h2>
+        <h2>十種參考 error 各自代表什麼</h2>
 
         <section class="error-section">
           <h3><code>GitNotRepositoryError</code>：Git 明確回報目前不在 repository</h3>
@@ -824,7 +833,7 @@
           </div>
 
           <div class="callout warning">
-            <p><strong><code>failure</code> 是輕量文字判斷，不是 Git 官方錯誤協定。</strong>目前程式只是把 stderr 轉成小寫，再搜尋幾個英文片段；它沒有解析結構化的 Git error code。若使用不同 locale、Git 版本，或遇到規則尚未涵蓋的訊息，即使原因其實是權限或 repository 損壞，也可能得到 <code>unknown</code>。</p>
+            <p><strong><code>failure</code> 是輕量文字判斷，不是 Git 官方錯誤協定。</strong>Git 沒有為這些失敗提供穩定的結構化 error code；若以 stderr 片段分類，必須固定 <code>LC_ALL=C</code> 並保留 <code>unknown</code> fallback。即使如此，Git 版本與未涵蓋訊息仍可能讓真實原因落入 <code>unknown</code>。</p>
             <p>閱讀這個 error 時，應把欄位分成兩層：<code>operation</code> 與 <code>exitCode</code> 是可靠的執行脈絡；<code>failure</code> 是為了選擇較有用的使用者提示而做的最佳努力分類。<code>unknown</code> 只代表「現有規則無法分類」，不代表沒有錯誤，也不代表發生了某種名為 unknown 的 Git 錯誤。</p>
           </div>
         </section>
@@ -878,11 +887,11 @@
         </section>
 
         <section class="error-section">
-          <h3><code>GitCommandTimeoutError</code>：Git 超過 10 秒仍未完成</h3>
-          <p>所有透過 <code>executeGit</code> 執行的 Git command 都設定 10,000 ms timeout。超時會保留成專屬 error，而不是被壓成一般 <code>GitExecutionError</code>，所以 CLI 能直接告訴使用者是哪個 operation 逾時多久。</p>
+          <h3><code>GitCommandTimeoutError</code>：Git 超過該操作的 deadline</h3>
+          <p>每個 Git command 都應設定依操作類型調校的 timeout，並接受上游 cancellation。超時要保留成專屬 error，而不是壓成一般 <code>GitExecutionError</code>，如此 caller 才能知道哪個 operation 逾時多久。</p>
           <dl class="field-list">
             <dt>operation</dt><dd>逾時的高階 Git 操作。</dd>
-            <dt>timeoutMilliseconds</dt><dd>本次 command 的時間上限，目前固定為 10,000。</dd>
+            <dt>timeoutMilliseconds</dt><dd>本次 command 實際採用的時間上限；它是診斷資料，不應假設全系統固定同一值。</dd>
             <dt>cause</dt><dd>command runner 的 <code>CommandTimeoutError</code>。</dd>
           </dl>
           <p>可能原因包括 repository 很大、儲存裝置或 network filesystem 太慢、Git hook／外部環境阻塞，或 child process 卡住。timeout 發生後 runner 仍會進入 process termination 清理。</p>
@@ -902,20 +911,20 @@
             <table>
               <thead><tr><th>操作類型</th><th>上限</th><th>例子</th></tr></thead>
               <tbody>
-                <tr><td>一般列表與 metadata</td><td>4 MiB</td><td>列 staged／unstaged／untracked files、repository root</td></tr>
-                <tr><td>單一 patch</td><td>512 KiB</td><td>讀 staged、working-tree 或 untracked diff</td></tr>
-                <tr><td>Git object metadata</td><td>1 KiB</td><td>解析 object ID、讀 object size、解析 empty tree</td></tr>
+                <tr><td>一般列表與 metadata</td><td>示例：4 MiB</td><td>列 staged／unstaged／untracked files、repository root</td></tr>
+                <tr><td>單一 patch</td><td>示例：512 KiB</td><td>讀 staged、working-tree 或 untracked diff</td></tr>
+                <tr><td>Git object metadata</td><td>示例：1 KiB</td><td>解析 object ID、讀 object size、解析 empty tree</td></tr>
               </tbody>
             </table>
           </div>
 
-          <p>這個 error 是整次 review 的 fatal failure。它與「檔案太大所以略過」不同：檔案大小預檢若已知超過 512 KiB，可以產生可解釋的 skipped record；但若 command 已經把 patch 輸出到超限，程式無法證明 patch 完整，因此不能假裝 coverage 只是一般 skip。</p>
+          <p>這個 error 是整次 review 的 fatal failure。它與「檔案超過產品政策所以略過」不同：檔案大小預檢若已知超限，可以產生可解釋的 skipped record；但若 command output 已超限，程式無法證明 patch 完整，因此不能假裝 coverage 只是一般 skip。實際 byte budget 應由壓力測試、下游 context 限制與可接受 latency 決定。</p>
         </section>
 
         <section class="error-section">
           <h3><code>GitChangedFileUnavailableError</code>：列舉與讀取之間，檔案狀態改變了</h3>
           <p><code>GitService</code> 先列出 changed paths，再逐一檢查大小與讀 patch。這兩步不是 atomic transaction；若使用者、編輯器或另一個 process 在中間刪除／移動檔案，就可能發生典型的 TOCTOU（time-of-check to time-of-use）race。</p>
-          <p>目前有兩個明確觸發點：</p>
+          <p>常見觸發點有兩個：</p>
           <ul>
             <li>列出的 untracked file 在 filesystem size inspection 時已不存在，因此 size 是 <code>undefined</code>。</li>
             <li>Git diff command 的 exit code 在允許範圍內，但 stdout 為空，代表先前列出的變更已無法產生 patch。</li>
@@ -929,7 +938,7 @@
 
         <section class="error-section">
           <h3><code>GitInvalidOutputError</code>：Git 成功回覆，但格式違反程式假設</h3>
-          <p>這類錯誤發生在 exit code 看似成功，但 stdout 無法安全解析。現在程式驗證四種輸出：</p>
+          <p>這類錯誤發生在 exit code 看似成功，但 stdout 無法安全解析。Production parser 至少應驗證四種輸出：</p>
           <ul>
             <li><code>detect git repository</code>：輸出必須是精確的 <code>true</code> 或 <code>false</code>。</li>
             <li><code>resolve empty tree</code>：輸出必須是 40 或 64 位十六進位 object ID，以支援 SHA-1 與 SHA-256 repository。</li>
@@ -941,6 +950,15 @@
             <dt>outputBytes</dt><dd>以 UTF-8 計算的輸出 bytes；不保留原始內容。</dd>
           </dl>
           <p>這通常暗示 Git 輸出被 wrapper、alias、環境或異常 repository 狀態干擾，也可能是程式的格式假設需要更新。它和 <code>GitCommandError</code> 的差別是：後者有明確的失敗 exit code；這裡則是「表面成功、內容不可信」。</p>
+        </section>
+
+        <section class="error-section">
+          <h3><code>GitUnmergedPathsError</code>：輸入存在未解決的 merge conflict</h3>
+          <p>Unmerged path 是領域前置條件失敗，不是一般 command failure。當 status discovery 找到 <code>U</code> 或等價的 unmerged 狀態時，服務應在讀 patch 前 fail fast，並附帶排序、去重後的路徑；它不應自動選 ours／theirs，也不應修改 index。</p>
+          <dl class="field-list">
+            <dt>paths</dt><dd>需要由使用者先解決的衝突路徑；若路徑可能敏感，log 與 telemetry 只記錄數量。</dd>
+          </dl>
+          <p>CLI 可提示使用者解決 conflict 後重新 <code>git add</code>，或中止 merge／rebase。若產品明確支援 partial review，才可把 unmerged 轉成 skipped reason；此時 coverage 必須不完整，且需要獨立 opt-in。</p>
         </section>
       </section>
 
@@ -1011,8 +1029,8 @@
                 <td>在特定 object／HEAD 探測中是預期的「不存在」，可能回傳 <code>undefined</code> 或改用 empty tree；其他非預期 exit code 才成為 <code>GitCommandError</code>。</td>
               </tr>
               <tr>
-                <td>檔案超過 512 KiB</td>
-                <td>大小預檢已知時是 <code>file-too-large</code> skip；command 輸出實際衝破 512 KiB 時是 fatal <code>GitCommandOutputLimitError</code>。</td>
+                <td>檔案超過產品設定的上限</td>
+                <td>大小預檢已知時是 <code>file-too-large</code> skip；command output 實際衝破獨立 budget 時是 fatal <code>GitCommandOutputLimitError</code>。</td>
               </tr>
               <tr>
                 <td>Git exit 0 但輸出是垃圾值</td>
@@ -1031,7 +1049,7 @@
         </div>
 
         <div class="callout">
-          <p><strong>快速判斷順序：</strong>先問是否取得完整 command result；再看 exit code 是否為該操作的預期值；成功時再驗證輸出格式；最後確認列舉的檔案仍可提供 patch。這個順序正好對應本檔案的錯誤邊界。</p>
+          <p><strong>快速判斷順序：</strong>先問是否取得完整 command result；再看 exit code 是否為該操作的預期值；成功時再驗證輸出格式；最後確認領域前置條件與列舉的檔案仍成立。這個順序能讓錯誤邊界保持互斥。</p>
         </div>
 
         <div class="callout warning">
@@ -1041,8 +1059,16 @@
 
       <section class="closing">
         <h2>整體設計的意義</h2>
-        <p><code>git-errors.ts</code> 是平台層與 Git domain 之間的 anti-corruption layer。底層只知道 process spawn、stream 與 bytes；Git domain 則補上 operation、repository、object、patch 與 coverage 的語意。上層 CLI 因此能用 tag 做完整分流，同時不必知道 child-process 實作細節。</p>
+        <p>Git 錯誤模型是平台層與 Git domain 之間的 anti-corruption layer。底層只知道 process spawn、stream 與 bytes；Git domain 則補上 operation、repository、object、patch、conflict 與 coverage 的語意。上層 CLI 或 API 因此能用 tag 完整分流，同時不必知道 child-process 實作細節。</p>
         <p>這套模型最重要的不是 error class 數量，而是它沒有把「Git 說不行」、「Git 根本沒跑完」、「Git 回了無法解析的資料」與「變更在讀取途中消失」混成同一種失敗。這讓錯誤訊息、測試與未來恢復策略都有清楚的落點。</p>
+        <h3>Production readiness 檢核</h3>
+        <ul>
+          <li>每個 tag 都有使用者訊息、exit／HTTP mapping、是否可重試與至少一個故障注入測試。</li>
+          <li>Unknown tag 或未知 <code>failure</code> 採 fail closed；consumer 不依賴 message 字串做控制流程。</li>
+          <li>Log 記錄 operation、tag、exit code、耗時與 byte 數，但不預設記錄 patch、完整 stderr 或敏感路徑。</li>
+          <li>Timeout／cancellation 後驗證 child process 已被回收；output-limit 測試同時壓 stdout 與 stderr。</li>
+          <li>Metrics 監控 error category、unknown classification 比例與 timeout 分布，避免分類規則在 Git 升級後靜默失效。</li>
+        </ul>
       </section>
     </article>
   </main>

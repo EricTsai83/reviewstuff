@@ -302,7 +302,7 @@
 <span class="f">fn2</span><span class="o">(</span><span class="f">fn1</span><span class="o">(</span>value<span class="o">)</span><span class="o">)</span></code></pre>
 
       <p><code>pipe</code> 會立即呼叫這些一般函式，但若其中傳遞的是 Effect，得到的仍然只是組合完成的 Effect 描述。真正執行工作的是 Effect runtime。</p>
-      <p>因此，使用 <code>pipe</code> 並不會自動處理 Effect 的失敗、環境依賴或巢狀結構。這些行為仍然來自放進 pipeline 的 <code>Effect.flatMap</code>、<code>Effect.map</code>、<code>Effect.catchAll</code> 等操作。</p>
+      <p>因此，使用 <code>pipe</code> 並不會自動處理 Effect 的失敗、環境依賴或巢狀結構。這些行為仍然來自放進 pipeline 的 <code>Effect.flatMap</code>、<code>Effect.map</code>、<code>Effect.catch</code> 等操作。本文 API 對齊 Effect <code>4.0.0-beta.98</code>；舊版常見的 <code>catchAll</code> 在此版本應寫成 <code>catch</code>。</p>
 
       <h2>pipe 裡可以放 Effect function 嗎？</h2>
       <p>可以。更精確地說，<code>pipe</code> 的第一個參數是一個值，後面的參數都必須是函式；這些函式既可以處理普通值，也可以處理 Effect。唯一的接續條件是：</p>

@@ -3,10 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta
-      name="description"
-      content="從最小 TypeScript 範例開始，淺白解釋為什麼刪除 return type 後 schemaVersion 會從 literal 1 推論成 number。"
-    />
+    <meta name="description" content="從最小 TypeScript 範例理解 return type、literal widening、satisfies 與 Effect 成功值／錯誤／依賴契約的取捨。" />
     <title>為什麼刪掉 TypeScript Return Type，程式反而報錯？</title>
     <style>
       :root {
@@ -745,6 +742,11 @@
         </p>
 
         <aside class="takeaway">
+          <strong>範例範圍</strong>
+          本文的 <code>ReviewReport</code>、<code>runReview</code> 與 <code>schemaVersion: 1</code> 是刻意設計的獨立教學模型，用來說明 literal widening 與 API 契約；它們不代表任何既有產品或 repository 的現行 schema。實務上請換成自己的版本型別與 migration policy。
+        </aside>
+
+        <aside class="takeaway">
           <strong>先看最短答案</strong>
           TypeScript 推論的是「這段 JavaScript 可以被安全地當成什麼」，不是「你心裡想把它當成哪個業務型別」。刪除 return type 後，<code>schemaVersion: 1</code> 被安全地推論成 <code>schemaVersion: number</code>；這個推論沒有錯，但它比 <code>ReviewReport</code> 要求的 literal <code>1</code> 更寬。
         </aside>
@@ -1257,12 +1259,11 @@ is not assignable to <span class="k">type</span> <span class="s">'ReviewReport'<
         </aside>
 
         <section class="sources">
-          <h2>延伸閱讀與實例</h2>
+          <h2>延伸閱讀</h2>
           <ul>
             <li><a href="https://www.typescriptlang.org/docs/handbook/release-notes/typescript-2-1.html">TypeScript：literal type widening</a></li>
             <li><a href="https://www.typescriptlang.org/docs/handbook/release-notes/typescript-4-9.html">TypeScript：<code>satisfies</code> operator</a></li>
-            <li><a href="https://github.com/pingdotgg/t3code/blob/ecb35f75839925dd1ac6f854efeef5c9e291d11b/apps/server/src/serverRuntimeState.ts">T3 Code：versioned state 使用明確 Effect return type</a></li>
-            <li><a href="https://github.com/pingdotgg/t3code/blob/ecb35f75839925dd1ac6f854efeef5c9e291d11b/apps/server/src/orchestration/Normalizer.ts">T3 Code：在回傳物件使用 <code>satisfies</code></a></li>
+            <li>公開 API、持久化資料與跨程序訊息都應把 schema version 視為正式契約，並搭配 decode validation 與 migration 測試。</li>
           </ul>
         </section>
       </article>

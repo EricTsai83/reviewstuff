@@ -3,493 +3,123 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="Reviewstuff 模組 boundary 與依賴方向指南：理解各目錄的 ownership、允許的依賴、composition root 與 architecture test。">
-  <title>Reviewstuff Module Boundary 架構指南</title>
+  <meta name="description" content="從需求、依賴方向、契約、失敗模式到 architecture tests，完整設計可演進且適合 production 的 TypeScript 模組邊界。">
+  <title>TypeScript 模組邊界：從零設計可演進的依賴架構</title>
   <style>
-    :root {
-      color-scheme: light;
-      --clay: #D97757;
-      --slate: #141413;
-      --ivory: #FAF9F5;
-      --oat: #E3DACC;
-      --white: #FFFFFF;
-      --gray-100: #F0EEE6;
-      --gray-300: #D1CFC5;
-      --gray-500: #87867F;
-      --gray-700: #3D3D3A;
-      --warning: #C78E3F;
-      --success: #66834f;
-      --space-sm: 8px;
-      --space-md: 12px;
-      --space-lg: 16px;
-      --space-xl: 24px;
-      --space-2xl: 32px;
-      --space-3xl: 48px;
-      --radius-sm: 4px;
-      --radius-md: 8px;
-      --content-width: 68ch;
-    }
-
-    * { box-sizing: border-box; }
-
-    html { scroll-behavior: smooth; }
-
-    body {
-      margin: 0;
-      background: var(--ivory);
-      color: var(--slate);
-      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      font-size: 16px;
-      font-weight: 430;
-      line-height: 1.55;
-      letter-spacing: 0;
-    }
-
-    main {
-      max-width: var(--content-width);
-      margin: 0 auto;
-      padding: var(--space-3xl) var(--space-xl) 72px;
-    }
-
-    article {
-      background: transparent;
-      border: 0;
-      border-radius: 0;
-      box-shadow: none;
-      padding: 0;
-    }
-
-    h1, h2, h3 { color: var(--slate); font-weight: 720; }
-    h1 { margin: 0 0 var(--space-lg); font-size: 1.8rem; line-height: 1.18; text-wrap: balance; }
-    h2 { margin: var(--space-3xl) 0 var(--space-lg); padding-top: var(--space-sm); font-size: 1.22rem; line-height: 1.25; }
-    h3 { margin: var(--space-2xl) 0 var(--space-md); font-size: 1rem; line-height: 1.35; }
-
-    p, ul, ol, .deck, .callout, table, pre { max-width: var(--content-width); }
-    p { margin: 0 0 var(--space-lg); }
-    ul, ol { margin: 0 0 var(--space-xl); padding-left: 1.35rem; }
-    li + li { margin-top: 6px; }
-    strong { font-weight: 700; }
-
-    .deck { margin: 0 0 var(--space-xl); color: var(--gray-700); font-size: 1.06rem; }
-
-    a { color: var(--clay); text-decoration-thickness: 1px; text-underline-offset: 3px; }
-    a:hover { text-decoration-thickness: 2px; }
-
-    nav {
-      margin: var(--space-xl) 0 var(--space-2xl);
-      padding: var(--space-lg) var(--space-xl);
-      border-left: 3px solid var(--clay);
-      background: var(--gray-100);
-    }
-    nav strong { display: block; margin-bottom: var(--space-sm); }
-    nav ol { margin: 0; columns: 2; column-gap: var(--space-xl); }
-    nav li { break-inside: avoid; margin-top: 0; }
-
-    code {
-      padding: 0.08em 0.3em;
-      border: 1px solid var(--oat);
-      border-radius: var(--radius-sm);
-      background: var(--gray-100);
-      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-      font-size: 0.9em;
-      overflow-wrap: anywhere;
-    }
-
-    pre {
-      position: relative;
-      width: 100%;
-      margin: var(--space-lg) 0 var(--space-xl);
-      border: 1px solid #26241f;
-      border-radius: var(--radius-md);
-      background: #11110f;
-      color: #d8d4ca;
-      overflow: hidden;
-    }
-    pre code {
-      display: block;
-      border: 0;
-      background: transparent;
-      padding: 18px 64px 18px 22px;
-      color: inherit;
-      overflow-x: auto;
-      overflow-wrap: normal;
-      white-space: pre;
-      font-size: 0.875rem;
-      font-weight: 400;
-      line-height: 1.62;
-      scrollbar-width: none;
-    }
-    pre code::-webkit-scrollbar { width: 0; height: 0; }
-    pre .label { display: none; }
-
-    pre code .k { color: #ff946e; font-weight: 400; }
-    pre code .s { color: #8fb86a; }
-    pre code .n, pre code .p { color: #d8d4ca; }
-    pre code .c { color: #858177; font-style: italic; }
-    pre code .f, pre code .t { color: #cfc6a2; font-weight: 400; }
-    pre code .o { color: #ff946e; }
-
-    .copy-code {
-      position: absolute; top: 9px; right: 9px; z-index: 1;
-      display: inline-flex; align-items: center; justify-content: center;
-      width: 30px; height: 30px; padding: 0;
-      border: 1px solid rgba(250, 249, 245, 0.14);
-      border-radius: var(--radius-sm);
-      background: rgba(250, 249, 245, 0.06);
-      color: rgba(250, 249, 245, 0.72);
-      cursor: pointer;
-    }
-    .copy-code:hover, .copy-code:focus-visible { border-color: rgba(250, 249, 245, 0.28); background: rgba(250, 249, 245, 0.12); color: var(--ivory); outline: none; }
-    .copy-code.copied { border-color: rgba(143, 184, 106, 0.42); background: rgba(143, 184, 106, 0.14); color: #b8d99a; }
-    .copy-code svg { width: 13px; height: 13px; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; fill: none; pointer-events: none; }
-
-    .code-scrollbar { position: absolute; right: 0; bottom: 0; left: 0; height: 3px; border-radius: 999px; background: rgba(250, 249, 245, 0.1); cursor: pointer; }
-    .code-scrollbar.hidden { display: none; }
-    .code-scrollbar-thumb { height: 100%; border-radius: inherit; background: rgba(255, 148, 110, 0.82); transform: translateX(0); cursor: grab; }
-    .code-scrollbar-thumb:active { cursor: grabbing; }
-
-    .callout {
-      margin: var(--space-xl) 0;
-      padding: var(--space-lg) var(--space-xl);
-      border: 1px solid var(--oat);
-      border-left: 4px solid var(--clay);
-      border-radius: 0 var(--radius-md) var(--radius-md) 0;
-      background: var(--gray-100);
-    }
-    .callout p:last-child { margin-bottom: 0; }
-    .callout.warning { border-left-color: var(--warning); }
-    .callout.good { border-left-color: var(--success); }
-
-    .table-wrap { width: 100%; margin: var(--space-lg) 0 var(--space-xl); overflow-x: auto; }
-    table { width: 100%; border-collapse: collapse; background: var(--white); font-size: 0.9rem; }
-    th, td { padding: 10px 12px; border: 1px solid var(--oat); text-align: left; vertical-align: top; }
-    th { background: var(--gray-100); font-weight: 700; }
-    td:first-child { white-space: nowrap; }
-
-    .flow-figure { margin: var(--space-xl) 0 var(--space-2xl); }
-    .flow-figure svg { display: block; width: 100%; height: auto; }
-    .flow-figure .flow-mobile { display: none; }
-    .flow-figure figcaption { margin-top: var(--space-md); color: var(--gray-700); font-size: 0.9rem; text-align: center; }
-
-    .rule-list { counter-reset: rules; list-style: none; padding: 0; }
-    .rule-list li { position: relative; padding: 0 0 var(--space-lg) 42px; }
-    .rule-list li::before {
-      counter-increment: rules;
-      content: counter(rules);
-      position: absolute;
-      top: -1px;
-      left: 0;
-      display: grid;
-      width: 28px;
-      height: 28px;
-      place-items: center;
-      border: 1px solid var(--oat);
-      border-radius: 50%;
-      background: var(--white);
-      color: var(--clay);
-      font-size: 0.82rem;
-      font-weight: 750;
-    }
-
-    .sources { margin-top: var(--space-3xl); padding-top: var(--space-xl); border-top: 1px solid var(--oat); color: var(--gray-700); font-size: 0.9rem; }
-
-    @media (max-width: 640px) {
-      body { font-size: 15px; }
-      h1 { font-size: 1.65rem; }
-      main { padding: var(--space-xl); }
-      nav ol { columns: 1; }
-      pre code { font-size: 0.8125rem; line-height: 1.5; }
-      p code, li code, td code { font-size: 0.9em; }
-      table, .deck, .sources { font-size: 0.875rem; }
-      .flow-figure { margin-inline: -8px; }
-      .flow-figure .flow-desktop { display: none; }
-      .flow-figure .flow-mobile { display: block; }
-    }
-
-    @media (prefers-reduced-motion: reduce) {
-      html { scroll-behavior: auto; }
-    }
+    :root{color-scheme:light;--ink:#171714;--paper:#faf9f5;--card:#fff;--soft:#f0eee6;--line:#ddd8cc;--accent:#c65f3d;--good:#567645;--warn:#a66d24;--code:#141411;--code-ink:#eee9df}
+    *{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;background:var(--paper);color:var(--ink);font:16px/1.68 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}
+    main{width:min(72ch,calc(100% - 40px));margin:auto;padding:52px 0 80px}h1{font-size:clamp(2rem,5vw,3.25rem);line-height:1.08;letter-spacing:-.035em;margin:0 0 18px;text-wrap:balance}h2{font-size:1.45rem;line-height:1.28;margin:56px 0 16px}h3{font-size:1.08rem;margin:32px 0 10px}p,ul,ol{margin:0 0 18px}.deck{font-size:1.12rem;color:#484740}.eyebrow{color:var(--accent);font-weight:750;letter-spacing:.08em;text-transform:uppercase;font-size:.78rem}
+    a{color:var(--accent);text-underline-offset:3px}code{font: .9em ui-monospace,SFMono-Regular,Menlo,monospace;background:var(--soft);border:1px solid var(--line);border-radius:4px;padding:.08em .3em;overflow-wrap:anywhere}pre{position:relative;background:var(--code);color:var(--code-ink);border-radius:9px;overflow:auto;padding:20px;margin:20px 0 26px}pre code{display:block;background:none;border:0;padding:0;white-space:pre;overflow-wrap:normal;line-height:1.62}
+    nav,.callout{background:var(--soft);border-left:4px solid var(--accent);padding:18px 22px;margin:28px 0;border-radius:0 8px 8px 0}nav ol{columns:2;margin:8px 0 0}.callout.good{border-color:var(--good)}.callout.warn{border-color:var(--warn)}.callout p:last-child{margin:0}
+    .table-wrap{overflow:auto;margin:22px 0 28px}table{width:100%;border-collapse:collapse;background:var(--card);font-size:.92rem}th,td{border:1px solid var(--line);padding:11px 12px;text-align:left;vertical-align:top}th{background:var(--soft)}
+    figure{margin:28px 0 34px;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:18px}figure svg{display:block;width:100%;height:auto}figcaption{text-align:center;color:#5d5b54;font-size:.88rem;margin-top:10px}.box{fill:#fff;stroke:#c65f3d;stroke-width:2}.core{fill:#f7dfd7}.label{font:700 15px ui-sans-serif,system-ui;fill:#171714}.note{font:12px ui-sans-serif,system-ui;fill:#59574f}.arrow{stroke:#c65f3d;stroke-width:2;fill:none}.dash{stroke:#77736a;stroke-dasharray:5 5}
+    .cards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin:22px 0}.card{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:18px}.card h3{margin:0 0 8px}.card p{margin:0;color:#4e4c45;font-size:.94rem}.checklist{list-style:none;padding:0}.checklist li{padding:9px 0 9px 30px;border-bottom:1px solid var(--line);position:relative}.checklist li:before{content:"✓";position:absolute;left:5px;color:var(--good);font-weight:800}
+    @media(max-width:650px){main{width:min(100% - 28px,72ch);padding-top:32px}nav ol{columns:1}.cards{grid-template-columns:1fr}figure{padding:10px}.wide-text{font-size:11px}}
+    @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}}@media print{body{background:#fff}main{width:100%;padding:0}nav{display:none}section{break-inside:avoid}}
   </style>
 </head>
 <body>
-  <main>
-    <article>
-      <h1>Reviewstuff Module Boundary 架構指南</h1>
-      <p class="deck">這份文件說明每個模組擁有什麼、可以依賴誰，以及為什麼 dependency direction 比「檔案放在哪個資料夾」更重要。讀完後，你應該能判斷新程式碼應放在哪裡、某個 import 是否合理，以及何時需要新增 boundary。</p>
+<main><article>
+  <p class="eyebrow">Software Architecture</p>
+  <h1>TypeScript 模組邊界：從零設計可演進的依賴架構</h1>
+  <p class="deck">模組邊界不是把檔案搬進漂亮的資料夾，而是決定「誰擁有概念、誰能依賴誰，以及變更應該停在哪裡」。本文從需求開始，推導契約、依賴方向、失敗翻譯、測試與 production guardrails。</p>
+  <nav aria-label="文章目錄"><strong>閱讀路徑</strong><ol>
+    <li><a href="#requirements">先定義品質目標</a></li><li><a href="#model">建立依賴模型</a></li><li><a href="#design">切出模組與 contracts</a></li><li><a href="#flow">追蹤一次請求</a></li><li><a href="#failures">設計失敗邊界</a></li><li><a href="#tests">用測試守住架構</a></li><li><a href="#evolution">演進與取捨</a></li><li><a href="#production">Production readiness</a></li>
+  </ol></nav>
 
-      <nav aria-label="文章目錄">
-        <strong>閱讀路徑</strong>
-        <ol>
-          <li><a href="#mental-model">先建立心智模型</a></li>
-          <li><a href="#map">看完整依賴方向</a></li>
-          <li><a href="#areas">認識各個區域</a></li>
-          <li><a href="#example">跟著一次 review 流程</a></li>
-          <li><a href="#imports">判斷 import 合不合法</a></li>
-          <li><a href="#test">理解測試保障範圍</a></li>
-          <li><a href="#new-module">新增模組的步驟</a></li>
-        </ol>
-      </nav>
+  <section id="requirements"><h2>1. 先定義品質目標，再決定邊界</h2>
+    <p>假設要建立一個「訂單定價」能力：接收購物車、讀取會員與促銷資料、計算價格，再保存報價。功能需求很短，但架構品質取決於非功能需求：</p>
+    <ul><li>定價規則能在沒有資料庫與網路時測試。</li><li>更換資料庫、HTTP framework 或促銷供應商，不重寫計價政策。</li><li>外部格式錯誤不會滲透成整個系統的資料模型。</li><li>每次 import 都能回答「為什麼這一層有權知道另一層」。</li><li>timeout、重試、觀測與資源清理有明確 owner。</li></ul>
+    <div class="callout"><p><strong>邊界的設計單位是變動原因。</strong>一起改變的程式碼可以放在一起；因不同原因改變的程式碼應被契約隔開。</p></div>
+  </section>
 
-      <section id="mental-model">
-        <h2>1. Boundary 是 ownership，不只是資料夾</h2>
-        <p>Module boundary 回答三個問題：<strong>誰擁有這個概念、誰可以知道它、誰負責副作用</strong>。目錄只是把答案放進原始碼結構，真正的架構則存在於依賴方向。</p>
+  <section id="model"><h2>2. 建立依賴模型：政策在內，機制在外</h2>
+    <p>一個實用模型可分成四種責任。層數不是規定；重點是 source dependency 只朝穩定政策前進。</p>
+    <figure><svg role="img" aria-labelledby="dep-title dep-desc" viewBox="0 0 760 310"><title id="dep-title">模組依賴方向</title><desc id="dep-desc">輸入輸出和 adapters 依賴 application，application 依賴 domain；composition root 組裝所有實作。</desc><defs><marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 10 5 0 10z" fill="#c65f3d"/></marker></defs>
+      <rect class="box" x="285" y="113" width="190" height="82" rx="10"/><text class="label" x="380" y="145" text-anchor="middle">Application</text><text class="note" x="380" y="168" text-anchor="middle">use cases · input ports</text>
+      <rect class="box core" x="300" y="235" width="160" height="60" rx="10"/><text class="label" x="380" y="270" text-anchor="middle">Domain policy</text>
+      <rect class="box" x="20" y="113" width="180" height="82" rx="10"/><text class="label" x="110" y="145" text-anchor="middle">Delivery</text><text class="note" x="110" y="168" text-anchor="middle">HTTP · CLI · queue</text>
+      <rect class="box" x="560" y="113" width="180" height="82" rx="10"/><text class="label" x="650" y="145" text-anchor="middle">Adapters</text><text class="note" x="650" y="168" text-anchor="middle">DB · vendor API</text>
+      <rect class="box" x="275" y="10" width="210" height="60" rx="10"/><text class="label" x="380" y="45" text-anchor="middle">Composition root</text>
+      <path class="arrow" d="M200 154H278" marker-end="url(#arr)"/><path class="arrow" d="M560 154H482" marker-end="url(#arr)"/><path class="arrow" d="M380 195V227" marker-end="url(#arr)"/><path class="arrow dash" d="M380 70V105" marker-end="url(#arr)"/>
+    </svg><figcaption>執行時可由 delivery 向外呼叫 adapter；原始碼依賴仍透過 application-owned port 指向內層。</figcaption></figure>
+    <div class="cards"><div class="card"><h3>Domain</h3><p>值物件、不變條件、純計算。不得知道 HTTP、SQL 或 SDK。</p></div><div class="card"><h3>Application</h3><p>編排使用案例並定義所需能力的 ports；不決定技術實作。</p></div><div class="card"><h3>Adapters</h3><p>把 SQL row、HTTP response、subprocess output 翻成內部語言。</p></div><div class="card"><h3>Composition root</h3><p>唯一可以同時知道抽象與具體實作的接線位置。</p></div></div>
+  </section>
 
-        <p>本專案同時有兩種粒度：<strong>area-level boundary</strong> 管理 <code>commands/</code>、<code>use-cases/</code> 等目錄之間的依賴；<strong>file-level boundary</strong> 則區分同一能力裡的 contract、live adapter 與 fake adapter。前者已有自動化測試，後者目前主要依靠命名、設計與 code review。</p>
+  <section id="design"><h2>3. 從能力切模組，而不是從技術分類</h2>
+    <p>先讓每個 capability 擁有自己的語言，再在 application boundary 定義消費者需要的最小 contract。不要建立全域 <code>types/</code>、<code>services/</code> 或 <code>utils/</code> 垃圾桶。</p>
+    <pre><code>src/
+├── pricing/
+│   ├── domain.ts           # Money、Quote、定價規則
+│   ├── quote-order.ts      # use case
+│   └── ports.ts            # MemberReader、PromotionReader、QuoteStore
+├── adapters/
+│   ├── postgres-quote-store.ts
+│   └── partner-promotion-reader.ts
+├── delivery/
+│   └── http/quote-route.ts
+└── main.ts                 # composition root</code></pre>
+    <p>Port 的形狀由使用者決定，而不是照抄供應商 SDK：</p>
+    <pre><code>type CustomerId = string &amp; { readonly CustomerId: unique symbol }
 
-        <div class="callout good">
-          <p><strong>核心規則：</strong>外層流程可以依賴內層抽象；內層模型不可以回頭知道 CLI、runtime 或基礎設施。</p>
-        </div>
+interface PromotionReader {
+  activeFor(customerId: CustomerId): Promise&lt;ReadonlyArray&lt;Promotion&gt;&gt;
+}
 
-        <p>例如，review use case 可以知道「我要讀取 Git diff」，但它只需要依賴 <code>GitService</code> 這個語意介面，不應知道底層使用 Bun subprocess、Effect Command，或未來改成 libgit2。</p>
+interface QuoteStore {
+  save(quote: Quote): Promise&lt;void&gt;
+}</code></pre>
+    <p>這個 contract 只暴露定價 use case 真正需要的語意。Adapter 可以呼叫 REST、讀資料庫或回傳測試資料，但供應商的 request、pagination 和錯誤 payload 不會穿過邊界。</p>
+    <div class="callout warn"><p><strong>避免 pass-through abstraction：</strong>如果介面和第三方 SDK 方法一模一樣，只是換了名稱，它沒有隔離變動，卻增加了一次跳轉。</p></div>
+  </section>
 
-        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="c">// 好：use case 描述應用流程，只知道語意服務</span>
-<span class="k">const</span> runReview <span class="o">=</span> <span class="t">Effect</span><span class="o">.</span><span class="p">gen</span><span class="o">(</span><span class="k">function</span><span class="o">*</span> <span class="o">(</span><span class="o">)</span> <span class="o">{</span>
-  <span class="k">const</span> git <span class="o">=</span> <span class="k">yield</span><span class="o">*</span> <span class="t">GitService</span><span class="o">;</span>
-  <span class="k">const</span> changes <span class="o">=</span> <span class="k">yield</span><span class="o">*</span> git<span class="o">.</span><span class="p">diff</span><span class="o">(</span><span class="o">)</span><span class="o">;</span>
-  <span class="k">return</span> <span class="k">yield</span><span class="o">*</span> <span class="f">reviewChanges</span><span class="o">(</span>changes<span class="o">)</span><span class="o">;</span>
-<span class="o">}</span><span class="o">)</span><span class="o">;</span>
+  <section id="flow"><h2>4. 追蹤一次請求，驗證 ownership</h2>
+    <ol><li>HTTP adapter 驗證 JSON，轉成 <code>QuoteOrderInput</code>。</li><li>use case 透過 ports 讀取會員與促銷資料。</li><li>domain policy 計算 <code>Quote</code>，不執行 I/O。</li><li>use case 要求 <code>QuoteStore</code> 保存結果。</li><li>HTTP adapter 把 application result 轉成 versioned response。</li></ol>
+    <pre><code>const quoteOrder = (input: QuoteOrderInput, deps: Dependencies) =&gt;
+  deps.members.find(input.customerId)
+    .then((member) =&gt; deps.promotions.activeFor(member.id)
+      .then((promotions) =&gt; calculateQuote(input.cart, member, promotions)))
+    .then(async (quote) =&gt; {
+      await deps.quotes.save(quote)
+      return quote
+    })</code></pre>
+    <p>這個範例刻意使用一般 Promise，因為模組邊界與特定 effect system 無關。重要的是 use case 只知道 capabilities，delivery 只知道輸入輸出，adapter 才知道外部協定。</p>
+  </section>
 
-<span class="c">// 不好：use case 直接決定 subprocess 實作</span>
-<span class="k">import</span> <span class="o">{</span> <span class="t">Command</span> <span class="o">}</span> <span class="k">from</span> <span class="s">"@effect/platform"</span><span class="o">;</span></code></pre>
-      </section>
+  <section id="failures"><h2>5. 失敗也必須在邊界翻譯</h2>
+    <p>讓 SQL error 或 vendor-specific status code 直接流入 use case，等於把外部協定變成核心 API。每層應用自己的語言表達可恢復失敗。</p>
+    <div class="table-wrap"><table><thead><tr><th>位置</th><th>知道的失敗</th><th>向內／向上提供</th></tr></thead><tbody>
+      <tr><td>Adapter</td><td>HTTP 429、SQL constraint、timeout</td><td><code>PromotionUnavailable</code>、<code>QuoteConflict</code></td></tr>
+      <tr><td>Application</td><td>能力暫時不可用、資料不存在</td><td>重試、fallback 或 use-case error</td></tr>
+      <tr><td>Delivery</td><td>application result 與 error</td><td>HTTP status、CLI exit code、使用者訊息</td></tr>
+    </tbody></table></div>
+    <p>重試必須知道操作是否 idempotent；timeout 應由真正控制外部呼叫的 adapter 執行；fallback 則屬於產品政策時應留在 application。不要在每層都重試，否則一次請求可能產生乘法級放大。</p>
+  </section>
 
-      <section id="map">
-        <h2>2. 依賴方向全圖</h2>
-        <p>下圖的箭頭表示「原始碼可以依賴」的方向，不是 runtime 資料流。執行時結果當然可以從 adapter 回到 use case，但 adapter 不因此成為 use case 的 owner。</p>
+  <section id="tests"><h2>6. 測試金字塔：驗證規則，也驗證接縫</h2>
+    <ul><li><strong>Domain unit tests：</strong>大量測試不變條件、邊界值與 property。</li><li><strong>Use-case tests：</strong>用 in-memory fakes 驗證編排、短路、錯誤政策與互動順序。</li><li><strong>Contract tests：</strong>同一組測試套件跑過 fake 與 production adapters，避免 fake 說謊。</li><li><strong>Adapter integration tests：</strong>測 schema mapping、transaction、timeout 與真實 protocol。</li><li><strong>少量 end-to-end：</strong>確認 composition root、設定與 delivery 路徑確實接通。</li></ul>
+    <h3>Architecture tests</h3><p>靜態規則可以阻止 forbidden imports，例如 domain 不得 import adapters、delivery 不得 deep-import adapter internals。這類測試守的是結構，不會證明 abstraction 有意義，也不會取代 code review。</p>
+    <pre><code>// 概念規則
+domain       -X-&gt; application | adapters | delivery
+application  -X-&gt; adapters | delivery
+delivery     ---&gt; application
+adapters     ---&gt; application ports
+main         ---&gt; all modules</code></pre>
+  </section>
 
-<figure class="flow-figure">
-  <svg id="mermaid-mrkpwccz-my-svg" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" class="flowchart flow-desktop" viewBox="0 0 796.4609375 734" aria-roledescription="flowchart-v2" role="img" aria-labelledby="mermaid-mrkpwccz-title mermaid-mrkpwccz-desc"><title id="mermaid-mrkpwccz-title">Reviewstuff 模組依賴方向</title><desc id="mermaid-mrkpwccz-desc">CLI composition root 組裝 commands、use-cases、語意服務與 platform；依賴由外層流向內層抽象，domain 不反向依賴基礎設施。</desc><style>#mermaid-mrkpwccz-my-svg{font-family:ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;font-size:16px;fill:#141413;}@keyframes edge-animation-frame{from{stroke-dashoffset:0;}}@keyframes dash{to{stroke-dashoffset:0;}}#mermaid-mrkpwccz-my-svg .edge-animation-slow{stroke-dasharray:9,5!important;stroke-dashoffset:900;animation:dash 50s linear infinite;stroke-linecap:round;}#mermaid-mrkpwccz-my-svg .edge-animation-fast{stroke-dasharray:9,5!important;stroke-dashoffset:900;animation:dash 20s linear infinite;stroke-linecap:round;}#mermaid-mrkpwccz-my-svg .error-icon{fill:#FAF9F5;}#mermaid-mrkpwccz-my-svg .error-text{fill:#05060a;stroke:#05060a;}#mermaid-mrkpwccz-my-svg .edge-thickness-normal{stroke-width:1px;}#mermaid-mrkpwccz-my-svg .edge-thickness-thick{stroke-width:3.5px;}#mermaid-mrkpwccz-my-svg .edge-pattern-solid{stroke-dasharray:0;}#mermaid-mrkpwccz-my-svg .edge-thickness-invisible{stroke-width:0;fill:none;}#mermaid-mrkpwccz-my-svg .edge-pattern-dashed{stroke-dasharray:3;}#mermaid-mrkpwccz-my-svg .edge-pattern-dotted{stroke-dasharray:2;}#mermaid-mrkpwccz-my-svg .marker{fill:#D97757;stroke:#D97757;}#mermaid-mrkpwccz-my-svg .marker.cross{stroke:#D97757;}#mermaid-mrkpwccz-my-svg svg{font-family:ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;font-size:16px;}#mermaid-mrkpwccz-my-svg p{margin:0;}#mermaid-mrkpwccz-my-svg .label{font-family:ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;color:#141413;}#mermaid-mrkpwccz-my-svg .cluster-label text{fill:#05060a;}#mermaid-mrkpwccz-my-svg .cluster-label span{color:#05060a;}#mermaid-mrkpwccz-my-svg .cluster-label span p{background-color:transparent;}#mermaid-mrkpwccz-my-svg .label text,#mermaid-mrkpwccz-my-svg span{fill:#141413;color:#141413;}#mermaid-mrkpwccz-my-svg .node rect,#mermaid-mrkpwccz-my-svg .node circle,#mermaid-mrkpwccz-my-svg .node ellipse,#mermaid-mrkpwccz-my-svg .node polygon,#mermaid-mrkpwccz-my-svg .node path{fill:#FFFFFF;stroke:#E3DACC;stroke-width:1px;}#mermaid-mrkpwccz-my-svg .rough-node .label text,#mermaid-mrkpwccz-my-svg .node .label text,#mermaid-mrkpwccz-my-svg .image-shape .label,#mermaid-mrkpwccz-my-svg .icon-shape .label{text-anchor:middle;}#mermaid-mrkpwccz-my-svg .node .katex path{fill:#000;stroke:#000;stroke-width:1px;}#mermaid-mrkpwccz-my-svg .rough-node .label,#mermaid-mrkpwccz-my-svg .node .label,#mermaid-mrkpwccz-my-svg .image-shape .label,#mermaid-mrkpwccz-my-svg .icon-shape .label{text-align:center;}#mermaid-mrkpwccz-my-svg .node.clickable{cursor:pointer;}#mermaid-mrkpwccz-my-svg .root .anchor path{fill:#D97757!important;stroke-width:0;stroke:#D97757;}#mermaid-mrkpwccz-my-svg .arrowheadPath{fill:rgba(255, 255, 255, 0);}#mermaid-mrkpwccz-my-svg .edgePath .path{stroke:#D97757;stroke-width:1px;}#mermaid-mrkpwccz-my-svg .flowchart-link{stroke:#D97757;fill:none;}#mermaid-mrkpwccz-my-svg .edgeLabel{background-color:#F0EEE6;text-align:center;}#mermaid-mrkpwccz-my-svg .edgeLabel p{background-color:#F0EEE6;}#mermaid-mrkpwccz-my-svg .edgeLabel rect{opacity:0.5;background-color:#F0EEE6;fill:#F0EEE6;}#mermaid-mrkpwccz-my-svg .labelBkg{background-color:rgba(240, 238, 230, 0.5);}#mermaid-mrkpwccz-my-svg .cluster rect{fill:#FAF9F5;stroke:hsl(48, 0%, 87.0588235294%);stroke-width:1px;}#mermaid-mrkpwccz-my-svg .cluster text{fill:#05060a;}#mermaid-mrkpwccz-my-svg .cluster span{color:#05060a;}#mermaid-mrkpwccz-my-svg div.mermaidTooltip{position:absolute;text-align:center;max-width:200px;padding:2px;font-family:ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;font-size:12px;background:#FAF9F5;border:1px solid hsl(48, 0%, 87.0588235294%);border-radius:2px;pointer-events:none;z-index:100;}#mermaid-mrkpwccz-my-svg .flowchartTitleText{text-anchor:middle;font-size:18px;fill:#141413;}#mermaid-mrkpwccz-my-svg rect.text{fill:none;stroke-width:0;}#mermaid-mrkpwccz-my-svg .icon-shape,#mermaid-mrkpwccz-my-svg .image-shape{background-color:#F0EEE6;text-align:center;}#mermaid-mrkpwccz-my-svg .icon-shape p,#mermaid-mrkpwccz-my-svg .image-shape p{background-color:#F0EEE6;padding:2px;}#mermaid-mrkpwccz-my-svg .icon-shape .label rect,#mermaid-mrkpwccz-my-svg .image-shape .label rect{opacity:0.5;background-color:#F0EEE6;fill:#F0EEE6;}#mermaid-mrkpwccz-my-svg .label-icon{display:inline-block;height:1em;overflow:visible;vertical-align:-0.125em;}#mermaid-mrkpwccz-my-svg .node .label-icon path{fill:currentColor;stroke:revert;stroke-width:revert;}#mermaid-mrkpwccz-my-svg .node .neo-node{stroke:#E3DACC;}#mermaid-mrkpwccz-my-svg [data-look="neo"].node rect,#mermaid-mrkpwccz-my-svg [data-look="neo"].cluster rect,#mermaid-mrkpwccz-my-svg [data-look="neo"].node polygon{stroke:url(#mermaid-mrkpwccz-my-svg-gradient);filter:drop-shadow( 1px 2px 2px rgba(185,185,185,1));}#mermaid-mrkpwccz-my-svg [data-look="neo"].swimlane.cluster rect{filter:none;}#mermaid-mrkpwccz-my-svg [data-look="neo"].node path{stroke:url(#mermaid-mrkpwccz-my-svg-gradient);stroke-width:1px;}#mermaid-mrkpwccz-my-svg [data-look="neo"].node .outer-path{filter:drop-shadow( 1px 2px 2px rgba(185,185,185,1));}#mermaid-mrkpwccz-my-svg [data-look="neo"].node .neo-line path{stroke:#E3DACC;filter:none;}#mermaid-mrkpwccz-my-svg [data-look="neo"].node circle{stroke:url(#mermaid-mrkpwccz-my-svg-gradient);filter:drop-shadow( 1px 2px 2px rgba(185,185,185,1));}#mermaid-mrkpwccz-my-svg [data-look="neo"].node circle .state-start{fill:#000000;}#mermaid-mrkpwccz-my-svg [data-look="neo"].icon-shape .icon{fill:url(#mermaid-mrkpwccz-my-svg-gradient);filter:drop-shadow( 1px 2px 2px rgba(185,185,185,1));}#mermaid-mrkpwccz-my-svg [data-look="neo"].icon-shape .icon-neo path{stroke:url(#mermaid-mrkpwccz-my-svg-gradient);filter:drop-shadow( 1px 2px 2px rgba(185,185,185,1));}#mermaid-mrkpwccz-my-svg :root{--mermaid-font-family:"trebuchet ms",verdana,arial,sans-serif;}</style><g><marker id="mermaid-mrkpwccz-my-svg_flowchart-v2-pointEnd" class="marker flowchart-v2" viewBox="0 0 10 10" refX="5" refY="5" markerUnits="userSpaceOnUse" markerWidth="8" markerHeight="8" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" class="arrowMarkerPath" style="stroke-width: 1; stroke-dasharray: 1, 0;"/></marker><marker id="mermaid-mrkpwccz-my-svg_flowchart-v2-pointStart" class="marker flowchart-v2" viewBox="0 0 10 10" refX="4.5" refY="5" markerUnits="userSpaceOnUse" markerWidth="8" markerHeight="8" orient="auto"><path d="M 0 5 L 10 10 L 10 0 z" class="arrowMarkerPath" style="stroke-width: 1; stroke-dasharray: 1, 0;"/></marker><marker id="mermaid-mrkpwccz-my-svg_flowchart-v2-pointEnd-margin" class="marker flowchart-v2" viewBox="0 0 11.5 14" refX="11.5" refY="7" markerUnits="userSpaceOnUse" markerWidth="10.5" markerHeight="14" orient="auto"><path d="M 0 0 L 11.5 7 L 0 14 z" class="arrowMarkerPath" style="stroke-width: 0; stroke-dasharray: 1, 0;"/></marker><marker id="mermaid-mrkpwccz-my-svg_flowchart-v2-pointStart-margin" class="marker flowchart-v2" viewBox="0 0 11.5 14" refX="1" refY="7" markerUnits="userSpaceOnUse" markerWidth="11.5" markerHeight="14" orient="auto"><polygon points="0,7 11.5,14 11.5,0" class="arrowMarkerPath" style="stroke-width: 0; stroke-dasharray: 1, 0;"/></marker><marker id="mermaid-mrkpwccz-my-svg_flowchart-v2-circleEnd" class="marker flowchart-v2" viewBox="0 0 10 10" refX="11" refY="5" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" orient="auto"><circle cx="5" cy="5" r="5" class="arrowMarkerPath" style="stroke-width: 1; stroke-dasharray: 1, 0;"/></marker><marker id="mermaid-mrkpwccz-my-svg_flowchart-v2-circleStart" class="marker flowchart-v2" viewBox="0 0 10 10" refX="-1" refY="5" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" orient="auto"><circle cx="5" cy="5" r="5" class="arrowMarkerPath" style="stroke-width: 1; stroke-dasharray: 1, 0;"/></marker><marker id="mermaid-mrkpwccz-my-svg_flowchart-v2-circleEnd-margin" class="marker flowchart-v2" viewBox="0 0 10 10" refY="5" refX="12.25" markerUnits="userSpaceOnUse" markerWidth="14" markerHeight="14" orient="auto"><circle cx="5" cy="5" r="5" class="arrowMarkerPath" style="stroke-width: 0; stroke-dasharray: 1, 0;"/></marker><marker id="mermaid-mrkpwccz-my-svg_flowchart-v2-circleStart-margin" class="marker flowchart-v2" viewBox="0 0 10 10" refX="-2" refY="5" markerUnits="userSpaceOnUse" markerWidth="14" markerHeight="14" orient="auto"><circle cx="5" cy="5" r="5" class="arrowMarkerPath" style="stroke-width: 0; stroke-dasharray: 1, 0;"/></marker><marker id="mermaid-mrkpwccz-my-svg_flowchart-v2-crossEnd" class="marker cross flowchart-v2" viewBox="0 0 11 11" refX="12" refY="5.2" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" orient="auto"><path d="M 1,1 l 9,9 M 10,1 l -9,9" class="arrowMarkerPath" style="stroke-width: 2; stroke-dasharray: 1, 0;"/></marker><marker id="mermaid-mrkpwccz-my-svg_flowchart-v2-crossStart" class="marker cross flowchart-v2" viewBox="0 0 11 11" refX="-1" refY="5.2" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" orient="auto"><path d="M 1,1 l 9,9 M 10,1 l -9,9" class="arrowMarkerPath" style="stroke-width: 2; stroke-dasharray: 1, 0;"/></marker><marker id="mermaid-mrkpwccz-my-svg_flowchart-v2-crossEnd-margin" class="marker cross flowchart-v2" viewBox="0 0 15 15" refX="17.7" refY="7.5" markerUnits="userSpaceOnUse" markerWidth="12" markerHeight="12" orient="auto"><path d="M 1,1 L 14,14 M 1,14 L 14,1" class="arrowMarkerPath" style="stroke-width: 2.5;"/></marker><marker id="mermaid-mrkpwccz-my-svg_flowchart-v2-crossStart-margin" class="marker cross flowchart-v2" viewBox="0 0 15 15" refX="-3.5" refY="7.5" markerUnits="userSpaceOnUse" markerWidth="12" markerHeight="12" orient="auto"><path d="M 1,1 L 14,14 M 1,14 L 14,1" class="arrowMarkerPath" style="stroke-width: 2.5; stroke-dasharray: 1, 0;"/></marker><g class="root"><g class="clusters"/><g class="edgePaths"><path d="M334.512,66.714L369.147,74.095C403.783,81.476,473.053,96.238,507.689,107.119C542.324,118,542.324,125,542.324,128.5L542.324,132" id="mermaid-mrkpwccz-my-svg-L_Root_Commands_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" data-edge="true" data-et="edge" data-id="mermaid-mrkpwccz-L_Root_Commands_0" data-points="W3sieCI6MzM0LjUxMTcxODc1LCJ5Ijo2Ni43MTM5NTEyNDk5Njc0OH0seyJ4Ijo1NDIuMzI0MjE4NzUsInkiOjExMX0seyJ4Ijo1NDIuMzI0MjE4NzUsInkiOjEzNn1d" data-look="classic" marker-end="url(#mermaid-mrkpwccz-my-svg_flowchart-v2-pointEnd)"/><path d="M456.754,207.501L442.932,212.751C429.109,218,401.465,228.5,387.643,237.25C373.82,246,373.82,253,373.82,256.5L373.82,260" id="mermaid-mrkpwccz-my-svg-L_Commands_UseCases_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" data-edge="true" data-et="edge" data-id="mermaid-mrkpwccz-L_Commands_UseCases_0" data-points="W3sieCI6NDU2Ljc1MzkwNjI1LCJ5IjoyMDcuNTAwNzMwMjMxNTg3NzR9LHsieCI6MzczLjgyMDMxMjUsInkiOjIzOX0seyJ4IjozNzMuODIwMzEyNSwieSI6MjY0fV0=" data-look="classic" marker-end="url(#mermaid-mrkpwccz-my-svg_flowchart-v2-pointEnd)"/><path d="M627.895,207.501L641.717,212.751C655.539,218,683.184,228.5,697.006,244.417C710.828,260.333,710.828,281.667,710.828,303C710.828,324.333,710.828,345.667,710.828,359.833C710.828,374,710.828,381,710.828,384.5L710.828,388" id="mermaid-mrkpwccz-my-svg-L_Commands_Output_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" data-edge="true" data-et="edge" data-id="mermaid-mrkpwccz-L_Commands_Output_0" data-points="W3sieCI6NjI3Ljg5NDUzMTI1LCJ5IjoyMDcuNTAwNzMwMjMxNTg3NzR9LHsieCI6NzEwLjgyODEyNSwieSI6MjM5fSx7IngiOjcxMC44MjgxMjUsInkiOjMwM30seyJ4Ijo3MTAuODI4MTI1LCJ5IjozNjd9LHsieCI6NzEwLjgyODEyNSwieSI6MzkyfV0=" data-look="classic" marker-end="url(#mermaid-mrkpwccz-my-svg_flowchart-v2-pointEnd)"/><path d="M306.188,324.157L283.361,331.297C260.534,338.438,214.88,352.719,195.597,363.546C176.314,374.372,183.402,381.744,186.946,385.43L190.49,389.117" id="mermaid-mrkpwccz-my-svg-L_UseCases_Services_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" data-edge="true" data-et="edge" data-id="mermaid-mrkpwccz-L_UseCases_Services_0" data-points="W3sieCI6MzA2LjE4NzUsInkiOjMyNC4xNTY1NjAyNTY2MDYxfSx7IngiOjE2OS4yMjY1NjI1LCJ5IjozNjd9LHsieCI6MTkzLjI2MjIwNzAzMTI1LCJ5IjozOTJ9XQ==" data-look="classic" marker-end="url(#mermaid-mrkpwccz-my-svg_flowchart-v2-pointEnd)"/><path d="M441.453,338.425L450.546,343.188C459.638,347.95,477.823,357.475,486.915,365.738C496.008,374,496.008,381,496.008,384.5L496.008,388" id="mermaid-mrkpwccz-my-svg-L_UseCases_Review_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" data-edge="true" data-et="edge" data-id="mermaid-mrkpwccz-L_UseCases_Review_0" data-points="W3sieCI6NDQxLjQ1MzEyNSwieSI6MzM4LjQyNTA2MzkzODYxODl9LHsieCI6NDk2LjAwNzgxMjUsInkiOjM2N30seyJ4Ijo0OTYuMDA3ODEyNSwieSI6MzkyfV0=" data-look="classic" marker-end="url(#mermaid-mrkpwccz-my-svg_flowchart-v2-pointEnd)"/><path d="M373.82,342L373.82,346.167C373.82,350.333,373.82,358.667,373.82,373.5C373.82,388.333,373.82,409.667,373.82,431C373.82,452.333,373.82,473.667,380.545,488.17C387.27,502.673,400.72,510.345,407.444,514.182L414.169,518.018" id="mermaid-mrkpwccz-my-svg-L_UseCases_Domain_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" data-edge="true" data-et="edge" data-id="mermaid-mrkpwccz-L_UseCases_Domain_0" data-points="W3sieCI6MzczLjgyMDMxMjUsInkiOjM0Mn0seyJ4IjozNzMuODIwMzEyNSwieSI6MzY3fSx7IngiOjM3My44MjAzMTI1LCJ5Ijo0MzF9LHsieCI6MzczLjgyMDMxMjUsInkiOjQ5NX0seyJ4Ijo0MTcuNjQzNTU0Njg3NSwieSI6NTIwfV0=" data-look="classic" marker-end="url(#mermaid-mrkpwccz-my-svg_flowchart-v2-pointEnd)"/><path d="M338.82,464.876L354.836,469.897C370.852,474.917,402.883,484.959,421.809,493.625C440.735,502.291,446.556,509.583,449.466,513.228L452.377,516.874" id="mermaid-mrkpwccz-my-svg-L_Services_Domain_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" data-edge="true" data-et="edge" data-id="mermaid-mrkpwccz-L_Services_Domain_0" data-points="W3sieCI6MzM4LjgyMDMxMjUsInkiOjQ2NC44NzYwMTQwODIzNTExNn0seyJ4Ijo0MzQuOTE0MDYyNSwieSI6NDk1fSx7IngiOjQ1NC44NzI1NTg1OTM3NSwieSI6NTIwfV0=" data-look="classic" marker-end="url(#mermaid-mrkpwccz-my-svg_flowchart-v2-pointEnd)"/><path d="M131.392,470L120.776,474.167C110.16,478.333,88.927,486.667,78.859,494.341C68.792,502.016,69.888,509.032,70.436,512.54L70.984,516.048" id="mermaid-mrkpwccz-my-svg-L_Services_Platform_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" data-edge="true" data-et="edge" data-id="mermaid-mrkpwccz-L_Services_Platform_0" data-points="W3sieCI6MTMxLjM5MTYwMTU2MjUsInkiOjQ3MH0seyJ4Ijo2Ny42OTUzMTI1LCJ5Ijo0OTV9LHsieCI6NzEuNjAxNTYyNSwieSI6NTIwfV0=" data-look="classic" marker-end="url(#mermaid-mrkpwccz-my-svg_flowchart-v2-pointEnd)"/><path d="M496.008,470L496.008,474.167C496.008,478.333,496.008,486.667,495.46,494.341C494.912,502.016,493.815,509.032,493.267,512.54L492.719,516.048" id="mermaid-mrkpwccz-my-svg-L_Review_Domain_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" data-edge="true" data-et="edge" data-id="mermaid-mrkpwccz-L_Review_Domain_0" data-points="W3sieCI6NDk2LjAwNzgxMjUsInkiOjQ3MH0seyJ4Ijo0OTYuMDA3ODEyNSwieSI6NDk1fSx7IngiOjQ5Mi4xMDE1NjI1LCJ5Ijo1MjB9XQ==" data-look="classic" marker-end="url(#mermaid-mrkpwccz-my-svg_flowchart-v2-pointEnd)"/><path d="M710.828,470L710.828,474.167C710.828,478.333,710.828,486.667,689.092,497.021C667.355,507.375,623.882,519.751,602.146,525.939L580.41,532.126" id="mermaid-mrkpwccz-my-svg-L_Output_Domain_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" data-edge="true" data-et="edge" data-id="mermaid-mrkpwccz-L_Output_Domain_0" data-points="W3sieCI6NzEwLjgyODEyNSwieSI6NDcwfSx7IngiOjcxMC44MjgxMjUsInkiOjQ5NX0seyJ4Ijo1NzYuNTYyNSwieSI6NTMzLjIyMTYzNTMzMzc3MzV9XQ==" data-look="classic" marker-end="url(#mermaid-mrkpwccz-my-svg_flowchart-v2-pointEnd)"/><path d="M242.004,86L242.004,90.167C242.004,94.333,242.004,102.667,242.004,117.5C242.004,132.333,242.004,153.667,242.004,175C242.004,196.333,242.004,217.667,242.004,239C242.004,260.333,242.004,281.667,242.004,303C242.004,324.333,242.004,345.667,241.387,359.843C240.77,374.02,239.537,381.04,238.92,384.55L238.303,388.06" id="mermaid-mrkpwccz-my-svg-L_Root_Services_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" data-edge="true" data-et="edge" data-id="mermaid-mrkpwccz-L_Root_Services_0" data-points="W3sieCI6MjQyLjAwMzkwNjI1LCJ5Ijo4Nn0seyJ4IjoyNDIuMDAzOTA2MjUsInkiOjExMX0seyJ4IjoyNDIuMDAzOTA2MjUsInkiOjE3NX0seyJ4IjoyNDIuMDAzOTA2MjUsInkiOjIzOX0seyJ4IjoyNDIuMDAzOTA2MjUsInkiOjMwM30seyJ4IjoyNDIuMDAzOTA2MjUsInkiOjM2N30seyJ4IjoyMzcuNjEwOTAwODc4OTA2MjUsInkiOjM5Mn1d" data-look="classic" marker-end="url(#mermaid-mrkpwccz-my-svg_flowchart-v2-pointEnd)"/><path d="M149.496,85.368L139.196,89.64C128.896,93.912,108.296,102.456,97.995,117.395C87.695,132.333,87.695,153.667,87.695,175C87.695,196.333,87.695,217.667,87.695,239C87.695,260.333,87.695,281.667,87.695,303C87.695,324.333,87.695,345.667,87.695,367C87.695,388.333,87.695,409.667,87.695,431C87.695,452.333,87.695,473.667,87.147,487.841C86.599,502.016,85.503,509.032,84.955,512.54L84.407,516.048" id="mermaid-mrkpwccz-my-svg-L_Root_Platform_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" data-edge="true" data-et="edge" data-id="mermaid-mrkpwccz-L_Root_Platform_0" data-points="W3sieCI6MTQ5LjQ5NjA5Mzc1LCJ5Ijo4NS4zNjc5MjE0MjM2ODkzNH0seyJ4Ijo4Ny42OTUzMTI1LCJ5IjoxMTF9LHsieCI6ODcuNjk1MzEyNSwieSI6MTc1fSx7IngiOjg3LjY5NTMxMjUsInkiOjIzOX0seyJ4Ijo4Ny42OTUzMTI1LCJ5IjozMDN9LHsieCI6ODcuNjk1MzEyNSwieSI6MzY3fSx7IngiOjg3LjY5NTMxMjUsInkiOjQzMX0seyJ4Ijo4Ny42OTUzMTI1LCJ5Ijo0OTV9LHsieCI6ODMuNzg5MDYyNSwieSI6NTIwfV0=" data-look="classic" marker-end="url(#mermaid-mrkpwccz-my-svg_flowchart-v2-pointEnd)"/><path d="M77.695,598L77.695,602.167C77.695,606.333,77.695,614.667,95.06,624.277C112.426,633.887,147.156,644.775,164.521,650.219L181.886,655.662" id="mermaid-mrkpwccz-my-svg-L_Platform_Shared_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" data-edge="true" data-et="edge" data-id="mermaid-mrkpwccz-L_Platform_Shared_0" data-points="W3sieCI6NzcuNjk1MzEyNSwieSI6NTk4fSx7IngiOjc3LjY5NTMxMjUsInkiOjYyM30seyJ4IjoxODUuNzAzMTI1LCJ5Ijo2NTYuODU4ODcwMzUwNTI4fV0=" data-look="classic" marker-end="url(#mermaid-mrkpwccz-my-svg_flowchart-v2-pointEnd)"/><path d="M486.008,598L486.008,602.167C486.008,606.333,486.008,614.667,468.643,624.277C451.277,633.887,416.547,644.775,399.182,650.219L381.817,655.662" id="mermaid-mrkpwccz-my-svg-L_Domain_Shared_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" data-edge="true" data-et="edge" data-id="mermaid-mrkpwccz-L_Domain_Shared_0" data-points="W3sieCI6NDg2LjAwNzgxMjUsInkiOjU5OH0seyJ4Ijo0ODYuMDA3ODEyNSwieSI6NjIzfSx7IngiOjM3OCwieSI6NjU2Ljg1ODg3MDM1MDUyOH1d" data-look="classic" marker-end="url(#mermaid-mrkpwccz-my-svg_flowchart-v2-pointEnd)"/></g><g class="edgeLabels"><g class="edgeLabel"><g class="label" data-id="mermaid-mrkpwccz-L_Root_Commands_0" transform="translate(0, 0)"><text y="-10.1" text-anchor="middle"><tspan class="text-outer-tspan row" x="0" y="-0.1em" dy="1.1em" text-anchor="middle"/></text></g></g><g><rect class="background" style="stroke: none"/></g><g class="edgeLabel"><g class="label" data-id="mermaid-mrkpwccz-L_Commands_UseCases_0" transform="translate(0, 0)"><text y="-10.1" text-anchor="middle"><tspan class="text-outer-tspan row" x="0" y="-0.1em" dy="1.1em" text-anchor="middle"/></text></g></g><g><rect class="background" style="stroke: none"/></g><g class="edgeLabel"><g class="label" data-id="mermaid-mrkpwccz-L_Commands_Output_0" transform="translate(0, 0)"><text y="-10.1" text-anchor="middle"><tspan class="text-outer-tspan row" x="0" y="-0.1em" dy="1.1em" text-anchor="middle"/></text></g></g><g><rect class="background" style="stroke: none"/></g><g class="edgeLabel"><g class="label" data-id="mermaid-mrkpwccz-L_UseCases_Services_0" transform="translate(0, 0)"><text y="-10.1" text-anchor="middle"><tspan class="text-outer-tspan row" x="0" y="-0.1em" dy="1.1em" text-anchor="middle"/></text></g></g><g><rect class="background" style="stroke: none"/></g><g class="edgeLabel"><g class="label" data-id="mermaid-mrkpwccz-L_UseCases_Review_0" transform="translate(0, 0)"><text y="-10.1" text-anchor="middle"><tspan class="text-outer-tspan row" x="0" y="-0.1em" dy="1.1em" text-anchor="middle"/></text></g></g><g><rect class="background" style="stroke: none"/></g><g class="edgeLabel"><g class="label" data-id="mermaid-mrkpwccz-L_UseCases_Domain_0" transform="translate(0, 0)"><text y="-10.1" text-anchor="middle"><tspan class="text-outer-tspan row" x="0" y="-0.1em" dy="1.1em" text-anchor="middle"/></text></g></g><g><rect class="background" style="stroke: none"/></g><g class="edgeLabel"><g class="label" data-id="mermaid-mrkpwccz-L_Services_Domain_0" transform="translate(0, 0)"><text y="-10.1" text-anchor="middle"><tspan class="text-outer-tspan row" x="0" y="-0.1em" dy="1.1em" text-anchor="middle"/></text></g></g><g><rect class="background" style="stroke: none"/></g><g class="edgeLabel"><g class="label" data-id="mermaid-mrkpwccz-L_Services_Platform_0" transform="translate(0, 0)"><text y="-10.1" text-anchor="middle"><tspan class="text-outer-tspan row" x="0" y="-0.1em" dy="1.1em" text-anchor="middle"/></text></g></g><g><rect class="background" style="stroke: none"/></g><g class="edgeLabel"><g class="label" data-id="mermaid-mrkpwccz-L_Review_Domain_0" transform="translate(0, 0)"><text y="-10.1" text-anchor="middle"><tspan class="text-outer-tspan row" x="0" y="-0.1em" dy="1.1em" text-anchor="middle"/></text></g></g><g><rect class="background" style="stroke: none"/></g><g class="edgeLabel"><g class="label" data-id="mermaid-mrkpwccz-L_Output_Domain_0" transform="translate(0, 0)"><text y="-10.1" text-anchor="middle"><tspan class="text-outer-tspan row" x="0" y="-0.1em" dy="1.1em" text-anchor="middle"/></text></g></g><g><rect class="background" style="stroke: none"/></g><g class="edgeLabel"><g class="label" data-id="mermaid-mrkpwccz-L_Root_Services_0" transform="translate(0, 0)"><text y="-10.1" text-anchor="middle"><tspan class="text-outer-tspan row" x="0" y="-0.1em" dy="1.1em" text-anchor="middle"/></text></g></g><g><rect class="background" style="stroke: none"/></g><g class="edgeLabel"><g class="label" data-id="mermaid-mrkpwccz-L_Root_Platform_0" transform="translate(0, 0)"><text y="-10.1" text-anchor="middle"><tspan class="text-outer-tspan row" x="0" y="-0.1em" dy="1.1em" text-anchor="middle"/></text></g></g><g><rect class="background" style="stroke: none"/></g><g class="edgeLabel"><g class="label" data-id="mermaid-mrkpwccz-L_Platform_Shared_0" transform="translate(0, 0)"><text y="-10.1" text-anchor="middle"><tspan class="text-outer-tspan row" x="0" y="-0.1em" dy="1.1em" text-anchor="middle"/></text></g></g><g><rect class="background" style="stroke: none"/></g><g class="edgeLabel"><g class="label" data-id="mermaid-mrkpwccz-L_Domain_Shared_0" transform="translate(0, 0)"><text y="-10.1" text-anchor="middle"><tspan class="text-outer-tspan row" x="0" y="-0.1em" dy="1.1em" text-anchor="middle"/></text></g></g><g><rect class="background" style="stroke: none"/></g></g><g class="nodes"><g class="node default" id="mermaid-mrkpwccz-my-svg-flowchart-Root-0" data-look="classic" transform="translate(242.00390625, 47)"><rect class="basic label-container" x="-92.5078125" y="-39" width="185.015625" height="78"/><g class="label" transform="translate(-62.5078125, -24)"><rect/><foreignObject width="125.015625" height="48"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="nodeLabel"><p>cli.ts<br />Composition root</p></span></div></foreignObject></g></g><g class="node default" id="mermaid-mrkpwccz-my-svg-flowchart-Commands-1" data-look="classic" transform="translate(542.32421875, 175)"><rect class="basic label-container" x="-85.5703125" y="-39" width="171.140625" height="78"/><g class="label" transform="translate(-55.5703125, -24)"><rect/><foreignObject width="111.140625" height="48"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="nodeLabel"><p>commands<br />輸入與輸出協調</p></span></div></foreignObject></g></g><g class="node default" id="mermaid-mrkpwccz-my-svg-flowchart-UseCases-3" data-look="classic" transform="translate(373.8203125, 303)"><rect class="basic label-container" x="-67.6328125" y="-39" width="135.265625" height="78"/><g class="label" transform="translate(-37.6328125, -24)"><rect/><foreignObject width="75.265625" height="48"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="nodeLabel"><p>use-cases<br />應用流程</p></span></div></foreignObject></g></g><g class="node default" id="mermaid-mrkpwccz-my-svg-flowchart-Output-5" data-look="classic" transform="translate(710.828125, 431)"><rect class="basic label-container" x="-77.6328125" y="-39" width="155.265625" height="78"/><g class="label" transform="translate(-47.6328125, -24)"><rect/><foreignObject width="95.265625" height="48"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="nodeLabel"><p>output<br />格式化與呈現</p></span></div></foreignObject></g></g><g class="node default" id="mermaid-mrkpwccz-my-svg-flowchart-Services-7" data-look="classic" transform="translate(230.7578125, 431)"><rect class="basic label-container" x="-108.0625" y="-39" width="216.125" height="78"/><g class="label" transform="translate(-78.0625, -24)"><rect/><foreignObject width="156.125" height="48"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="nodeLabel"><p>語意服務<br />git · engines · storage</p></span></div></foreignObject></g></g><g class="node default" id="mermaid-mrkpwccz-my-svg-flowchart-Review-9" data-look="classic" transform="translate(496.0078125, 431)"><rect class="basic label-container" x="-87.1875" y="-39" width="174.375" height="78"/><g class="label" transform="translate(-57.1875, -24)"><rect/><foreignObject width="114.375" height="48"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="nodeLabel"><p>review<br />純 review policy</p></span></div></foreignObject></g></g><g class="node default" id="mermaid-mrkpwccz-my-svg-flowchart-Domain-11" data-look="classic" transform="translate(486.0078125, 559)"><rect class="basic label-container" x="-90.5546875" y="-39" width="181.109375" height="78"/><g class="label" transform="translate(-60.5546875, -24)"><rect/><foreignObject width="121.109375" height="48"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="nodeLabel"><p>domain<br />模型與 invariants</p></span></div></foreignObject></g></g><g class="node default" id="mermaid-mrkpwccz-my-svg-flowchart-Platform-15" data-look="classic" transform="translate(77.6953125, 559)"><rect class="basic label-container" x="-69.6953125" y="-39" width="139.390625" height="78"/><g class="label" transform="translate(-39.6953125, -24)"><rect/><foreignObject width="79.390625" height="48"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="nodeLabel"><p>platform<br />受控副作用</p></span></div></foreignObject></g></g><g class="node default" id="mermaid-mrkpwccz-my-svg-flowchart-Shared-25" data-look="classic" transform="translate(281.8515625, 687)"><rect class="basic label-container" x="-96.1484375" y="-39" width="192.296875" height="78"/><g class="label" transform="translate(-66.1484375, -24)"><rect/><foreignObject width="132.296875" height="48"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="nodeLabel"><p>shared<br />無 owner 的純工具</p></span></div></foreignObject></g></g></g></g></g><defs><filter id="mermaid-mrkpwccz-my-svg-drop-shadow" height="130%" width="130%"><feDropShadow dx="4" dy="4" stdDeviation="0" flood-opacity="0.06" flood-color="#000000"/></filter></defs><defs><filter id="mermaid-mrkpwccz-my-svg-drop-shadow-small" height="150%" width="150%"><feDropShadow dx="2" dy="2" stdDeviation="0" flood-opacity="0.06" flood-color="#000000"/></filter></defs><linearGradient id="mermaid-mrkpwccz-my-svg-gradient" gradientUnits="objectBoundingBox" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" stop-color="#E3DACC" stop-opacity="1"/><stop offset="100%" stop-color="hsl(48, 0%, 82.1568627451%)" stop-opacity="1"/></linearGradient></svg>
-  <svg id="mermaid-mrkq1eex-my-svg" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" class="flowchart flow-mobile" viewBox="0 0 386.5 734" aria-roledescription="flowchart-v2" role="img" aria-labelledby="mermaid-mrkq1eex-title mermaid-mrkq1eex-desc"><title id="mermaid-mrkq1eex-title">Reviewstuff 手機版模組依賴方向</title><desc id="mermaid-mrkq1eex-desc">由 composition root、commands、use-cases 依序進入語意服務；語意服務連接 domain 與 platform，最底層是 shared。</desc><style>#mermaid-mrkq1eex-my-svg{font-family:ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;font-size:16px;fill:#141413;}@keyframes edge-animation-frame{from{stroke-dashoffset:0;}}@keyframes dash{to{stroke-dashoffset:0;}}#mermaid-mrkq1eex-my-svg .edge-animation-slow{stroke-dasharray:9,5!important;stroke-dashoffset:900;animation:dash 50s linear infinite;stroke-linecap:round;}#mermaid-mrkq1eex-my-svg .edge-animation-fast{stroke-dasharray:9,5!important;stroke-dashoffset:900;animation:dash 20s linear infinite;stroke-linecap:round;}#mermaid-mrkq1eex-my-svg .error-icon{fill:#FAF9F5;}#mermaid-mrkq1eex-my-svg .error-text{fill:#05060a;stroke:#05060a;}#mermaid-mrkq1eex-my-svg .edge-thickness-normal{stroke-width:1px;}#mermaid-mrkq1eex-my-svg .edge-thickness-thick{stroke-width:3.5px;}#mermaid-mrkq1eex-my-svg .edge-pattern-solid{stroke-dasharray:0;}#mermaid-mrkq1eex-my-svg .edge-thickness-invisible{stroke-width:0;fill:none;}#mermaid-mrkq1eex-my-svg .edge-pattern-dashed{stroke-dasharray:3;}#mermaid-mrkq1eex-my-svg .edge-pattern-dotted{stroke-dasharray:2;}#mermaid-mrkq1eex-my-svg .marker{fill:#D97757;stroke:#D97757;}#mermaid-mrkq1eex-my-svg .marker.cross{stroke:#D97757;}#mermaid-mrkq1eex-my-svg svg{font-family:ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;font-size:16px;}#mermaid-mrkq1eex-my-svg p{margin:0;}#mermaid-mrkq1eex-my-svg .label{font-family:ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;color:#141413;}#mermaid-mrkq1eex-my-svg .cluster-label text{fill:#05060a;}#mermaid-mrkq1eex-my-svg .cluster-label span{color:#05060a;}#mermaid-mrkq1eex-my-svg .cluster-label span p{background-color:transparent;}#mermaid-mrkq1eex-my-svg .label text,#mermaid-mrkq1eex-my-svg span{fill:#141413;color:#141413;}#mermaid-mrkq1eex-my-svg .node rect,#mermaid-mrkq1eex-my-svg .node circle,#mermaid-mrkq1eex-my-svg .node ellipse,#mermaid-mrkq1eex-my-svg .node polygon,#mermaid-mrkq1eex-my-svg .node path{fill:#FFFFFF;stroke:#E3DACC;stroke-width:1px;}#mermaid-mrkq1eex-my-svg .rough-node .label text,#mermaid-mrkq1eex-my-svg .node .label text,#mermaid-mrkq1eex-my-svg .image-shape .label,#mermaid-mrkq1eex-my-svg .icon-shape .label{text-anchor:middle;}#mermaid-mrkq1eex-my-svg .node .katex path{fill:#000;stroke:#000;stroke-width:1px;}#mermaid-mrkq1eex-my-svg .rough-node .label,#mermaid-mrkq1eex-my-svg .node .label,#mermaid-mrkq1eex-my-svg .image-shape .label,#mermaid-mrkq1eex-my-svg .icon-shape .label{text-align:center;}#mermaid-mrkq1eex-my-svg .node.clickable{cursor:pointer;}#mermaid-mrkq1eex-my-svg .root .anchor path{fill:#D97757!important;stroke-width:0;stroke:#D97757;}#mermaid-mrkq1eex-my-svg .arrowheadPath{fill:rgba(255, 255, 255, 0);}#mermaid-mrkq1eex-my-svg .edgePath .path{stroke:#D97757;stroke-width:1px;}#mermaid-mrkq1eex-my-svg .flowchart-link{stroke:#D97757;fill:none;}#mermaid-mrkq1eex-my-svg .edgeLabel{background-color:#F0EEE6;text-align:center;}#mermaid-mrkq1eex-my-svg .edgeLabel p{background-color:#F0EEE6;}#mermaid-mrkq1eex-my-svg .edgeLabel rect{opacity:0.5;background-color:#F0EEE6;fill:#F0EEE6;}#mermaid-mrkq1eex-my-svg .labelBkg{background-color:rgba(240, 238, 230, 0.5);}#mermaid-mrkq1eex-my-svg .cluster rect{fill:#FAF9F5;stroke:hsl(48, 0%, 87.0588235294%);stroke-width:1px;}#mermaid-mrkq1eex-my-svg .cluster text{fill:#05060a;}#mermaid-mrkq1eex-my-svg .cluster span{color:#05060a;}#mermaid-mrkq1eex-my-svg div.mermaidTooltip{position:absolute;text-align:center;max-width:200px;padding:2px;font-family:ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;font-size:12px;background:#FAF9F5;border:1px solid hsl(48, 0%, 87.0588235294%);border-radius:2px;pointer-events:none;z-index:100;}#mermaid-mrkq1eex-my-svg .flowchartTitleText{text-anchor:middle;font-size:18px;fill:#141413;}#mermaid-mrkq1eex-my-svg rect.text{fill:none;stroke-width:0;}#mermaid-mrkq1eex-my-svg .icon-shape,#mermaid-mrkq1eex-my-svg .image-shape{background-color:#F0EEE6;text-align:center;}#mermaid-mrkq1eex-my-svg .icon-shape p,#mermaid-mrkq1eex-my-svg .image-shape p{background-color:#F0EEE6;padding:2px;}#mermaid-mrkq1eex-my-svg .icon-shape .label rect,#mermaid-mrkq1eex-my-svg .image-shape .label rect{opacity:0.5;background-color:#F0EEE6;fill:#F0EEE6;}#mermaid-mrkq1eex-my-svg .label-icon{display:inline-block;height:1em;overflow:visible;vertical-align:-0.125em;}#mermaid-mrkq1eex-my-svg .node .label-icon path{fill:currentColor;stroke:revert;stroke-width:revert;}#mermaid-mrkq1eex-my-svg .node .neo-node{stroke:#E3DACC;}#mermaid-mrkq1eex-my-svg [data-look="neo"].node rect,#mermaid-mrkq1eex-my-svg [data-look="neo"].cluster rect,#mermaid-mrkq1eex-my-svg [data-look="neo"].node polygon{stroke:url(#mermaid-mrkq1eex-my-svg-gradient);filter:drop-shadow( 1px 2px 2px rgba(185,185,185,1));}#mermaid-mrkq1eex-my-svg [data-look="neo"].swimlane.cluster rect{filter:none;}#mermaid-mrkq1eex-my-svg [data-look="neo"].node path{stroke:url(#mermaid-mrkq1eex-my-svg-gradient);stroke-width:1px;}#mermaid-mrkq1eex-my-svg [data-look="neo"].node .outer-path{filter:drop-shadow( 1px 2px 2px rgba(185,185,185,1));}#mermaid-mrkq1eex-my-svg [data-look="neo"].node .neo-line path{stroke:#E3DACC;filter:none;}#mermaid-mrkq1eex-my-svg [data-look="neo"].node circle{stroke:url(#mermaid-mrkq1eex-my-svg-gradient);filter:drop-shadow( 1px 2px 2px rgba(185,185,185,1));}#mermaid-mrkq1eex-my-svg [data-look="neo"].node circle .state-start{fill:#000000;}#mermaid-mrkq1eex-my-svg [data-look="neo"].icon-shape .icon{fill:url(#mermaid-mrkq1eex-my-svg-gradient);filter:drop-shadow( 1px 2px 2px rgba(185,185,185,1));}#mermaid-mrkq1eex-my-svg [data-look="neo"].icon-shape .icon-neo path{stroke:url(#mermaid-mrkq1eex-my-svg-gradient);filter:drop-shadow( 1px 2px 2px rgba(185,185,185,1));}#mermaid-mrkq1eex-my-svg :root{--mermaid-font-family:"trebuchet ms",verdana,arial,sans-serif;}</style><g><marker id="mermaid-mrkq1eex-my-svg_flowchart-v2-pointEnd" class="marker flowchart-v2" viewBox="0 0 10 10" refX="5" refY="5" markerUnits="userSpaceOnUse" markerWidth="8" markerHeight="8" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" class="arrowMarkerPath" style="stroke-width: 1; stroke-dasharray: 1, 0;"/></marker><marker id="mermaid-mrkq1eex-my-svg_flowchart-v2-pointStart" class="marker flowchart-v2" viewBox="0 0 10 10" refX="4.5" refY="5" markerUnits="userSpaceOnUse" markerWidth="8" markerHeight="8" orient="auto"><path d="M 0 5 L 10 10 L 10 0 z" class="arrowMarkerPath" style="stroke-width: 1; stroke-dasharray: 1, 0;"/></marker><marker id="mermaid-mrkq1eex-my-svg_flowchart-v2-pointEnd-margin" class="marker flowchart-v2" viewBox="0 0 11.5 14" refX="11.5" refY="7" markerUnits="userSpaceOnUse" markerWidth="10.5" markerHeight="14" orient="auto"><path d="M 0 0 L 11.5 7 L 0 14 z" class="arrowMarkerPath" style="stroke-width: 0; stroke-dasharray: 1, 0;"/></marker><marker id="mermaid-mrkq1eex-my-svg_flowchart-v2-pointStart-margin" class="marker flowchart-v2" viewBox="0 0 11.5 14" refX="1" refY="7" markerUnits="userSpaceOnUse" markerWidth="11.5" markerHeight="14" orient="auto"><polygon points="0,7 11.5,14 11.5,0" class="arrowMarkerPath" style="stroke-width: 0; stroke-dasharray: 1, 0;"/></marker><marker id="mermaid-mrkq1eex-my-svg_flowchart-v2-circleEnd" class="marker flowchart-v2" viewBox="0 0 10 10" refX="11" refY="5" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" orient="auto"><circle cx="5" cy="5" r="5" class="arrowMarkerPath" style="stroke-width: 1; stroke-dasharray: 1, 0;"/></marker><marker id="mermaid-mrkq1eex-my-svg_flowchart-v2-circleStart" class="marker flowchart-v2" viewBox="0 0 10 10" refX="-1" refY="5" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" orient="auto"><circle cx="5" cy="5" r="5" class="arrowMarkerPath" style="stroke-width: 1; stroke-dasharray: 1, 0;"/></marker><marker id="mermaid-mrkq1eex-my-svg_flowchart-v2-circleEnd-margin" class="marker flowchart-v2" viewBox="0 0 10 10" refY="5" refX="12.25" markerUnits="userSpaceOnUse" markerWidth="14" markerHeight="14" orient="auto"><circle cx="5" cy="5" r="5" class="arrowMarkerPath" style="stroke-width: 0; stroke-dasharray: 1, 0;"/></marker><marker id="mermaid-mrkq1eex-my-svg_flowchart-v2-circleStart-margin" class="marker flowchart-v2" viewBox="0 0 10 10" refX="-2" refY="5" markerUnits="userSpaceOnUse" markerWidth="14" markerHeight="14" orient="auto"><circle cx="5" cy="5" r="5" class="arrowMarkerPath" style="stroke-width: 0; stroke-dasharray: 1, 0;"/></marker><marker id="mermaid-mrkq1eex-my-svg_flowchart-v2-crossEnd" class="marker cross flowchart-v2" viewBox="0 0 11 11" refX="12" refY="5.2" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" orient="auto"><path d="M 1,1 l 9,9 M 10,1 l -9,9" class="arrowMarkerPath" style="stroke-width: 2; stroke-dasharray: 1, 0;"/></marker><marker id="mermaid-mrkq1eex-my-svg_flowchart-v2-crossStart" class="marker cross flowchart-v2" viewBox="0 0 11 11" refX="-1" refY="5.2" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" orient="auto"><path d="M 1,1 l 9,9 M 10,1 l -9,9" class="arrowMarkerPath" style="stroke-width: 2; stroke-dasharray: 1, 0;"/></marker><marker id="mermaid-mrkq1eex-my-svg_flowchart-v2-crossEnd-margin" class="marker cross flowchart-v2" viewBox="0 0 15 15" refX="17.7" refY="7.5" markerUnits="userSpaceOnUse" markerWidth="12" markerHeight="12" orient="auto"><path d="M 1,1 L 14,14 M 1,14 L 14,1" class="arrowMarkerPath" style="stroke-width: 2.5;"/></marker><marker id="mermaid-mrkq1eex-my-svg_flowchart-v2-crossStart-margin" class="marker cross flowchart-v2" viewBox="0 0 15 15" refX="-3.5" refY="7.5" markerUnits="userSpaceOnUse" markerWidth="12" markerHeight="12" orient="auto"><path d="M 1,1 L 14,14 M 1,14 L 14,1" class="arrowMarkerPath" style="stroke-width: 2.5; stroke-dasharray: 1, 0;"/></marker><g class="root"><g class="clusters"/><g class="edgePaths"><path d="M203.68,86L203.68,90.167C203.68,94.333,203.68,102.667,203.68,110.333C203.68,118,203.68,125,203.68,128.5L203.68,132" id="mermaid-mrkq1eex-my-svg-L_Root_Commands_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" data-edge="true" data-et="edge" data-id="mermaid-mrkq1eex-L_Root_Commands_0" data-points="W3sieCI6MjAzLjY3OTY4NzUsInkiOjg2fSx7IngiOjIwMy42Nzk2ODc1LCJ5IjoxMTF9LHsieCI6MjAzLjY3OTY4NzUsInkiOjEzNn1d" data-look="classic" marker-end="url(#mermaid-mrkq1eex-my-svg_flowchart-v2-pointEnd)"/><path d="M203.68,214L203.68,218.167C203.68,222.333,203.68,230.667,203.68,238.333C203.68,246,203.68,253,203.68,256.5L203.68,260" id="mermaid-mrkq1eex-my-svg-L_Commands_UseCases_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" data-edge="true" data-et="edge" data-id="mermaid-mrkq1eex-L_Commands_UseCases_0" data-points="W3sieCI6MjAzLjY3OTY4NzUsInkiOjIxNH0seyJ4IjoyMDMuNjc5Njg3NSwieSI6MjM5fSx7IngiOjIwMy42Nzk2ODc1LCJ5IjoyNjR9XQ==" data-look="classic" marker-end="url(#mermaid-mrkq1eex-my-svg_flowchart-v2-pointEnd)"/><path d="M203.68,342L203.68,346.167C203.68,350.333,203.68,358.667,203.68,366.333C203.68,374,203.68,381,203.68,384.5L203.68,388" id="mermaid-mrkq1eex-my-svg-L_UseCases_Services_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" data-edge="true" data-et="edge" data-id="mermaid-mrkq1eex-L_UseCases_Services_0" data-points="W3sieCI6MjAzLjY3OTY4NzUsInkiOjM0Mn0seyJ4IjoyMDMuNjc5Njg3NSwieSI6MzY3fSx7IngiOjIwMy42Nzk2ODc1LCJ5IjozOTJ9XQ==" data-look="classic" marker-end="url(#mermaid-mrkq1eex-my-svg_flowchart-v2-pointEnd)"/><path d="M139.619,470L132.775,474.167C125.931,478.333,112.243,486.667,105.399,494.333C98.555,502,98.555,509,98.555,512.5L98.555,516" id="mermaid-mrkq1eex-my-svg-L_Services_Domain_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" data-edge="true" data-et="edge" data-id="mermaid-mrkq1eex-L_Services_Domain_0" data-points="W3sieCI6MTM5LjYxOTE0MDYyNSwieSI6NDcwfSx7IngiOjk4LjU1NDY4NzUsInkiOjQ5NX0seyJ4Ijo5OC41NTQ2ODc1LCJ5Ijo1MjB9XQ==" data-look="classic" marker-end="url(#mermaid-mrkq1eex-my-svg_flowchart-v2-pointEnd)"/><path d="M267.74,470L274.584,474.167C281.428,478.333,295.117,486.667,301.961,494.333C308.805,502,308.805,509,308.805,512.5L308.805,516" id="mermaid-mrkq1eex-my-svg-L_Services_Platform_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" data-edge="true" data-et="edge" data-id="mermaid-mrkq1eex-L_Services_Platform_0" data-points="W3sieCI6MjY3Ljc0MDIzNDM3NSwieSI6NDcwfSx7IngiOjMwOC44MDQ2ODc1LCJ5Ijo0OTV9LHsieCI6MzA4LjgwNDY4NzUsInkiOjUyMH1d" data-look="classic" marker-end="url(#mermaid-mrkq1eex-my-svg_flowchart-v2-pointEnd)"/><path d="M98.555,598L98.555,602.167C98.555,606.333,98.555,614.667,104.829,622.653C111.104,630.64,123.653,638.28,129.928,642.1L136.203,645.92" id="mermaid-mrkq1eex-my-svg-L_Domain_Shared_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" data-edge="true" data-et="edge" data-id="mermaid-mrkq1eex-L_Domain_Shared_0" data-points="W3sieCI6OTguNTU0Njg3NSwieSI6NTk4fSx7IngiOjk4LjU1NDY4NzUsInkiOjYyM30seyJ4IjoxMzkuNjE5MTQwNjI1LCJ5Ijo2NDh9XQ==" data-look="classic" marker-end="url(#mermaid-mrkq1eex-my-svg_flowchart-v2-pointEnd)"/><path d="M308.805,598L308.805,602.167C308.805,606.333,308.805,614.667,302.53,622.653C296.255,630.64,283.706,638.28,277.432,642.1L271.157,645.92" id="mermaid-mrkq1eex-my-svg-L_Platform_Shared_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" data-edge="true" data-et="edge" data-id="mermaid-mrkq1eex-L_Platform_Shared_0" data-points="W3sieCI6MzA4LjgwNDY4NzUsInkiOjU5OH0seyJ4IjozMDguODA0Njg3NSwieSI6NjIzfSx7IngiOjI2Ny43NDAyMzQzNzUsInkiOjY0OH1d" data-look="classic" marker-end="url(#mermaid-mrkq1eex-my-svg_flowchart-v2-pointEnd)"/></g><g class="edgeLabels"><g class="edgeLabel"><g class="label" data-id="mermaid-mrkq1eex-L_Root_Commands_0" transform="translate(0, 0)"><text y="-10.1" text-anchor="middle"><tspan class="text-outer-tspan row" x="0" y="-0.1em" dy="1.1em" text-anchor="middle"/></text></g></g><g><rect class="background" style="stroke: none"/></g><g class="edgeLabel"><g class="label" data-id="mermaid-mrkq1eex-L_Commands_UseCases_0" transform="translate(0, 0)"><text y="-10.1" text-anchor="middle"><tspan class="text-outer-tspan row" x="0" y="-0.1em" dy="1.1em" text-anchor="middle"/></text></g></g><g><rect class="background" style="stroke: none"/></g><g class="edgeLabel"><g class="label" data-id="mermaid-mrkq1eex-L_UseCases_Services_0" transform="translate(0, 0)"><text y="-10.1" text-anchor="middle"><tspan class="text-outer-tspan row" x="0" y="-0.1em" dy="1.1em" text-anchor="middle"/></text></g></g><g><rect class="background" style="stroke: none"/></g><g class="edgeLabel"><g class="label" data-id="mermaid-mrkq1eex-L_Services_Domain_0" transform="translate(0, 0)"><text y="-10.1" text-anchor="middle"><tspan class="text-outer-tspan row" x="0" y="-0.1em" dy="1.1em" text-anchor="middle"/></text></g></g><g><rect class="background" style="stroke: none"/></g><g class="edgeLabel"><g class="label" data-id="mermaid-mrkq1eex-L_Services_Platform_0" transform="translate(0, 0)"><text y="-10.1" text-anchor="middle"><tspan class="text-outer-tspan row" x="0" y="-0.1em" dy="1.1em" text-anchor="middle"/></text></g></g><g><rect class="background" style="stroke: none"/></g><g class="edgeLabel"><g class="label" data-id="mermaid-mrkq1eex-L_Domain_Shared_0" transform="translate(0, 0)"><text y="-10.1" text-anchor="middle"><tspan class="text-outer-tspan row" x="0" y="-0.1em" dy="1.1em" text-anchor="middle"/></text></g></g><g><rect class="background" style="stroke: none"/></g><g class="edgeLabel"><g class="label" data-id="mermaid-mrkq1eex-L_Platform_Shared_0" transform="translate(0, 0)"><text y="-10.1" text-anchor="middle"><tspan class="text-outer-tspan row" x="0" y="-0.1em" dy="1.1em" text-anchor="middle"/></text></g></g><g><rect class="background" style="stroke: none"/></g></g><g class="nodes"><g class="node default" id="mermaid-mrkq1eex-my-svg-flowchart-Root-0" data-look="classic" transform="translate(203.6796875, 47)"><rect class="basic label-container" x="-75.6796875" y="-39" width="151.359375" height="78"/><g class="label" transform="translate(-45.6796875, -24)"><rect/><foreignObject width="91.359375" height="48"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="nodeLabel"><p>cli.ts<br />組裝 runtime</p></span></div></foreignObject></g></g><g class="node default" id="mermaid-mrkq1eex-my-svg-flowchart-Commands-1" data-look="classic" transform="translate(203.6796875, 175)"><rect class="basic label-container" x="-77.8828125" y="-39" width="155.765625" height="78"/><g class="label" transform="translate(-47.8828125, -24)"><rect/><foreignObject width="95.765625" height="48"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="nodeLabel"><p>commands<br />轉譯 CLI 意圖</p></span></div></foreignObject></g></g><g class="node default" id="mermaid-mrkq1eex-my-svg-flowchart-UseCases-3" data-look="classic" transform="translate(203.6796875, 303)"><rect class="basic label-container" x="-77.6328125" y="-39" width="155.265625" height="78"/><g class="label" transform="translate(-47.6328125, -24)"><rect/><foreignObject width="95.265625" height="48"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="nodeLabel"><p>use-cases<br />安排應用流程</p></span></div></foreignObject></g></g><g class="node default" id="mermaid-mrkq1eex-my-svg-flowchart-Services-5" data-look="classic" transform="translate(203.6796875, 431)"><rect class="basic label-container" x="-108.0625" y="-39" width="216.125" height="78"/><g class="label" transform="translate(-78.0625, -24)"><rect/><foreignObject width="156.125" height="48"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="nodeLabel"><p>語意服務<br />git · engines · storage</p></span></div></foreignObject></g></g><g class="node default" id="mermaid-mrkq1eex-my-svg-flowchart-Domain-7" data-look="classic" transform="translate(98.5546875, 559)"><rect class="basic label-container" x="-90.5546875" y="-39" width="181.109375" height="78"/><g class="label" transform="translate(-60.5546875, -24)"><rect/><foreignObject width="121.109375" height="48"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="nodeLabel"><p>domain<br />模型與 invariants</p></span></div></foreignObject></g></g><g class="node default" id="mermaid-mrkq1eex-my-svg-flowchart-Platform-9" data-look="classic" transform="translate(308.8046875, 559)"><rect class="basic label-container" x="-69.6953125" y="-39" width="139.390625" height="78"/><g class="label" transform="translate(-39.6953125, -24)"><rect/><foreignObject width="79.390625" height="48"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="nodeLabel"><p>platform<br />受控副作用</p></span></div></foreignObject></g></g><g class="node default" id="mermaid-mrkq1eex-my-svg-flowchart-Shared-11" data-look="classic" transform="translate(203.6796875, 687)"><rect class="basic label-container" x="-77.6328125" y="-39" width="155.265625" height="78"/><g class="label" transform="translate(-47.6328125, -24)"><rect/><foreignObject width="95.265625" height="48"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="nodeLabel"><p>shared<br />純型別與工具</p></span></div></foreignObject></g></g></g></g></g><defs><filter id="mermaid-mrkq1eex-my-svg-drop-shadow" height="130%" width="130%"><feDropShadow dx="4" dy="4" stdDeviation="0" flood-opacity="0.06" flood-color="#000000"/></filter></defs><defs><filter id="mermaid-mrkq1eex-my-svg-drop-shadow-small" height="150%" width="150%"><feDropShadow dx="2" dy="2" stdDeviation="0" flood-opacity="0.06" flood-color="#000000"/></filter></defs><linearGradient id="mermaid-mrkq1eex-my-svg-gradient" gradientUnits="objectBoundingBox" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" stop-color="#E3DACC" stop-opacity="1"/><stop offset="100%" stop-color="hsl(48, 0%, 82.1568627451%)" stop-opacity="1"/></linearGradient></svg>
-  <figcaption>箭頭代表可以依賴的方向；執行時資料可以往返，但原始碼依賴不可反向。</figcaption>
-</figure>
+  <section id="evolution"><h2>7. 演進策略：讓真實壓力決定抽象</h2>
+    <div class="table-wrap"><table><thead><tr><th>階段</th><th>適合的設計</th><th>升級訊號</th></tr></thead><tbody>
+      <tr><td>單一小功能</td><td>同檔純函式與直接依賴</td><td>I/O 使核心難測、外部格式開始擴散</td></tr>
+      <tr><td>穩定 use case</td><td>抽出 domain 與 consumer-owned port</td><td>出現第二個 delivery 或 adapter</td></tr>
+      <tr><td>多團隊／多部署單元</td><td>明確 public API、版本與 ownership</td><td>需要獨立發布或獨立擴展</td></tr>
+      <tr><td>分散式系統</td><td>網路 contract、outbox、idempotency</td><td>只有在組織與擴展需求值得時拆服務</td></tr>
+    </tbody></table></div>
+    <p>不要因為「未來可能替換」就替每個 class 建 interface；也不要等到供應商型別滲透所有 use cases 才處理。最好的切點是已有清楚變動壓力、又能用小 contract 隔離的地方。</p>
+  </section>
 
-        <p>最穩定的模型與規則位於圖的下方；越靠上越接近輸入、流程組裝與 runtime。當底層工具或 CLI framework 改變時，<code>domain/</code> 與 use case 的意圖應盡量保持不變。</p>
-      </section>
-
-      <section id="areas">
-        <h2>3. 各區域的責任與允許依賴</h2>
-        <p>以下是目前架構規則的實用版本。表格中的「允許依賴」不包含外部純函式套件；它主要描述專案內部 source area 的方向。</p>
-
-        <p><code>git/</code>、<code>engines/</code>、<code>storage/</code> 等列也包含目標架構：目錄只在第一個真實 owner 出現時建立，規則不代表現在必須先建立空資料夾。</p>
-
-        <div class="table-wrap">
-          <table>
-            <thead>
-              <tr><th>區域</th><th>擁有的責任</th><th>允許依賴</th></tr>
-            </thead>
-            <tbody>
-              <tr><td><code>commands/</code></td><td>CLI command、flags、usage error、dispatch 與結果呈現</td><td><code>use-cases</code>、<code>output</code>、<code>domain</code>、<code>shared</code></td></tr>
-              <tr><td><code>use-cases/</code></td><td>應用流程與操作順序；透過語意服務協調工作</td><td><code>domain</code>、<code>git</code>、<code>engines</code>、<code>storage</code>、<code>config</code>、<code>review</code> 等語意能力</td></tr>
-              <tr><td><code>domain/</code></td><td>跨能力穩定的模型、schema、invariant</td><td><code>shared</code></td></tr>
-              <tr><td><code>git/</code></td><td><code>GitService</code> contract、Git models、live/fake adapters</td><td><code>domain</code>、<code>platform</code>、<code>shared</code></td></tr>
-              <tr><td><code>engines/</code></td><td><code>ReviewEngine</code> contract 與 provider adapters</td><td><code>domain</code>、<code>platform</code>、<code>config</code>、<code>shared</code></td></tr>
-              <tr><td><code>review/</code></td><td>Review-specific 的純 policy、prompt construction、request normalization</td><td><code>domain</code>、<code>shared</code></td></tr>
-              <tr><td><code>platform/</code></td><td>process、filesystem、clock 等受控副作用與低階 Effect service</td><td><code>shared</code>、runtime-agnostic Effect platform packages</td></tr>
-              <tr><td><code>output/</code></td><td>輸出模型、formatter、renderer</td><td><code>domain</code>、<code>shared</code></td></tr>
-              <tr><td><code>config/</code></td><td>設定 schema、載入與驗證</td><td><code>domain</code>、<code>platform</code>、<code>shared</code></td></tr>
-              <tr><td><code>storage/</code></td><td>未來的持久化語意服務與 adapters</td><td><code>domain</code>、<code>platform</code>、<code>shared</code></td></tr>
-              <tr><td><code>shared/</code></td><td>沒有自然 owner、被多個不相關區域使用的純型別或 helper</td><td>不依賴任何 feature directory</td></tr>
-              <tr><td><code>src/cli.ts</code></td><td>唯一 runtime entry point 與 composition root</td><td>負責組裝所有 layer，因此是刻意保留的例外</td></tr>
-            </tbody>
-          </table>
-        </div>
-
-        <h3>語意服務是一條重要的中間 boundary</h3>
-        <p><code>git/</code>、<code>engines/</code>、<code>storage/</code> 不是單純的 infrastructure 資料夾。它們先用專案語言定義能力，再由 live adapter 翻譯到底層技術。</p>
-
-        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="c">// git/service.ts：use case 看見的語意介面</span>
-interface <span class="t">GitService</span> <span class="o">{</span>
-  readonly diff<span class="o">:</span> <span class="o">(</span><span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span> <span class="t">Effect</span><span class="o">&lt;</span><span class="t">ReadonlyArray</span><span class="o">&lt;</span><span class="t">Change</span><span class="o">&gt;</span><span class="o">,</span> <span class="t">GitError</span><span class="o">&gt;</span><span class="o">;</span>
-<span class="o">}</span>
-
-<span class="c">// git/live.ts：將 platform 結果翻譯成 Git 語意</span>
-<span class="k">const</span> <span class="t">GitServiceLive</span> <span class="o">=</span> <span class="t">Layer</span><span class="o">.</span><span class="p">effect</span><span class="o">(</span>
-  <span class="t">GitService</span><span class="o">,</span>
-  <span class="t">Effect</span><span class="o">.</span><span class="p">gen</span><span class="o">(</span><span class="k">function</span><span class="o">*</span> <span class="o">(</span><span class="o">)</span> <span class="o">{</span>
-    <span class="k">const</span> runner <span class="o">=</span> <span class="k">yield</span><span class="o">*</span> <span class="t">CommandRunner</span><span class="o">;</span>
-    <span class="k">return</span> <span class="f">makeGitService</span><span class="o">(</span>runner<span class="o">)</span><span class="o">;</span>
-  <span class="o">}</span><span class="o">)</span><span class="o">,</span>
-<span class="o">)</span><span class="o">;</span></code></pre>
-
-        <p>即使 contract 和 live adapter 同在 <code>git/</code>，它們仍有 file-level boundary：contract 不應 import <code>platform/</code> 或暴露 platform types；只有 live adapter 應知道 <code>CommandRunner</code>。</p>
-      </section>
-
-      <section id="example">
-        <h2>4. 一次 review request 如何穿過 boundaries</h2>
-        <ol class="rule-list">
-          <li><strong><code>cli.ts</code> 組裝 runtime。</strong>它提供 <code>BunContext.layer</code>、live adapters、commands，最後啟動 CLI。</li>
-          <li><strong><code>commands/review.ts</code> 解析使用者意圖。</strong>它將 flags 與 arguments 轉成 typed input，呼叫 use case，最後選擇 renderer。</li>
-          <li><strong><code>use-cases/run-review.ts</code> 決定順序。</strong>例如取得 diff、建立 review request、呼叫 engine、保存或輸出結果。</li>
-          <li><strong><code>GitService</code> 與 <code>ReviewEngine</code> 提供語意能力。</strong>Use case 依賴 interface，而不是 provider SDK 或 subprocess。</li>
-          <li><strong>Live adapters 呼叫 <code>platform/</code>。</strong>它們執行受 timeout、output limit、cleanup policy 控制的副作用，並翻譯錯誤。</li>
-          <li><strong><code>domain/</code> 保持穩定。</strong>Finding、report、scope 等模型不需要知道 Bun、CLI 或 provider。</li>
-        </ol>
-
-        <div class="callout">
-          <p><strong>Dependency inversion 的實際效果：</strong>執行方向是 command → use case → service → adapter，但組裝 adapter 的責任留在 <code>cli.ts</code>。Use case 不需要 import live implementation。</p>
-        </div>
-      </section>
-
-      <section id="imports">
-        <h2>5. 如何判斷一個 import 合不合法</h2>
-        <p>看到 import 時，不要先問「TypeScript 能不能 resolve」，而是依序問以下問題。</p>
-
-        <ol>
-          <li><strong>這個檔案屬於哪個 source area？</strong></li>
-          <li><strong>被 import 的概念由誰擁有？</strong></li>
-          <li><strong>dependency matrix 是否允許這個方向？</strong></li>
-          <li><strong>是否跨過更小的 file-level boundary？</strong>例如 service contract 不應依賴 live adapter。</li>
-          <li><strong>是否直接碰 runtime 或低階 platform？</strong>如果是，通常應經過語意服務或受控 platform service。</li>
-        </ol>
-
-        <div class="table-wrap">
-          <table>
-            <thead><tr><th>Import</th><th>判斷</th><th>原因</th></tr></thead>
-            <tbody>
-              <tr><td><code>commands → use-cases</code></td><td>允許</td><td>Command 將解析後的輸入交給應用流程。</td></tr>
-              <tr><td><code>use-cases → GitService</code></td><td>允許</td><td>Use case 可以依賴語意服務 contract。</td></tr>
-              <tr><td><code>use-cases → platform</code></td><td>禁止</td><td>會讓應用流程知道低階執行細節。</td></tr>
-              <tr><td><code>domain → commands</code></td><td>禁止</td><td>穩定模型不應知道輸入介面。</td></tr>
-              <tr><td><code>review → domain</code></td><td>允許</td><td>純 review policy 可以操作 domain models。</td></tr>
-              <tr><td><code>shared → git</code></td><td>禁止</td><td><code>shared</code> 不能成為反向依賴或規則逃生口。</td></tr>
-              <tr><td><code>git/service → platform</code></td><td>應禁止</td><td>目錄規則雖允許，但 contract 的 file-level boundary 不允許。</td></tr>
-              <tr><td><code>git/live → platform</code></td><td>允許</td><td>Live adapter 負責將外部系統翻譯成 Git 語意。</td></tr>
-            </tbody>
-          </table>
-        </div>
-
-        <h3>Composition root 為什麼是例外</h3>
-        <p><code>cli.ts</code> 必須同時看見 abstract services 與 live layers，否則沒有人能完成依賴注入。它的特權只用來組裝，不應放 command-specific workflow 或 domain rules。</p>
-
-        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="c">// Composition root：知道 concrete runtime 是合理的</span>
-<span class="k">const</span> <span class="t">MainLive</span> <span class="o">=</span> <span class="t">Layer</span><span class="o">.</span><span class="p">mergeAll</span><span class="o">(</span>
-  <span class="t">BunContext</span><span class="o">.</span><span class="p">layer</span><span class="o">,</span>
-  <span class="t">GitServiceLive</span><span class="o">,</span>
-  <span class="t">ReviewEngineLive</span><span class="o">,</span>
-<span class="o">)</span><span class="o">;</span>
-
-<span class="c">// Use case：只要求能力，不選擇 implementation</span>
-<span class="k">const</span> program<span class="o">:</span> <span class="t">Effect</span><span class="o">&lt;</span><span class="t">Report</span><span class="o">,</span> <span class="t">ReviewError</span><span class="o">,</span> <span class="t">GitService</span> <span class="o">|</span> <span class="t">ReviewEngine</span><span class="o">&gt;</span> <span class="o">=</span>
-  <span class="f">runReview</span><span class="o">(</span>input<span class="o">)</span><span class="o">;</span></code></pre>
-      </section>
-
-      <section id="test">
-        <h2>6. Architecture test 真正保障什麼</h2>
-        <p><code>test/architecture/module-boundaries.test.ts</code> 會掃描 <code>src/**/*.ts</code>，找出 imports、re-exports 與部分 runtime API 使用，再依照 dependency matrix 收集違規。</p>
-
-        <h3>目前能保障</h3>
-        <ul>
-          <li>新的 top-level source directory 必須先登記。</li>
-          <li>相對路徑 import 必須符合 area-level dependency direction。</li>
-          <li>非 root code 不可直接使用 <code>Bun.spawn</code>、<code>process.argv</code>、<code>process.env</code>。</li>
-          <li><code>child_process</code> 與 <code>node:*</code> imports 會被拒絕。</li>
-          <li><code>@effect/platform</code> 只允許 root 與 <code>platform/</code> 使用。</li>
-          <li><code>@effect/platform-bun</code> 只允許 composition root 使用。</li>
-        </ul>
-
-        <h3>目前不能完整保障</h3>
-        <ul>
-          <li>同一目錄內的 contract、live adapter、fake adapter 等 file-level boundaries。</li>
-          <li>alias、destructuring、bracket notation 等所有 runtime API 變形。</li>
-          <li>程式碼的真正業務責任是否放錯 owner；這仍需要設計判斷與 code review。</li>
-          <li>所有直接位於 <code>src/</code> 的檔案是否真的是 composition modules。</li>
-        </ul>
-
-        <div class="callout warning">
-          <p><strong>不要把測試通過等同於架構一定正確。</strong>Architecture test 是針對常見錯誤的 executable guardrail；ownership 與 abstraction quality 仍需要人在 review 時判斷。</p>
-        </div>
-      </section>
-
-      <section id="new-module">
-        <h2>7. 新增 module 或 capability 時的檢查表</h2>
-        <ol class="rule-list">
-          <li><strong>先找 owner。</strong>如果概念明確屬於 Git、review 或 output，就不要先放進 <code>shared/</code>。</li>
-          <li><strong>確認是否真的需要新目錄。</strong>只有在第一個真實 owner 出現時才建立 capability，不建立推測性的空架構。</li>
-          <li><strong>寫清楚 public contract。</strong>Use case 應依賴能力與 domain-facing errors，而不是 adapter details。</li>
-          <li><strong>決定 allowed dependencies。</strong>在架構文件與 architecture test 同步登記，不用 deep import 繞過規則。</li>
-          <li><strong>把副作用推到邊界。</strong>Provider SDK、filesystem、process 與 clock 留在 live adapter 或 <code>platform/</code>。</li>
-          <li><strong>準備 fake adapter。</strong>如果 use case 能用 fake service 獨立測試，通常代表 boundary 切得合理。</li>
-        </ol>
-
-        <div class="callout good">
-          <p><strong>最後的快速判斷：</strong>如果替換 CLI framework、Bun runtime、Git 執行方式或 review provider 時，domain 與主要 use case 幾乎不用改，這組 boundaries 通常就在正確的位置。</p>
-        </div>
-      </section>
-
-      <section class="sources" aria-labelledby="related-title">
-        <h2 id="related-title">專案內相關文件</h2>
-        <ul>
-          <li><code>docs/repository-structure.md</code>：架構政策的精簡規範。</li>
-          <li><code>test/architecture/module-boundaries.test.ts</code>：可執行的 dependency guardrail。</li>
-          <li><code>src/platform/command-runner.ts</code>：目前低階 platform service contract 的實例。</li>
-        </ul>
-      </section>
-    </article>
-  </main>
-
-  <script>
-    (() => {
-      const copyIcon = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="11" height="11" rx="2"></rect><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"></path></svg>';
-      const checkIcon = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"></path></svg>';
-
-      document.querySelectorAll("pre").forEach((pre) => {
-        const code = pre.querySelector("code");
-        if (!code) return;
-
-        const button = document.createElement("button");
-        button.className = "copy-code";
-        button.type = "button";
-        button.setAttribute("aria-label", "複製程式碼");
-        button.innerHTML = copyIcon;
-
-        const copy = async () => {
-          const text = code.textContent || "";
-          try {
-            await navigator.clipboard.writeText(text);
-          } catch {
-            const area = document.createElement("textarea");
-            area.value = text;
-            area.style.position = "fixed";
-            area.style.opacity = "0";
-            document.body.appendChild(area);
-            area.select();
-            document.execCommand("copy");
-            area.remove();
-          }
-          button.classList.add("copied");
-          button.innerHTML = checkIcon;
-          window.setTimeout(() => {
-            button.classList.remove("copied");
-            button.innerHTML = copyIcon;
-          }, 1400);
-        };
-
-        button.addEventListener("click", copy);
-        pre.appendChild(button);
-
-        const track = document.createElement("div");
-        const thumb = document.createElement("div");
-        track.className = "code-scrollbar";
-        thumb.className = "code-scrollbar-thumb";
-        track.appendChild(thumb);
-        pre.appendChild(track);
-
-        const sync = () => {
-          const overflow = code.scrollWidth - code.clientWidth;
-          track.classList.toggle("hidden", overflow <= 0);
-          if (overflow <= 0) return;
-          const ratio = code.clientWidth / code.scrollWidth;
-          const width = Math.max(36, track.clientWidth * ratio);
-          const left = (code.scrollLeft / overflow) * (track.clientWidth - width);
-          thumb.style.width = `${width}px`;
-          thumb.style.transform = `translateX(${left}px)`;
-        };
-
-        code.addEventListener("scroll", sync, { passive: true });
-        window.addEventListener("resize", sync, { passive: true });
-        requestAnimationFrame(sync);
-      });
-    })();
-  </script>
-</body>
-</html>
+  <section id="production"><h2>8. Production-ready 邊界檢查表</h2>
+    <ul class="checklist"><li>每個 module 有 owner、public surface 與禁止 deep import 的規則。</li><li>外部輸入在邊界完成 validation、大小限制與 schema versioning。</li><li>外部呼叫有 deadline、取消、bounded concurrency 與資源清理。</li><li>重試只發生在了解 idempotency 的單一層，並使用 backoff 與 jitter。</li><li>log、trace 與 metric 帶 correlation ID，但不洩漏敏感資料。</li><li>錯誤在邊界翻譯；未知 defect 可觀測且不偽裝成可恢復 domain error。</li><li>composition root 驗證設定，啟動失敗要快速且訊息明確。</li><li>contract tests 與 architecture tests 進入 CI；依賴循環會阻擋合併。</li><li>資料寫入考慮 transaction、idempotency、migration 與 rollback。</li></ul>
+    <div class="callout good"><p><strong>最後的判斷：</strong>替換 delivery、資料庫或供應商時，變更應停在 adapter 與 composition root；產品規則改變時，則應明確改到 domain 或 use case。邊界的價值，是讓正確的改動發生在正確的位置。</p></div>
+  </section>
+</article></main>
+</body></html>

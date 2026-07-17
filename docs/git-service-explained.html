@@ -3,7 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>git-service.ts 完整程式碼導讀</title>
+  <meta name="description" content="從零設計 production-ready Git 差異收集服務，涵蓋 scope、路徑解析、資源限制、錯誤模型、coverage 與測試策略。">
+  <title>Git 差異收集服務：Production-ready 系統設計</title>
   <style>
     :root {
       color-scheme: light;
@@ -182,29 +183,29 @@
 <body>
   <main>
     <article>
-      <h1><code>git-service.ts</code> 完整程式碼導讀</h1>
-      <p class="deck">這個模組把 Git repository 中適合送去 code review 的文字差異，轉成有型別的 Effect service。它不只是執行 <code>git diff</code>：還要處理 staged、unstaged、untracked、rename、初始 repository、大檔案、binary patch、timeout、coverage 與可預期錯誤。</p>
+      <h1>Git 差異收集服務：Production-ready 系統設計</h1>
+      <p class="deck">一個可靠的 Git service 不只是執行 <code>git diff</code>。它要先定義 staged 與 working-tree 語意，再處理任意檔名、rename、初始 repository、merge conflict、binary、大檔案、timeout、coverage 與可操作錯誤。本篇由需求與邊界出發，最後給出可測試的參考架構。</p>
 
       <nav class="toc" aria-label="本文目錄">
         <strong>閱讀路徑</strong>
         <ol>
           <li><a href="#scope">範圍與心智模型</a></li>
-          <li><a href="#contracts">常數與資料契約</a></li>
+          <li><a href="#contracts">資源政策與資料契約</a></li>
           <li><a href="#service">錯誤與 service 介面</a></li>
           <li><a href="#commands">Git 指令執行層</a></li>
           <li><a href="#paths">路徑解析與合併</a></li>
           <li><a href="#limits">檔案與輸出限制</a></li>
           <li><a href="#patches">patch 讀取流程</a></li>
-          <li><a href="#orchestration">readDiff 總流程</a></li>
-          <li><a href="#layer">Layer 組裝</a></li>
-          <li><a href="#map">全檔案函式地圖</a></li>
+          <li><a href="#orchestration">總流程與邊界</a></li>
+          <li><a href="#layer">依賴注入與生命週期</a></li>
+          <li><a href="#map">元件地圖與 readiness</a></li>
         </ol>
       </nav>
 
       <section id="scope">
-        <h2>1. 這個檔案負責什麼</h2>
-        <p><code>GitService</code> 對外只提供一個能力：<code>readDiff(scope)</code>。它是應用程式使用 Git 的語意邊界，負責確認 repository、選擇 staged 或 working-tree 流程、檢查 conflict、決定 review base，並把 helpers 的結果組成穩定的 <code>GitDiff</code> 或 typed error。</p>
-        <p>實作機制分在三個 adapter 檔案：<code>git-command.ts</code> 統一 Git command policy 與 object metadata 讀取；<code>git-change-parser.ts</code> 純粹解析並合併 Git records；<code>git-diff.ts</code> 負責 binary、大小限制與 concurrent patch collection。底層的 <code>CommandRunner</code> 執行 Git 指令並限制合併輸出，<code>FileInspector</code> 取得 working tree 中的檔案大小。</p>
+        <h2>1. 先定義服務責任與非目標</h2>
+        <p>服務對外可只提供 <code>readDiff(scope)</code>：它是應用程式使用 Git 的語意邊界，負責確認 repository、選擇 staged 或 working-tree 流程、檢查 conflict、決定 review base，並組成穩定的結果或 typed error。</p>
+        <p>內部至少拆成 command adapter、純 change parser、scope planner 與 patch collector。底層 runner 負責程序資源限制，file inspector 只讀 metadata。服務不應成為通用 Git library，也不應修改 index、解決 conflict 或執行使用者 hook；它的任務是安全、可稽核地讀取 review 輸入。</p>
 
         <h3>兩種 review 路徑</h3>
         <div class="table-wrap">
@@ -212,7 +213,7 @@
             <thead><tr><th>scope 判斷</th><th>收集內容</th><th>diff 基準</th></tr></thead>
             <tbody>
               <tr><td><code>scope === "staged"</code></td><td>只處理 index 中已 staged 的路徑</td><td><code>git diff --cached</code></td></tr>
-              <tr><td><code>scope === "working-tree"</code></td><td>合併 staged 與 unstaged 的 tracked 路徑，另外加入 untracked</td><td>tracked 用 <code>HEAD</code>（初始 repository 用空 tree）對目前 working tree；untracked 用 <code>/dev/null</code> 對檔案</td></tr>
+              <tr><td><code>scope === "working-tree"</code></td><td>合併 staged 與 unstaged 的 tracked 路徑，另外加入 untracked</td><td>tracked 用 <code>HEAD</code>（初始 repository 用空 tree）對 working tree；untracked 與平台相容的空檔案比較</td></tr>
             </tbody>
           </table>
         </div>
@@ -226,32 +227,32 @@
       </section>
 
       <section id="contracts">
-        <h2>2. imports、常數與資料契約</h2>
-        <h3>Effect 與 domain imports</h3>
-        <p><code>Context</code> 用來宣告 service tag，<code>Data</code> 建立可辨識的 tagged error，<code>Effect</code> 描述成功值與錯誤流程，<code>Layer</code> 則把實作與依賴組裝成可注入的 service。<code>ReviewScope</code> 是輸入型別；<code>ReviewFileSource</code> 與 <code>ReviewSkippedFile</code> 讓 Git adapter 和 report domain 共用相同的 coverage 契約；兩個 platform module 則是本服務的執行依賴。</p>
+        <h2>2. 資源政策與資料契約</h2>
+        <h3>框架只是實作選擇</h3>
+        <p>以下 TypeScript 片段以 Effect 的 <code>Context</code>、tagged error、<code>Effect</code> 與 <code>Layer</code> 示範 typed service；使用 Promise、Result 或其他 dependency-injection framework 也能採用同一架構。真正的契約是 scope、成功資料、錯誤分類與資源政策，不是特定 library API。</p>
 
-        <h3>四個限制值</h3>
+        <h3>把限制視為可觀測的產品政策</h3>
         <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">const</span> commandTimeoutMilliseconds <span class="o">=</span> <span class="n">10_000</span><span class="o">;</span>
 <span class="k">const</span> listOutputLimit <span class="o">=</span> <span class="n">4</span> <span class="o">*</span> <span class="n">1024</span> <span class="o">*</span> <span class="n">1024</span><span class="o">;</span>
 <span class="k">const</span> patchOutputLimit <span class="o">=</span> <span class="n">512</span> <span class="o">*</span> <span class="n">1024</span><span class="o">;</span>
 <span class="k">const</span> fileSizeLimit <span class="o">=</span> <span class="f">BigInt</span><span class="o">(</span>patchOutputLimit<span class="o">)</span><span class="o">;</span></code></pre>
         <ul>
-          <li>所有 Git 指令最多執行 10 秒。</li>
-          <li>列舉路徑等操作最多接收 4 MiB 輸出。</li>
-          <li>單一 patch 指令的 stdout 與 stderr 合併輸出上限是 512 KiB。</li>
-          <li>檔案大小也以 512 KiB 為門檻；轉成 <code>bigint</code> 是為了與檔案大小結果安全比較。</li>
+          <li>示例 deadline 為 10 秒；production 應依 metadata、list 與 patch 操作分別調校，並支援上游 cancellation。</li>
+          <li>示例 list budget 為 4 MiB；超限應回報已觀察 bytes，不可默默截斷後繼續解析。</li>
+          <li>示例單檔 patch budget 為 512 KiB；stdout 與 stderr 都必須受控，且程序終止後要完成 drain／reap。</li>
+          <li>檔案門檻可以同為 512 KiB，但概念上與 command output budget 分離；檔案大小使用 <code>bigint</code> 以保留整數精度。</li>
         </ul>
 
         <h3>動態解析空 tree object ID</h3>
-        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">export</span> <span class="k">const</span> resolveEmptyTreeObjectId <span class="o">=</span> <span class="o">(</span>
+        <pre class="language-typescript"><span class="label">TypeScript pseudocode</span><code><span class="k">export</span> <span class="k">const</span> resolveEmptyTreeObjectId <span class="o">=</span> <span class="o">(</span>
   runner<span class="o">:</span> <span class="t">CommandRunner</span><span class="o">.</span><span class="t">Service</span><span class="o">,</span>
   repositoryRoot<span class="o">:</span> <span class="t">string</span><span class="o">,</span>
 <span class="o">)</span><span class="o">:</span> <span class="t">Effect</span><span class="o">.</span><span class="t">Effect</span><span class="o">&lt;</span><span class="t">string</span><span class="o">,</span> <span class="t">GitError</span><span class="o">&gt;</span> <span class="o">=&gt;</span>
   requireGitSuccess<span class="o">(</span>
     runner<span class="o">,</span>
     <span class="s">"resolve empty tree"</span><span class="o">,</span>
-    <span class="o">[</span><span class="s">"hash-object"</span><span class="o">,</span> <span class="s">"-t"</span><span class="o">,</span> <span class="s">"tree"</span><span class="o">,</span> <span class="s">"/dev/null"</span><span class="o">]</span><span class="o">,</span>
-    repositoryRoot<span class="o">,</span>
+    <span class="o">[</span><span class="s">"hash-object"</span><span class="o">,</span> <span class="s">"-t"</span><span class="o">,</span> <span class="s">"tree"</span><span class="o">,</span> <span class="s">"--stdin"</span><span class="o">]</span><span class="o">,</span>
+    <span class="o">{</span> cwd<span class="o">:</span> repositoryRoot<span class="o">,</span> stdin<span class="o">:</span> <span class="k">new</span> <span class="t">Uint8Array</span><span class="o">(</span><span class="n">0</span><span class="o">)</span> <span class="o">}</span><span class="o">,</span>
   <span class="o">)</span><span class="o">.</span><span class="f">pipe</span><span class="o">(</span>
     <span class="t">Effect</span><span class="o">.</span><span class="f">flatMap</span><span class="o">(</span><span class="o">(</span>output<span class="o">)</span> <span class="o">=&gt;</span> <span class="o">{</span>
       <span class="k">const</span> objectId <span class="o">=</span> output<span class="o">.</span><span class="f">trim</span><span class="o">(</span><span class="o">)</span><span class="o">;</span>
@@ -261,7 +262,7 @@
         <span class="o">:</span> <span class="t">Effect</span><span class="o">.</span><span class="f">fail</span><span class="o">(</span><span class="k">new</span> <span class="t">GitInvalidOutputError</span><span class="o">(</span><span class="o">{</span> <span class="o">...</span> <span class="o">}</span><span class="o">)</span><span class="o">)</span><span class="o">;</span>
     <span class="o">}</span><span class="o">)</span><span class="o">,</span>
   <span class="o">)</span><span class="o">;</span></code></pre>
-        <p>空 tree object ID 仍以 <code>string</code> 表示，但不再寫死 SHA-1 值。<code>resolveEmptyTreeObjectId</code> 讓目前 repository 的 Git 透過 <code>git hash-object -t tree /dev/null</code> 產生正確 ID，因此同時支援 SHA-1 與 SHA-256 repository。去除換行後，結果必須是 40 或 64 個十六進位字元，否則回傳 <code>GitInvalidOutputError</code>。</p>
+        <p>空 tree Object ID 不應寫死 SHA-1 值。把零 bytes stdin 傳給 <code>git hash-object -t tree --stdin</code>，可由 Git 依 repository 的 object format 產生正確 ID，也避免依賴 Unix-only 的 <code>/dev/null</code>。去除單一行尾後，結果還要依偵測到的 object format 驗證；只用「40 或 64 位」雖可當 sanity check，卻不能取代格式契約。</p>
 
         <h3>輸出資料結構</h3>
         <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">export</span> interface <span class="t">GitFilePatch</span> <span class="o">{</span>
@@ -276,7 +277,7 @@
   readonly files<span class="o">:</span> <span class="t">ReadonlyArray</span><span class="o">&lt;</span><span class="t">GitFilePatch</span><span class="o">&gt;</span><span class="o">;</span>
   readonly skippedFiles<span class="o">:</span> <span class="t">ReadonlyArray</span><span class="o">&lt;</span><span class="t">GitSkippedFile</span><span class="o">&gt;</span><span class="o">;</span>
 <span class="o">}</span></code></pre>
-        <p><code>files</code> 中每筆結果包含顯示用的目標路徑、完整文字 patch，以及 patch 來源。<code>skippedFiles</code> 則保留已偵測但不適合送入文字 review 的檔案：binary 會記錄 <code>reason: "binary"</code>；大檔案會額外記錄實際大小與 512 KiB 限制。這些 skipped records 讓上層能產生完整的 coverage，而不是把略過行為隱藏起來。</p>
+        <p><code>files</code> 中每筆結果包含顯示用的目標路徑、完整文字 patch，以及 patch 來源。<code>skippedFiles</code> 則保留已偵測但不適合送入文字 review 的檔案：binary 會記錄 <code>reason: "binary"</code>；大檔案會記錄實際大小與當次政策上限。這些 records 讓上層能產生完整 coverage，而不是把略過行為隱藏起來。</p>
         <p>所有欄位與陣列都只讀，表示此模組把結果當作不可變資料傳遞。</p>
         <p>內部的 <code>GitChange</code> 除了最終 <code>path</code>，還保存一組 <code>pathspecs</code>。普通修改通常兩者只有同一條路徑；rename 或 copy 則需要同時保存舊路徑與新路徑，確保後續指定路徑產生 diff 時不漏掉關聯。</p>
       </section>
@@ -308,7 +309,7 @@
       scope<span class="o">:</span> <span class="t">ReviewScope</span><span class="o">,</span>
     <span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span> <span class="t">Effect</span><span class="o">.</span><span class="p">Effect</span><span class="o">&lt;</span><span class="t">GitDiff</span><span class="o">,</span> <span class="t">GitError</span><span class="o">&gt;</span><span class="o">;</span>
   <span class="o">}</span>
-<span class="o">&gt;</span><span class="o">(</span><span class="o">)</span><span class="o">(</span><span class="s">"reviewstuff/GitService"</span><span class="o">)</span> <span class="o">{</span><span class="o">}</span></code></pre>
+<span class="o">&gt;</span><span class="o">(</span><span class="o">)</span><span class="o">(</span><span class="s">"app/GitService"</span><span class="o">)</span> <span class="o">{</span><span class="o">}</span></code></pre>
         <p>service 的公開介面刻意很小：成功值是 <code>GitDiff</code>，失敗值是 <code>GitError</code>。型別沒有列出環境依賴，表示依賴會在建立 layer 時被注入，而不是要求每個 <code>readDiff</code> 呼叫端再提供一次。</p>
       </section>
 
@@ -331,7 +332,7 @@
         <p>Git 指令使用 <code>-z</code> 輸出 NUL 分隔資料。相較用換行切割，NUL 能正確處理檔名裡真的含有換行、空白或其他特殊字元的情況。</p>
 
         <h3><code>parseNulSeparatedPaths</code></h3>
-        <p>這是簡單版本：以 <code>\0</code> 切開、丟掉末尾空欄位，再按字典順序排序。它用於 untracked 路徑，因為 <code>git ls-files --others -z</code> 只輸出路徑，不附 status。</p>
+        <p>這是簡單版本：以 <code>\0</code> 切開、驗證結尾 record，再按穩定順序排序。它用於 untracked 路徑，因為 <code>git ls-files --others --exclude-standard -z</code> 只輸出未被 ignore 的路徑，不附 status。Production parser 不應直接丟棄任意空欄位，否則截斷輸出可能被誤當成完整資料。</p>
 
         <h3><code>parseNulSeparatedChanges</code></h3>
         <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">if</span> <span class="o">(</span>status<span class="o">.</span><span class="p">startsWith</span><span class="o">(</span><span class="s">"R"</span><span class="o">)</span> <span class="o">|</span><span class="o">|</span> status<span class="o">.</span><span class="p">startsWith</span><span class="o">(</span><span class="s">"C"</span><span class="o">)</span><span class="o">)</span> <span class="o">{</span>
@@ -380,13 +381,13 @@ index <span class="o">+</span><span class="o">=</span> <span class="n">2</span><
           </table>
         </div>
         <p>staged 刪除在 index 中可能已沒有 object，所以回頭查 <code>HEAD</code>。working-tree 刪除在 filesystem 中找不到，也會回頭查 Git object。untracked 檔案若 filesystem 都找不到，就沒有任何可靠內容可產生 patch，因此視為讀取期間的檔案 race，而不是略過。</p>
-        <p>檔案大小是第一層預防：超過 512 KiB 時會產生 <code>reason: "file-too-large"</code> 的 skipped record。<code>readDiffPatch</code> 還有獨立的 512 KiB command output 上限；若這層超限，因為無法判定完整 patch 或 coverage，整次讀取會以 <code>GitCommandOutputLimitError</code> 失敗。</p>
+        <p>檔案大小是第一層預防：超過政策上限時會產生 <code>reason: "file-too-large"</code> 的 skipped record。Patch command 還要有獨立的 output 上限；若這層超限，因為無法判定完整 patch 或 coverage，整次讀取應以 output-limit error 失敗。</p>
       </section>
 
       <section id="patches">
         <h2>7. 從單一路徑讀取 patch</h2>
         <h3><code>readDiffPatch</code></h3>
-        <p>這個函式透過共用的 <code>executeGit</code> 執行 patch 指令，因此沿用 timeout 與 typed error mapping，同時把 command output 限制為 512 KiB。呼叫端可以指定預期 exit codes；超限不是 coverage skip，而是 fatal <code>GitCommandOutputLimitError</code>。</p>
+        <p>Patch reader 透過共用 command adapter 執行 Git，因此沿用 timeout 與 typed error mapping，同時套用當次 output budget。呼叫端可以指定預期 exit codes；超限不是 coverage skip，而是 fatal output-limit error。</p>
         <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">if</span> <span class="o">(</span><span class="o">!</span>expectedExitCodes<span class="o">.</span><span class="p">has</span><span class="o">(</span>result<span class="o">.</span><span class="p">exitCode</span><span class="o">)</span><span class="o">)</span> <span class="o">{</span>
   <span class="k">return</span> <span class="t">Effect</span><span class="o">.</span><span class="p">fail</span><span class="o">(</span><span class="f">makeGitCommandError</span><span class="o">(</span>operation<span class="o">,</span> result<span class="o">)</span><span class="o">)</span><span class="o">;</span>
 <span class="o">}</span>
@@ -410,14 +411,14 @@ index <span class="o">+</span><span class="o">=</span> <span class="n">2</span><
           <table>
             <thead><tr><th>kind</th><th>主要指令形態</th><th>允許 exit code</th></tr></thead>
             <tbody>
-              <tr><td>untracked</td><td><code>git diff --no-index ... -- /dev/null path</code></td><td>0 或 1</td></tr>
+              <tr><td>untracked</td><td><code>git diff --no-index ... -- &lt;empty-file&gt; path</code></td><td>0 或 1</td></tr>
               <tr><td>staged</td><td><code>git diff --cached ... -- pathspecs</code></td><td>0</td></tr>
               <tr><td>working-tree</td><td><code>git diff base ... -- pathspecs</code></td><td>0</td></tr>
             </tbody>
           </table>
         </div>
-        <p><code>--no-index</code> 比較兩個 filesystem 路徑；找到差異時 Git 通常回傳 1，所以 untracked 分支把 0 與 1 都當作預期結果。tracked 分支加入 rename 偵測、關閉顏色與 external diff，並固定三行 context，確保產物是穩定、純文字、可供後續處理的 patch。</p>
-        <p><code>Effect.forEach</code> 在這裡沒有指定 concurrency，因此本檔案沒有宣告單一群組內要平行處理所有檔案；真正明確的平行點出現在 <code>readDiff</code> 同時啟動 tracked 與 untracked 兩大群組時。</p>
+        <p><code>--no-index</code> 比較兩個 filesystem 路徑；找到差異時 Git 通常回傳 1，所以 untracked 分支把 0 與 1 都當作預期結果。空檔案來源要由 platform adapter 提供，不能假設所有系統都有 <code>/dev/null</code>。Tracked 分支加入 rename 偵測、關閉顏色與 external diff，並固定 context，確保產物是穩定、純文字、可供後續處理的 patch。</p>
+        <p>Production 實作必須明確指定 concurrency；只平行 tracked 與 untracked 兩大群組仍可能讓單一巨大群組拖垮 latency，而無界逐檔平行則會耗盡 process 與 file descriptor。通常應使用小型 bounded worker pool，並讓 cancellation 能中止尚未開始與執行中的工作。</p>
         <div class="callout warning">
           <strong>skip 與 fatal error 的界線</strong>
           <p>只有「內容已確認，但不適合文字 review」的 binary 與大檔案會進入 <code>skippedFiles</code>。timeout、command output 超限、空 patch、檔案消失或非法 Git 輸出都代表無法可靠描述 coverage，因此會讓整個 <code>readDiff</code> 失敗。</p>
@@ -425,7 +426,7 @@ index <span class="o">+</span><span class="o">=</span> <span class="n">2</span><
       </section>
 
       <section id="orchestration">
-        <h2>8. readDiff：整個模組的編排核心</h2>
+        <h2>8. 總流程：從 repository 驗證到 coverage input</h2>
         <h3>步驟一：確認 repository 與 root</h3>
         <ol>
           <li>執行 <code>git rev-parse --is-inside-work-tree</code>。</li>
@@ -447,7 +448,7 @@ index <span class="o">+</span><span class="o">=</span> <span class="n">2</span><
           <li>以 <code>git ls-files --others --exclude-standard -z</code> 列出未被 ignore 規則排除的 untracked files。</li>
           <li>用 <code>git rev-parse --verify --quiet HEAD^{commit}</code> 判斷 commit base 是否存在：exit code 0 使用 <code>HEAD</code>；1 呼叫 <code>resolveEmptyTreeObjectId</code>，使用 Git 回傳的空 tree object ID；其他 exit code 回傳 <code>GitCommandError</code>。</li>
           <li>合併 staged 與 unstaged tracked paths；把 untracked path 轉成統一的 <code>GitChange</code> 結構。</li>
-          <li>用 <code>Effect.all(..., { concurrency: "unbounded" })</code> 同時收集 tracked 與 untracked patch 群組。</li>
+          <li>透過有界 worker pool 收集 tracked 與 untracked patch；上限依 CPU、程序成本與檔案數調校。</li>
           <li><code>files</code> 與 <code>skippedFiles</code> 都以 tracked 在前、untracked 在後的順序串接。</li>
         </ol>
         <div class="callout warning">
@@ -457,7 +458,7 @@ index <span class="o">+</span><span class="o">=</span> <span class="n">2</span><
       </section>
 
       <section id="layer">
-        <h2>9. Layer：把依賴封裝到服務實作</h2>
+        <h2>9. 依賴注入與資源生命週期</h2>
         <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">export</span> <span class="k">const</span> layer<span class="o">:</span> <span class="t">Layer</span><span class="o">.</span><span class="p">Layer</span><span class="o">&lt;</span>
   <span class="t">GitService</span><span class="o">,</span>
   never<span class="o">,</span>
@@ -473,12 +474,12 @@ index <span class="o">+</span><span class="o">=</span> <span class="n">2</span><
     <span class="o">}</span><span class="o">;</span>
   <span class="o">}</span><span class="o">)</span><span class="o">,</span>
 <span class="o">)</span><span class="o">;</span></code></pre>
-        <p><code>Layer.Layer&lt;輸出, 建立錯誤, 輸入依賴&gt;</code> 在這裡可讀成：此 layer 提供 <code>GitService</code>；建立 layer 本身不會失敗（<code>never</code>）；但建立時需要 <code>CommandRunner</code> 與 <code>FileInspector</code>。</p>
-        <p>generator 先從環境取出兩個依賴，再回傳 service 實作。對外的 <code>readDiff</code> closure 已經捕捉 runner 與 inspector，因此使用者只需要傳 <code>scope</code>。</p>
+        <p><code>Layer.Layer&lt;輸出, 建立錯誤, 輸入依賴&gt;</code> 在這個 Effect 示例中可讀成：layer 提供 <code>GitService</code>，並需要 <code>CommandRunner</code> 與 <code>FileInspector</code>。其他框架也應讓這些邊界可替換，避免測試真的啟動不受控程序。</p>
+        <p>依賴注入不只為 mocking；它也集中管理 child-process termination、semaphore、clock、filesystem 與 telemetry。每次 request 結束時必須確保 child process 被回收，取消訊號與 timeout 不可留下 orphan。</p>
       </section>
 
       <section id="map">
-        <h2>10. 全檔案函式地圖</h2>
+        <h2>10. 參考元件地圖與 Production readiness</h2>
         <div class="table-wrap">
           <table class="section-map">
             <thead><tr><th>符號</th><th>單一責任</th><th>被誰使用</th></tr></thead>
@@ -502,11 +503,11 @@ index <span class="o">+</span><span class="o">=</span> <span class="n">2</span><
         </div>
 
         <h3>最後的整體理解</h3>
-        <p>這份程式碼的設計重點是把「Git 差異」收斂成可預測、有限制、可型別化失敗的資料來源。路徑列舉與 patch 讀取被拆開，因此能先處理 rename、去重與大小檢查；staged 與完整模式共用底層能力，又保留不同的 diff 語意；Effect service 與 Layer 則把命令執行和檔案系統依賴留在邊界。</p>
+        <p>這套設計把「Git 差異」收斂成可預測、有限制、可型別化失敗的資料來源。路徑列舉與 patch 讀取被拆開，因此能先處理 rename、去重與大小檢查；staged 與 working-tree 模式共用底層能力，又保留不同的 diff 語意；service boundary 則把命令執行和檔案系統依賴留在外圍。</p>
         <p>結果不是 repository 的完整鏡像：binary 與檔案大小超限會保留成明確的 skipped coverage；空 patch、讀取期間消失的檔案、command output 超限與無法解析的 Git 輸出則是 fatal typed error。這條界線讓 <code>GitService</code> 能誠實描述 review coverage，同時仍專注於「為文字 code review 準備輸入」，而不是成為通用 Git library。</p>
       </section>
 
-      <p class="source-note">本文以 <code>src/git/git-service.ts</code> 的公開契約與實作為主，並在解釋共用 coverage 型別與 command output limit 時，參照它直接依賴的 domain 與 platform contract；不依賴未在這些邊界中保證的實作細節。</p>
+      <p class="source-note"><strong>上線前檢核：</strong>以真實 repository 覆蓋 unborn branch、detached HEAD、rename/copy、衝突、特殊檔名、SHA-256、bare repository、檔案 race、巨量變更、timeout 與 cancellation；固定 Git 最低版本，記錄 latency／bytes／error category，但不要把 patch 或敏感路徑寫入 log。</p>
     </article>
   </main>
   <script>

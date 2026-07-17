@@ -271,7 +271,7 @@
       <p>這個結果看起來不合理，但原因不是比較運算子壞掉，而是右邊的整數在進入比較之前就已經失去精度。</p>
 
       <h2><code>bigint</code> 如何解決精度問題</h2>
-      <p><code>bigint</code> 專門用來表示整數，而且不受 <code>number</code> 的安全整數上限限制。整數常值後方的 <code>n</code> 表示它是 <code>bigint</code>：</p>
+      <p><code>bigint</code> 專門用來表示整數，其可表示範圍不受 <code>number</code> 的安全整數上限限制，實際上只受執行環境可用資源約束。整數常值後方的 <code>n</code> 表示它是 <code>bigint</code>：</p>
 
       <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="n">9007199254740992</span>n <span class="o">=</span><span class="o">=</span><span class="o">=</span> <span class="n">9007199254740993</span>n
 <span class="c">// false</span></code></pre>
@@ -306,6 +306,14 @@
       </ul>
 
       <p>反過來說，如果來源本來就是已經失去精度的 <code>number</code>，事後再呼叫 <code>BigInt(value)</code> 無法找回遺失的位元。最理想的作法，是從資料來源開始就以 <code>bigint</code> 取得大小。</p>
+
+      <h2>跨系統邊界時的兩個陷阱</h2>
+      <ul>
+        <li><strong>JSON 不直接支援 <code>bigint</code>。</strong><code>JSON.stringify({ size: 1n })</code> 會拋出錯誤。若要傳輸，應先轉成十進位字串，並在 schema 中明確標示單位與格式；不要轉成可能失真的 JSON number。</li>
+        <li><strong>大小檢查不是資源鎖。</strong><code>stat</code> 後檔案仍可能被替換或增長。安全上傳或檔案處理流程要對實際讀取的 byte stream 設硬上限，不能只依賴事前 metadata。</li>
+      </ul>
+
+      <p>測試至少應涵蓋限制值的前一個 byte、剛好等於限制、超過一個 byte、<code>Number.MAX_SAFE_INTEGER</code> 附近，以及字串序列化與還原。若外部輸入可指定大小，也要拒絕負值、非十進位格式與不合理長度。</p>
 
       <section class="conclusion" aria-labelledby="conclusion-title">
         <h2 id="conclusion-title">這句話可以怎麼理解</h2>

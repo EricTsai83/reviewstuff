@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="Reviewstuff ReviewReport schema version 的精簡 system design。">
-  <title>ReviewReport Schema Version System Design</title>
+  <meta name="description" content="機器可讀 JSON 報告的 schema version、相容性、migration、runtime validation 與 production readiness 設計指南。">
+  <title>機器可讀報告的 Schema Version 系統設計</title>
   <style>
     :root {
       color-scheme: light;
@@ -292,117 +292,92 @@
 </head>
 <body>
   <main>
-    <h1>ReviewReport Schema Version System Design</h1>
-    <p class="deck">本文件定義 <code>reviewstuff review --json</code> 的版本策略。目標是保留必要的相容性資訊，同時避免在沒有獨立演進需求的巢狀資料上增加版本。</p>
+    <h1>機器可讀報告的 Schema Version 系統設計</h1>
+    <p class="deck">一份 JSON 報告只要被 CI、外掛或其他服務解析，就已經是公開契約。版本設計的核心不是替每個物件加數字，而是讓 producer 與 consumer 能可靠判斷「這份資料可不可以安全解讀」。</p>
 
     <section>
-      <h2>系統背景</h2>
-      <p><code>review</code> command 會產生一份 <code>ReviewReport</code>，terminal renderer 將它顯示給人閱讀，JSON renderer 則把它輸出給 script、CI 或其他工具。因為 JSON 可能由不同版本的 consumer 解析，所以完整 report 是一個需要版本的資料契約。</p>
-      <p><code>coverage</code> 只存在於 <code>ReviewReport</code> 裡面，目前不會獨立儲存、傳輸或解析。它不是獨立契約，因此不需要自己的版本。</p>
-    </section>
-
-    <section>
-      <h2>設計決策</h2>
+      <h2>先界定契約邊界</h2>
+      <p>同一份結果通常有兩種呈現：給人看的 terminal 文字，以及給程式讀取的 JSON。前者可以為可讀性調整，後者則需要穩定欄位、明確語意與可驗證的版本。只有會被獨立儲存、傳輸或解析的單位，才應視為獨立契約。</p>
       <div class="decision">
-        <strong>只保留外層 <code>ReviewReport.schemaVersion</code></strong>
-        <p>目標格式使用 <code>schemaVersion: 2</code>。移除 <code>coverage.schemaVersion</code>，並把 <code>ReviewCoverageV1</code> 更名為 <code>ReviewCoverage</code>。</p>
+        <strong>預設只版本化最外層 envelope</strong>
+        <p>若 <code>coverage</code> 只能隨完整 report 出現，consumer 也不能單獨取得它，那麼 <code>report.schemaVersion</code> 已足以描述整棵資料。巢狀物件只有在能獨立演進時，才需要自己的版本。</p>
       </div>
-
       <div class="table-wrap">
         <table>
-          <thead>
-            <tr>
-              <th>資料</th>
-              <th>是否版本化</th>
-              <th>原因</th>
-            </tr>
-          </thead>
+          <thead><tr><th>資料單位</th><th>建議</th><th>判斷依據</th></tr></thead>
           <tbody>
-            <tr>
-              <td><code>ReviewReport</code></td>
-              <td>是，版本 2</td>
-              <td>它是 <code>--json</code> 輸出的完整 machine-readable contract。</td>
-            </tr>
-            <tr>
-              <td><code>ReviewCoverage</code></td>
-              <td>否</td>
-              <td>它只由 report 包含，跟隨外層 report 一起演進。</td>
-            </tr>
-            <tr>
-              <td>Terminal text</td>
-              <td>否</td>
-              <td>它是給人閱讀的 presentation，不是 JSON schema。</td>
-            </tr>
+            <tr><td>完整 JSON report</td><td>版本化</td><td>它是跨程序、跨版本的 machine-readable contract。</td></tr>
+            <tr><td>只能內嵌的 coverage</td><td>沿用外層版本</td><td>生命週期、發佈與解析都由 report 控制。</td></tr>
+            <tr><td>可由另一 API 單獨回傳的 finding</td><td>視為獨立契約</td><td>可能有不同 consumer 與演進節奏。</td></tr>
+            <tr><td>Terminal 文字</td><td>通常不做 schema version</td><td>它是 presentation；若允許腳本解析，則應另外提供 JSON。</td></tr>
           </tbody>
         </table>
       </div>
     </section>
 
     <section>
-      <h2>目標資料契約</h2>
-      <p>維持目前簡單的 TypeScript contract。系統只負責產生 report，現階段不需要額外導入 runtime schema 或 migration framework。</p>
-
-      <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">export</span> interface <span class="t">ReviewCoverage</span> <span class="o">{</span>
-  readonly complete<span class="o">:</span> boolean<span class="o">;</span>
-  readonly files<span class="o">:</span> <span class="t">ReadonlyArray</span><span class="o">&lt;</span><span class="t">ReviewFileCoverage</span><span class="o">&gt;</span><span class="o">;</span>
+      <h2>資料契約與 runtime 驗證</h2>
+      <p>TypeScript 介面只能在編譯期約束 producer，無法保護從檔案、網路或舊版快取讀入的資料。Production 系統應在信任邊界先讀取 <code>schemaVersion</code>，再用對應的 runtime schema 驗證完整 payload；解析失敗時回報可定位的欄位路徑，而不是讓半有效資料流入領域邏輯。以下以 v1／v2 示意版本演進，數字不是任何特定產品的現況宣告。</p>
+      <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">interface</span> <span class="t">ReviewReportV2</span> <span class="o">{</span>
+  readonly schemaVersion<span class="o">:</span> <span class="n">2</span><span class="o">;</span>
+  readonly scope<span class="o">:</span> <span class="s">"staged"</span> <span class="o">|</span> <span class="s">"working-tree"</span><span class="o">;</span>
+  readonly summary<span class="o">:</span> <span class="t">ReportSummary</span><span class="o">;</span>
+  readonly coverage<span class="o">:</span> <span class="t">ReviewCoverage</span><span class="o">;</span>
+  readonly findings<span class="o">:</span> readonly <span class="t">Finding</span><span class="o">[]</span><span class="o">;</span>
 <span class="o">}</span>
 
-<span class="k">export</span> interface <span class="t">ReviewReport</span> <span class="o">{</span>
-  readonly schemaVersion<span class="o">:</span> <span class="n">2</span><span class="o">;</span>
-  readonly scope<span class="o">:</span> <span class="t">ReviewScope</span><span class="o">;</span>
-  readonly summary<span class="o">:</span> <span class="t">ReviewReportSummary</span><span class="o">;</span>
-  readonly coverage<span class="o">:</span> <span class="t">ReviewCoverage</span><span class="o">;</span>
-  readonly findings<span class="o">:</span> <span class="t">ReadonlyArray</span><span class="o">&lt;</span><span class="t">Finding</span><span class="o">&gt;</span><span class="o">;</span>
-<span class="o">}</span></code></pre>
-
-      <p><code>runReview</code> 必須明確回傳 <code>Effect.Effect&lt;ReviewReport, ...&gt;</code>，讓 TypeScript 在 report 的生產位置檢查版本與欄位。JSON renderer 保持單純：</p>
-
-      <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">export</span> <span class="k">const</span> renderJsonReport <span class="o">=</span> <span class="o">(</span>report<span class="o">:</span> <span class="t">ReviewReport</span><span class="o">)</span><span class="o">:</span> string <span class="o">=</span><span class="o">&gt;</span>
-  <span class="t">JSON</span><span class="o">.</span><span class="p">stringify</span><span class="o">(</span>report<span class="o">,</span> <span class="n">undefined</span><span class="o">,</span> <span class="n">2</span><span class="o">)</span><span class="o">;</span></code></pre>
+<span class="k">type</span> <span class="t">SupportedReport</span> <span class="o">=</span> <span class="t">ReviewReportV1</span> <span class="o">|</span> <span class="t">ReviewReportV2</span><span class="o">;</span></code></pre>
+      <p>Version 應是整數 literal，而不是任意字串。Consumer 先做最小 envelope 檢查，再 dispatch 到 <code>parseV1</code> 或 <code>parseV2</code>；遇到未知版本要明確拒絕，並提示可支援的範圍。</p>
     </section>
 
     <section>
-      <h2>版本演進規則</h2>
-      <h3>需要提升外層版本</h3>
+      <h2>版本提升規則</h2>
+      <h3>通常需要新版本</h3>
       <ul>
-        <li>新增、移除或重新命名欄位。</li>
-        <li>改變欄位型別或 enum 值。</li>
-        <li>改變既有欄位的業務語意。</li>
+        <li>移除或重新命名欄位、改變欄位型別、收窄允許值。</li>
+        <li>改變既有欄位的單位、排序保證、nullable 規則或業務語意。</li>
+        <li>新增必填欄位，或讓原本成功的 payload 變成無效。</li>
       </ul>
-
-      <h3>不需要提升版本</h3>
+      <h3>可在同版本內演進，但要先定義政策</h3>
       <ul>
-        <li>內部實作重構。</li>
-        <li>terminal 顯示文字改變。</li>
-        <li>JSON indentation 或欄位輸出順序改變。</li>
-        <li>修正 bug，使輸出重新符合既有契約。</li>
+        <li>新增 optional 欄位：只有 consumer 被要求忽略未知欄位時才安全。</li>
+        <li>擴充 enum：若 consumer 使用 exhaustive switch，新增值可能仍是 breaking change。</li>
+        <li>修正 producer bug：只有輸出重新符合已發布契約時不必升版；不能用「修 bug」重新定義既有語意。</li>
       </ul>
-
-      <h3>這次變更使用 v2 或 v3</h3>
-      <p>預設假設目前含有 <code>coverage.schemaVersion</code> 的 v2 尚未對外發布，因此直接整理成最終 v2。如果現有 consumer 已經依賴該欄位，則不得重新定義 v2，必須把外層版本提升為 v3。</p>
+      <h3>不影響 schema version</h3>
+      <ul>
+        <li>內部重構、效能改善與 terminal 呈現變更。</li>
+        <li>JSON whitespace 或物件 key 順序；consumer 不應依賴兩者。</li>
+      </ul>
     </section>
 
     <section>
-      <h2>實作範圍</h2>
+      <h2>相容性與 migration 策略</h2>
       <ol class="implementation">
-        <li><strong><code>src/domain/review-file.ts</code></strong><br>將 <code>ReviewCoverageV1</code> 更名為 <code>ReviewCoverage</code>，移除其 <code>schemaVersion</code>。</li>
-        <li><strong><code>src/domain/report.ts</code></strong><br>改為引用 <code>ReviewCoverage</code>，外層維持 <code>schemaVersion: 2</code>。</li>
-        <li><strong><code>src/use-cases/run-review.ts</code></strong><br>移除建立 coverage 時的 <code>schemaVersion: 1</code>。</li>
-        <li><strong>相關 tests</strong><br>更新 fixtures 與 JSON expectations，確認版本只出現在 report 最外層。</li>
+        <li><strong>不可覆寫已發布版本。</strong><br>只要 production consumer 可能看過 v2，就不能修改 v2 的定義；breaking change 必須發布 v3。</li>
+        <li><strong>Reader 先寬、writer 後切。</strong><br>部署能同時讀 v1/v2 的 consumer，再切換 producer；完成保留期後才移除舊 reader。</li>
+        <li><strong>Migration 保持純函式。</strong><br>將舊 payload 驗證後轉成最新的 canonical domain model，避免核心邏輯到處分支。</li>
+        <li><strong>保留版本生命週期。</strong><br>文件應列出支援版本、deprecated 日期、停止支援日期與升級路徑。</li>
       </ol>
+      <div class="decision">
+        <strong>Forward compatibility 不是「看到未知版本也硬解析」</strong>
+        <p>未知 major schema 可能已改變語意。安全做法是 fail closed，保留原始 payload 供診斷，並要求更新 consumer。</p>
+      </div>
     </section>
 
     <section>
-      <h2>驗收標準</h2>
+      <h2>Production readiness 與測試</h2>
       <div class="acceptance">
         <ul>
-          <li><span class="check">✓</span> <code>review --json</code> 的最外層包含 <code>schemaVersion: 2</code>。</li>
-          <li><span class="check">✓</span> <code>coverage</code> 不包含 <code>schemaVersion</code>。</li>
-          <li><span class="check">✓</span> 專案中不再存在 <code>ReviewCoverageV1</code>。</li>
-          <li><span class="check">✓</span> <code>bun run typecheck</code> 通過。</li>
-          <li><span class="check">✓</span> report renderer、run-review 與 CLI e2e tests 通過。</li>
+          <li><span class="check">✓</span> 每個已支援版本都有可執行的 runtime schema 與 golden fixtures。</li>
+          <li><span class="check">✓</span> Contract tests 驗證 producer 輸出能被正式 consumer parser 接受。</li>
+          <li><span class="check">✓</span> 測試未知版本、缺欄位、錯誤型別、未知 enum、超大 payload 與惡意深度。</li>
+          <li><span class="check">✓</span> Migration 測試覆蓋每一條支援路徑，並檢查轉換後語意而非只比 snapshot。</li>
+          <li><span class="check">✓</span> Logs 與 metrics 記錄解析失敗、版本分布與 deprecated 版本使用量，但不洩漏敏感內容。</li>
+          <li><span class="check">✓</span> 文件提供範例 payload、欄位語意、單位、排序、nullable 與相容性政策。</li>
         </ul>
       </div>
+      <p>最簡單且穩健的模型是：外層 envelope 擁有版本、每個版本有 runtime validator、內部統一轉成最新 domain model。只有當巢狀資料真的能獨立發佈與消費時，才增加第二層版本，避免產生彼此組合爆炸的版本矩陣。</p>
     </section>
   </main>
 
