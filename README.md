@@ -1,4 +1,4 @@
-# reviewstuff
+# reviewstuff (work in progress)
 
 Minimal Bun-powered CLI scaffold for reviewstuff.
 
