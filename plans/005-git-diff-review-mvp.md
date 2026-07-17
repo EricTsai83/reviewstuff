@@ -1,5 +1,23 @@
 # 005 - Git Diff Review MVP
 
+## Current Status
+
+`VERIFY`。2026-07-18 baseline audit 確認本 plan 的 source、typecheck 與 106 個直接
+`bun test` cases 已通過；本次未獲授權執行 build，所以不要重做 implementation。下一次只完成
+下列 closure：
+
+```bash
+bun run build
+./dist/reviewstuff --version
+./dist/reviewstuff --help
+./dist/reviewstuff review --json
+./dist/reviewstuff review --staged --json
+```
+
+在 temporary Git fixtures 驗 marker、no-change、binary/large skip 與 non-repo error後，把
+[README](./README.md) 的 005 改成 `DONE`。除非 closure 發現 regression，005 不再接受新 scope；
+engine/schema/provider 工作從 007 開始。
+
 ## Goal
 
 做出第一個可工作的本機 review：讀 git diff，產生 deterministic report。
@@ -63,8 +81,8 @@ reviewstuff review --staged
 ```bash
 bun run test
 bun run build
-AI_REVIEW_FAKE_ENGINE=1 ./dist/reviewstuff review --json
-AI_REVIEW_FAKE_ENGINE=1 ./dist/reviewstuff review --staged --json
+./dist/reviewstuff review --engine fake --json
+./dist/reviewstuff review --engine fake --staged --json
 ```
 
 ## Acceptance Criteria
