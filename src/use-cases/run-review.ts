@@ -23,6 +23,7 @@ import {
   type GitDiff,
   GitService,
 } from "../git/git-service";
+import { buildReviewRequestV1 } from "../review/review-request";
 
 export class ReviewTimeoutError extends Data.TaggedError(
   "ReviewTimeoutError",
@@ -109,10 +110,16 @@ export const runReview = (
     yield* ensureSupportedFakeSelection(config);
     return yield* Effect.gen(function* () {
       const diff = yield* git.readDiff(scope);
-      const findings = yield* engine.review({
+      const request = buildReviewRequestV1({
+        repository: { scope },
+        config: {
+          profile: config.profile,
+          model: config.model,
+          concurrency: config.concurrency,
+        },
         files: diff.files,
-        concurrency: config.concurrency,
       });
+      const findings = yield* engine.review(request);
       return buildReviewReport(scope, diff, findings);
     }).pipe(
       Effect.timeoutOrElse({

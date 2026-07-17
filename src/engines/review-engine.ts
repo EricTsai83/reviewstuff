@@ -6,16 +6,10 @@ import {
   decodeReviewFindingV1,
   type ReviewFindingV1,
 } from "../domain/finding";
-
-export interface ReviewEngineFile {
-  readonly path: string;
-  readonly patch: string;
-}
-
-export interface ReviewEngineRequest {
-  readonly files: ReadonlyArray<ReviewEngineFile>;
-  readonly concurrency: number;
-}
+import type {
+  ReviewRequestFileV1,
+  ReviewRequestV1,
+} from "../review/review-request";
 
 export class ReviewEngineFailure extends Data.TaggedError(
   "ReviewEngineFailure",
@@ -30,7 +24,7 @@ export class ReviewEngine extends Context.Service<
   ReviewEngine,
   {
     readonly review: (
-      request: ReviewEngineRequest,
+      request: ReviewRequestV1,
     ) => Effect.Effect<ReadonlyArray<ReviewFindingV1>, ReviewEngineError>;
   }
 >()("reviewstuff/ReviewEngine") {}
@@ -51,7 +45,7 @@ const stableFindingFingerprint = (value: string): string => {
 };
 
 const findingsForPatch = (
-  file: ReviewEngineFile,
+  file: ReviewRequestFileV1,
 ): ReadonlyArray<ReviewFindingV1> => {
   const findings: Array<ReviewFindingV1> = [];
   let targetLineNumber = 0;
@@ -93,10 +87,10 @@ const findingsForPatch = (
 };
 
 const review = (
-  request: ReviewEngineRequest,
+  request: ReviewRequestV1,
 ): Effect.Effect<ReadonlyArray<ReviewFindingV1>, ReviewEngineError> =>
   Effect.forEach(
-    request.files,
+    request.context.files,
     (file) =>
       Effect.try({
         try: () => findingsForPatch(file),
@@ -106,7 +100,7 @@ const review = (
             cause,
           }),
       }),
-    { concurrency: request.concurrency },
+    { concurrency: request.options.concurrency },
   ).pipe(Effect.map((fileFindings) => fileFindings.flat()));
 
 export const layer: Layer.Layer<ReviewEngine> = Layer.succeed(

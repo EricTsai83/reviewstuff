@@ -5,10 +5,28 @@ import {
   layer,
   ReviewEngine,
   ReviewEngineFailure,
-  type ReviewEngineRequest,
 } from "../../src/engines/review-engine";
+import {
+  buildReviewRequestV1,
+  type ReviewRequestFileV1,
+  type ReviewRequestV1,
+} from "../../src/review/review-request";
 
-const review = (request: ReviewEngineRequest) =>
+const buildRequest = (
+  files: ReadonlyArray<ReviewRequestFileV1>,
+  concurrency: number,
+): ReviewRequestV1 =>
+  buildReviewRequestV1({
+    repository: { scope: "working-tree" },
+    config: {
+      profile: "standard",
+      model: "fake-reviewer-v1",
+      concurrency,
+    },
+    files,
+  });
+
+const review = (request: ReviewRequestV1) =>
   ReviewEngine.pipe(
     Effect.flatMap((engine) => engine.review(request)),
     Effect.provide(layer),
@@ -16,10 +34,11 @@ const review = (request: ReviewEngineRequest) =>
   );
 
 test("fake ReviewEngine produces deterministic findings from added marker lines", async () => {
-  const request: ReviewEngineRequest = {
-    files: [
+  const request = buildRequest(
+    [
       {
         path: "src/example.ts",
+        source: "working-tree",
         patch: [
           "@@ -2,2 +2,3 @@",
           " context",
@@ -28,8 +47,8 @@ test("fake ReviewEngine produces deterministic findings from added marker lines"
         ].join("\n"),
       },
     ],
-    concurrency: 2,
-  };
+    2,
+  );
   const expected: ReadonlyArray<ReviewFindingV1> = [
     {
       id: "fake-marker:src/example.ts:3:2c4700fe",
@@ -49,10 +68,11 @@ test("fake ReviewEngine produces deterministic findings from added marker lines"
 
 test("fake ReviewEngine ignores markers outside added lines", async () => {
   expect(
-    await review({
-      files: [
+    await review(buildRequest(
+      [
         {
           path: "src/example.ts",
+          source: "working-tree",
           patch: [
             "@@ -1,2 +1,2 @@",
             "-// REVIEWSTUFF_FAKE_FINDING removed",
@@ -60,23 +80,24 @@ test("fake ReviewEngine ignores markers outside added lines", async () => {
           ].join("\n"),
         },
       ],
-      concurrency: 1,
-    }),
+      1,
+    )),
   ).toEqual([]);
 });
 
 test("fake ReviewEngine maps invalid generated findings to a typed failure", async () => {
   const error = await ReviewEngine.pipe(
     Effect.flatMap((engine) =>
-      engine.review({
-        files: [
+      engine.review(buildRequest(
+        [
           {
             path: "src/example.ts",
+            source: "working-tree",
             patch: "+// REVIEWSTUFF_FAKE_FINDING missing-hunk",
           },
         ],
-        concurrency: 1,
-      }),
+        1,
+      )),
     ),
     Effect.provide(layer),
     Effect.flip,

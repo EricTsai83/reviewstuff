@@ -8,7 +8,7 @@ The source tree separates CLI concerns, application flow, domain rules, semantic
 | `use-cases/` | Application workflows and orchestration through semantic service interfaces | `domain/`, semantic service interfaces in `git/`, `engines/`, `storage/`, `config/`, `languages/`, `analyzers/`, `fix/`, `agent/`, and pure policy in `review/`; never `platform/` or `output/` |
 | `domain/` | Stable domain models, versioned schemas, and invariants shared across application capabilities | `shared/` only; no platform services or side effects |
 | `git/` | `GitService` contract and its canonical Git-backed implementation | `domain/`, `platform/`, `shared/`; the public service contract must not expose platform types |
-| `engines/` | `ReviewEngine` contract plus provider-specific implementations such as `OpenAiReviewEngine` or `CodexCliReviewEngine` | `domain/`, `platform/`, `config/`, `shared/`; providers receive normalized requests and never read the repository |
+| `engines/` | `ReviewEngine` contract plus provider-specific implementations such as `OpenAiReviewEngine` or `CodexCliReviewEngine` | `review/`, `domain/`, `platform/`, `config/`, `shared/`; providers receive normalized requests and never read the repository |
 | `review/` | Review-specific pure policy, prompt construction, and request normalization introduced when first needed | `domain/`, `shared/`; no application flow or IO |
 | `platform/` | Low-level Effect services and controlled wrappers for process, filesystem, and time side effects when application-level policy is required | `shared/` and runtime-agnostic Effect 4 platform modules |
 | `output/` | Output models, formatting, and renderers shared by CLI entry points | `domain/`, `shared/` |

@@ -12,6 +12,7 @@ import {
   ReviewEngineFailure,
 } from "../../src/engines/review-engine";
 import { GitService } from "../../src/git/git-service";
+import type { ReviewRequestV1 } from "../../src/review/review-request";
 import {
   ReviewTimeoutError,
   runReview,
@@ -89,6 +90,50 @@ test("runReview applies the same resolved timeout to engine work", async () => {
   );
 
   expect(error).toEqual(new ReviewTimeoutError({ timeoutMilliseconds: 1 }));
+});
+
+test("runReview builds the normalized request before invoking the engine", async () => {
+  const file = {
+    path: "src/example.ts",
+    source: "working-tree" as const,
+    patch: "@@ -0,0 +1 @@\n+export const example = true;\n",
+  };
+  const git = Layer.succeed(GitService, {
+    readDiff: () => Effect.succeed({ files: [file], skippedFiles: [] }),
+  });
+  let received: ReviewRequestV1 | undefined;
+  const engine = Layer.succeed(ReviewEngine, {
+    review: (request) =>
+      Effect.sync(() => {
+        received = request;
+        return [];
+      }),
+  });
+
+  await runReview("working-tree", {
+    profile: "quick",
+    model: "fake-reviewer-v1",
+    concurrency: 1,
+  }).pipe(
+    Effect.provide(git),
+    Effect.provide(config),
+    Effect.provide(engine),
+    Effect.runPromise,
+  );
+
+  expect(received).toMatchObject({
+    schemaVersion: 1,
+    context: {
+      contentType: "untrusted-repository-data",
+      repository: { scope: "working-tree" },
+      files: [file],
+    },
+    options: {
+      profile: "quick",
+      model: "fake-reviewer-v1",
+      concurrency: 1,
+    },
+  });
 });
 
 test("runReview produces deterministic findings from added marker lines", async () => {
