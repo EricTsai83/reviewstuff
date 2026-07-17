@@ -5,6 +5,7 @@ import {
   ConfigFileReadError,
   UnsupportedReviewSelectionError,
 } from "../../src/config/config-service";
+import { ReviewEngineFailure } from "../../src/engines/review-engine";
 import {
   GitChangedFileUnavailableError,
   GitCommandError,
@@ -53,6 +54,17 @@ describe("renderReviewError", () => {
         new ReviewTimeoutError({ timeoutMilliseconds: 30_000 }),
       ),
     ).toBe("Review timed out after 30s.");
+  });
+
+  test("renders typed review engine failures", () => {
+    expect(
+      renderReviewError(
+        new ReviewEngineFailure({
+          message: "Invalid response\nfrom engine.",
+          cause: undefined,
+        }),
+      ),
+    ).toBe("Review engine failed: Invalid response\\u000afrom engine.");
   });
 
   test.each([

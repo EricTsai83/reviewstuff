@@ -7,10 +7,7 @@ import {
   type ResolvedReviewConfig,
   UnsupportedReviewSelectionError,
 } from "../config/config-service";
-import {
-  decodeReviewFindingV1,
-  type ReviewFindingV1,
-} from "../domain/finding";
+import type { ReviewFindingV1 } from "../domain/finding";
 import type { ReviewFileCoverage } from "../domain/review-file";
 import {
   decodeReviewReportV3,
@@ -18,9 +15,12 @@ import {
 } from "../domain/report";
 import type { ReviewScope } from "../domain/scope";
 import {
+  type ReviewEngineError,
+  ReviewEngine,
+} from "../engines/review-engine";
+import {
   type GitError,
   type GitDiff,
-  type GitFilePatch,
   GitService,
 } from "../git/git-service";
 
@@ -30,9 +30,11 @@ export class ReviewTimeoutError extends Data.TaggedError(
   readonly timeoutMilliseconds: number;
 }> {}
 
-export type RunReviewError = GitError | ConfigError | ReviewTimeoutError;
-
-const fakeFindingMarker = "REVIEWSTUFF_FAKE_FINDING";
+export type RunReviewError =
+  | GitError
+  | ConfigError
+  | ReviewEngineError
+  | ReviewTimeoutError;
 
 const ensureSupportedFakeSelection = (
   config: ResolvedReviewConfig,
@@ -48,61 +50,6 @@ const ensureSupportedFakeSelection = (
           model: config.model,
         }),
       );
-
-// Finding IDs are compatibility-sensitive deterministic identities. This is
-// intentionally not a cryptographic hash and must never be used for security.
-const stableFindingFingerprint = (value: string): string => {
-  let hash = 0x811c9dc5;
-
-  for (let index = 0; index < value.length; index += 1) {
-    hash ^= value.charCodeAt(index);
-    hash = Math.imul(hash, 0x01000193);
-  }
-
-  return (hash >>> 0).toString(16).padStart(8, "0");
-};
-
-const findingsForPatch = (
-  file: GitFilePatch,
-): ReadonlyArray<ReviewFindingV1> => {
-  const findings: Array<ReviewFindingV1> = [];
-  let targetLineNumber = 0;
-
-  for (const line of file.patch.split("\n")) {
-    const hunkHeaderMatch = /^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@/.exec(
-      line,
-    );
-
-    if (hunkHeaderMatch !== null) {
-      targetLineNumber = Number(hunkHeaderMatch[1]);
-      continue;
-    }
-
-    if (line.startsWith("+") && !line.startsWith("+++")) {
-      if (line.includes(fakeFindingMarker)) {
-        findings.push(decodeReviewFindingV1({
-          id: `fake-marker:${file.path}:${targetLineNumber}:${stableFindingFingerprint(line.slice(1))}`,
-          ruleId: "fake-marker",
-          severity: "medium",
-          category: "correctness",
-          confidence: 1,
-          message: "Deterministic fake finding marker detected.",
-          file: file.path,
-          line: targetLineNumber,
-        }));
-      }
-
-      targetLineNumber += 1;
-      continue;
-    }
-
-    if (!line.startsWith("-") && !line.startsWith("\\")) {
-      targetLineNumber += 1;
-    }
-  }
-
-  return findings;
-};
 
 const buildCoverageFiles = (
   diff: GitDiff,
@@ -152,20 +99,20 @@ export const runReview = (
 ): Effect.Effect<
   ReviewReportV3,
   RunReviewError,
-  GitService | ConfigService
+  GitService | ConfigService | ReviewEngine
 > =>
   Effect.gen(function* () {
     const configService = yield* ConfigService;
     const git = yield* GitService;
+    const engine = yield* ReviewEngine;
     const config = yield* configService.load(overrides);
     yield* ensureSupportedFakeSelection(config);
     return yield* Effect.gen(function* () {
       const diff = yield* git.readDiff(scope);
-      const findings = yield* Effect.forEach(
-        diff.files,
-        (file) => Effect.sync(() => findingsForPatch(file)),
-        { concurrency: config.concurrency },
-      ).pipe(Effect.map((fileFindings) => fileFindings.flat()));
+      const findings = yield* engine.review({
+        files: diff.files,
+        concurrency: config.concurrency,
+      });
       return buildReviewReport(scope, diff, findings);
     }).pipe(
       Effect.timeoutOrElse({

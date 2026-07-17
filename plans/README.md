@@ -43,8 +43,8 @@ service skeleton、flag 或空目錄。
 | [x] DONE | 004 | [Repository Structure Boundaries](./004-repository-structure-boundaries.md) | module boundary 固定 |
 | [x] DONE | 005 | [Git Diff Review MVP](./005-git-diff-review-mvp.md) | deterministic Git diff review |
 | [x] DONE | 006 | [Config Profiles](./006-config-profiles-and-prompts.md) | versioned config/profile |
-| [ ] IN PROGRESS | 007 | [Normalize Review Contracts](./007-normalize-review-contracts.md) | Safe cloud dogfood |
-| [ ] TODO | 008 | [Extract The Fake Review Engine](./008-extract-the-fake-review-engine.md) | Safe cloud dogfood |
+| [x] DONE | 007 | [Normalize Review Contracts](./007-normalize-review-contracts.md) | Safe cloud dogfood |
+| [x] DONE | 008 | [Extract The Fake Review Engine](./008-extract-the-fake-review-engine.md) | Safe cloud dogfood |
 | [ ] TODO | 009 | [Build A Pure Review Request](./009-build-a-pure-review-request.md) | Safe cloud dogfood |
 | [ ] TODO | 010 | [Preserve Normalized File And Hunk Metadata](./010-preserve-normalized-file-and-hunk-metadata.md) | Safe cloud dogfood |
 | [ ] TODO | 011 | [Select Complete Hunks Within A Request Budget](./011-select-complete-hunks-within-a-request-budget.md) | Safe cloud dogfood |

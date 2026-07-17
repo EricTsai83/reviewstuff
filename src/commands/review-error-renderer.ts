@@ -61,6 +61,8 @@ export const renderReviewError = (error: RunReviewError): string =>
       `Unsupported review selection: engine=${escapeTerminalText(selectionError.engine)}, provider=${escapeTerminalText(selectionError.provider)}, model=${escapeTerminalText(selectionError.model)}. This build supports engine=fake, provider=fake, model=fake-reviewer-v1.`,
     ReviewTimeoutError: (timeoutError) =>
       `Review timed out after ${Duration.format(Duration.millis(timeoutError.timeoutMilliseconds))}.`,
+    ReviewEngineFailure: (engineError) =>
+      `Review engine failed: ${escapeTerminalText(engineError.message)}`,
     GitNotRepositoryError: (repositoryError) =>
       `Not a git repository (or any parent directory); detection exited with code ${repositoryError.exitCode}.`,
     GitWorkingTreeUnavailableError: () =>

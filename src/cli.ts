@@ -7,6 +7,7 @@ import packageJson from "../package.json";
 import { doctorCommand } from "./commands/doctor";
 import { reviewCommand } from "./commands/review";
 import * as ConfigService from "./config/config-service";
+import * as ReviewEngine from "./engines/review-engine";
 import * as GitService from "./git/git-service";
 import * as CommandRunner from "./platform/command-runner";
 import * as FileInspector from "./platform/file-inspector";
@@ -14,6 +15,7 @@ import * as FileInspector from "./platform/file-inspector";
 const AppLive = GitService.layer.pipe(
   Layer.provide(Layer.merge(CommandRunner.layer, FileInspector.layer)),
   Layer.merge(ConfigService.layer),
+  Layer.merge(ReviewEngine.layer),
   Layer.provideMerge(BunServices.layer),
 );
 

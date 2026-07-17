@@ -6,6 +6,11 @@ import {
   resolveReviewConfig,
   UnsupportedReviewSelectionError,
 } from "../../src/config/config-service";
+import {
+  layer as fakeReviewEngine,
+  ReviewEngine,
+  ReviewEngineFailure,
+} from "../../src/engines/review-engine";
 import { GitService } from "../../src/git/git-service";
 import {
   ReviewTimeoutError,
@@ -15,6 +20,7 @@ import {
 const config = Layer.succeed(ConfigService, {
   load: (overrides) => Effect.succeed(resolveReviewConfig(undefined, overrides)),
 });
+const services = Layer.merge(config, fakeReviewEngine);
 
 test("runReview rejects selections that cannot execute yet", async () => {
   const git = Layer.succeed(GitService, {
@@ -27,7 +33,7 @@ test("runReview rejects selections that cannot execute yet", async () => {
     model: "gpt-example",
   }).pipe(
     Effect.provide(git),
-    Effect.provide(config),
+    Effect.provide(services),
     Effect.flip,
     Effect.runPromise,
   );
@@ -41,14 +47,43 @@ test("runReview rejects selections that cannot execute yet", async () => {
   );
 });
 
-test("runReview applies the resolved timeout to review work", async () => {
+test("runReview applies the resolved timeout to Git diff work", async () => {
   const git = Layer.succeed(GitService, {
     readDiff: () => Effect.never,
   });
 
   const error = await runReview("working-tree", { timeoutMs: 1 }).pipe(
     Effect.provide(git),
+    Effect.provide(services),
+    Effect.flip,
+    Effect.runPromise,
+  );
+
+  expect(error).toEqual(new ReviewTimeoutError({ timeoutMilliseconds: 1 }));
+});
+
+test("runReview applies the same resolved timeout to engine work", async () => {
+  const git = Layer.succeed(GitService, {
+    readDiff: () =>
+      Effect.succeed({
+        files: [
+          {
+            path: "src/example.ts",
+            source: "working-tree" as const,
+            patch: "@@ -0,0 +1 @@\n+export const example = true;\n",
+          },
+        ],
+        skippedFiles: [],
+      }),
+  });
+  const engine = Layer.succeed(ReviewEngine, {
+    review: () => Effect.never,
+  });
+
+  const error = await runReview("working-tree", { timeoutMs: 1 }).pipe(
+    Effect.provide(git),
     Effect.provide(config),
+    Effect.provide(engine),
     Effect.flip,
     Effect.runPromise,
   );
@@ -77,7 +112,7 @@ test("runReview produces deterministic findings from added marker lines", async 
   });
   const report = await runReview("working-tree").pipe(
     Effect.provide(git),
-    Effect.provide(config),
+    Effect.provide(services),
     Effect.runPromise,
   );
 
@@ -135,7 +170,7 @@ test("finding IDs do not change when the same patch is staged", async () => {
             }),
         }),
       ),
-      Effect.provide(config),
+      Effect.provide(services),
       Effect.map((report) => report.findings[0]?.id),
       Effect.runPromise,
     );
@@ -173,7 +208,7 @@ test("runReview reports deterministic incomplete coverage", async () => {
           }),
       }),
     ),
-    Effect.provide(config),
+    Effect.provide(services),
     Effect.runPromise,
   );
 
@@ -208,4 +243,37 @@ test("runReview reports deterministic incomplete coverage", async () => {
       },
     ],
   });
+});
+
+test("runReview propagates typed engine failures", async () => {
+  const failure = new ReviewEngineFailure({
+    message: "Injected engine failure.",
+    cause: undefined,
+  });
+  const git = Layer.succeed(GitService, {
+    readDiff: () =>
+      Effect.succeed({
+        files: [
+          {
+            path: "src/example.ts",
+            source: "working-tree" as const,
+            patch: "@@ -0,0 +1 @@\n+export const example = true;\n",
+          },
+        ],
+        skippedFiles: [],
+      }),
+  });
+  const engine = Layer.succeed(ReviewEngine, {
+    review: () => Effect.fail(failure),
+  });
+
+  const error = await runReview("working-tree").pipe(
+    Effect.provide(git),
+    Effect.provide(config),
+    Effect.provide(engine),
+    Effect.flip,
+    Effect.runPromise,
+  );
+
+  expect(error).toBe(failure);
 });
