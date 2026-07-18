@@ -21,6 +21,7 @@ import {
 import {
   type GitError,
   type GitDiff,
+  type GitTextFile,
   GitService,
 } from "../git/git-service";
 import { buildReviewRequestV1 } from "../review/review-request";
@@ -55,19 +56,25 @@ const ensureSupportedFakeSelection = (
 const buildCoverageFiles = (
   diff: GitDiff,
 ): ReadonlyArray<ReviewFileCoverage> =>
-  [
-    ...diff.files.map((file) => ({
-      path: file.path,
-      source: file.source,
-      status: "reviewed" as const,
-    })),
-    ...diff.skippedFiles.map((file) => ({
-      ...file,
-      status: "skipped" as const,
-    })),
-  ].sort((left, right) =>
+  diff.files.map((file): ReviewFileCoverage =>
+    file.kind === "text"
+      ? {
+          path: file.path,
+          source: file.source,
+          status: "reviewed",
+        }
+      : {
+          path: file.path,
+          source: file.source,
+          status: "skipped",
+          reason: "binary",
+        }
+  ).sort((left, right) =>
     left.path < right.path ? -1 : left.path > right.path ? 1 : 0
   );
+
+const textFiles = (diff: GitDiff): ReadonlyArray<GitTextFile> =>
+  diff.files.filter((file): file is GitTextFile => file.kind === "text");
 
 const buildReviewReport = (
   scope: ReviewScope,
@@ -75,19 +82,21 @@ const buildReviewReport = (
   findings: ReadonlyArray<ReviewFindingV1>,
 ): ReviewReportV3 => {
   const coverageFiles = buildCoverageFiles(diff);
+  const reviewedFiles = textFiles(diff).length;
+  const skippedFiles = diff.files.length - reviewedFiles;
 
   return decodeReviewReportV3({
     schemaVersion: 3,
     scope,
     summary: {
       changedFiles: coverageFiles.length,
-      reviewedFiles: diff.files.length,
-      skippedFiles: diff.skippedFiles.length,
+      reviewedFiles,
+      skippedFiles,
       findings: findings.length,
     },
     coverage: {
       schemaVersion: 1,
-      complete: diff.skippedFiles.length === 0,
+      complete: skippedFiles === 0,
       files: coverageFiles,
     },
     findings,
@@ -110,6 +119,7 @@ export const runReview = (
     yield* ensureSupportedFakeSelection(config);
     return yield* Effect.gen(function* () {
       const diff = yield* git.readDiff(scope);
+      const reviewableFiles = textFiles(diff);
       const request = buildReviewRequestV1({
         repository: { scope },
         config: {
@@ -117,7 +127,11 @@ export const runReview = (
           model: config.model,
           concurrency: config.concurrency,
         },
-        files: diff.files,
+        files: reviewableFiles.map(({ path, source, patch }) => ({
+          path,
+          source,
+          patch,
+        })),
       });
       const findings = yield* engine.review(request);
       return buildReviewReport(scope, diff, findings);

@@ -2,7 +2,6 @@ import { describe, expect, test } from "bun:test";
 import * as Effect from "effect/Effect";
 import {
   findUnmergedPaths,
-  mergePatchTargetsByPath,
   parseChangeStatus,
   parseNulSeparatedChanges,
   parseNulSeparatedPaths,
@@ -35,6 +34,7 @@ describe("Git change parsing", () => {
         score: 100,
         path: "src/new.ts",
         pathspecs: ["src/old.ts", "src/new.ts"],
+        previousPath: "src/old.ts",
       },
     ]);
   });
@@ -66,24 +66,6 @@ describe("Git change parsing", () => {
         { status: "U", path: "b.ts", pathspecs: ["b.ts"] },
       ]),
     ).toEqual(["b.ts", "z.ts"]);
-  });
-
-  test("merges patch targets and preserves every rename pathspec", () => {
-    expect(
-      mergePatchTargetsByPath([
-        { status: "M", path: "new.ts", pathspecs: ["new.ts"] },
-        {
-          status: "R",
-          score: 100,
-          path: "new.ts",
-          pathspecs: ["old.ts", "new.ts"],
-        },
-        { status: "A", path: "a.ts", pathspecs: ["a.ts"] },
-      ]),
-    ).toEqual([
-      { path: "a.ts", pathspecs: ["a.ts"] },
-      { path: "new.ts", pathspecs: ["new.ts", "old.ts"] },
-    ]);
   });
 
   test.each([

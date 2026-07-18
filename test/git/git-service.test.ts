@@ -20,10 +20,6 @@ import {
   type Service,
   layer as commandRunnerLayer,
 } from "../../src/platform/command-runner";
-import {
-  FileInspector,
-  type Service as FileInspectorService,
-} from "../../src/platform/file-inspector";
 import { gitResult, makeGitRunnerFixture } from "./git-runner-fixture";
 
 const detectRepository = ["rev-parse", "--is-inside-work-tree"] as const;
@@ -31,7 +27,7 @@ const resolveRepositoryRoot = ["rev-parse", "--show-toplevel"] as const;
 const listStaged = [
   "diff",
   "--cached",
-  "--find-renames",
+  "--find-copies-harder",
   "--name-status",
   "-z",
   "--diff-filter=ACDMRTUXB",
@@ -39,7 +35,7 @@ const listStaged = [
 ] as const;
 const listUnstaged = [
   "diff",
-  "--find-renames",
+  "--find-copies-harder",
   "--name-status",
   "-z",
   "--diff-filter=ACDMRTUXB",
@@ -59,28 +55,43 @@ const resolveHead = [
   "HEAD^{commit}",
 ] as const;
 
-const provideGit = (
-  runner: Service,
-  inspector: FileInspectorService = { size: () => Effect.succeed(1n) },
-) =>
+const provideGit = (runner: Service) =>
   layer.pipe(
-    Layer.provide(
-      Layer.merge(
-        Layer.succeed(CommandRunner, runner),
-        Layer.succeed(FileInspector, inspector),
-      ),
-    ),
+    Layer.provide(Layer.succeed(CommandRunner, runner)),
   );
 
 const readDiff = (
   runner: Service,
   scope: "staged" | "working-tree",
-  inspector?: FileInspectorService,
 ) =>
   GitService.pipe(
     Effect.flatMap((git) => git.readDiff(scope)),
-    Effect.provide(provideGit(runner, inspector)),
+    Effect.provide(provideGit(runner)),
   );
+
+const addedPatch = (path: string, content = "export const added = true;") =>
+  [
+    `diff --git a/${path} b/${path}`,
+    "new file mode 100644",
+    "index 0000000..1111111",
+    "--- /dev/null",
+    `+++ b/${path}`,
+    "@@ -0,0 +1 @@",
+    `+${content}`,
+    "",
+  ].join("\n");
+
+const modifiedPatch = (path: string) =>
+  [
+    `diff --git a/${path} b/${path}`,
+    "index 1111111..2222222 100644",
+    `--- a/${path}`,
+    `+++ b/${path}`,
+    "@@ -1 +1 @@",
+    "-old",
+    "+new",
+    "",
+  ].join("\n");
 
 const expectRepositoryPrelude = (
   fixture: ReturnType<typeof makeGitRunnerFixture>,
@@ -167,19 +178,13 @@ describe("GitService orchestration", () => {
 
   test("collects only the staged flow for staged scope", async () => {
     const fixture = makeGitRunnerFixture();
-    const objectId = "a".repeat(40);
     expectRepositoryPrelude(fixture, "A\0staged.ts\0");
-    fixture.expectGit(
-      ["rev-parse", "--verify", "--quiet", ":./staged.ts"],
-      gitResult(objectId),
-    );
-    fixture.expectGit(["cat-file", "-s", objectId], gitResult("10\n"));
     fixture.expectGit(
       (args) =>
         args[0] === "diff" &&
         args.includes("--cached") &&
         args.includes("staged.ts"),
-      gitResult("patch:staged.ts"),
+      gitResult(addedPatch("staged.ts")),
       "staged patch",
     );
 
@@ -187,9 +192,13 @@ describe("GitService orchestration", () => {
       Effect.runPromise,
     );
 
-    expect(diff.files).toEqual([
-      { path: "staged.ts", source: "staged", patch: "patch:staged.ts" },
-    ]);
+    expect(diff.files[0]).toMatchObject({
+      kind: "text",
+      path: "staged.ts",
+      source: "staged",
+      status: "A",
+      hunks: [{ oldLineCount: 0, newLineCount: 1 }],
+    });
     fixture.verify();
   });
 
@@ -202,9 +211,17 @@ describe("GitService orchestration", () => {
     fixture.expectGit(
       (args) =>
         args[0] === "diff" &&
+        args[1] === "HEAD" &&
+        args.includes("--name-status"),
+      gitResult("M\0tracked.ts\0"),
+      "normalized working-tree changes",
+    );
+    fixture.expectGit(
+      (args) =>
+        args[0] === "diff" &&
         args.includes("HEAD") &&
         args.filter((argument) => argument === "tracked.ts").length === 1,
-      gitResult("patch:tracked.ts"),
+      gitResult(modifiedPatch("tracked.ts")),
       "merged tracked patch",
     );
     fixture.expectGit(
@@ -212,7 +229,7 @@ describe("GitService orchestration", () => {
         args[0] === "diff" &&
         args.includes("--no-index") &&
         args.includes("new.ts"),
-      gitResult("patch:new.ts", 1),
+      gitResult(addedPatch("new.ts"), 1),
       "untracked patch",
     );
 
@@ -220,13 +237,14 @@ describe("GitService orchestration", () => {
       Effect.runPromise,
     );
 
-    expect(diff.files).toEqual([
+    expect(diff.files).toMatchObject([
       {
+        kind: "text",
         path: "tracked.ts",
         source: "working-tree",
-        patch: "patch:tracked.ts",
+        status: "M",
       },
-      { path: "new.ts", source: "untracked", patch: "patch:new.ts" },
+      { kind: "text", path: "new.ts", source: "untracked", status: "A" },
     ]);
     fixture.verify();
   });
@@ -245,9 +263,17 @@ describe("GitService orchestration", () => {
     fixture.expectGit(
       (args) =>
         args[0] === "diff" &&
+        args[1] === emptyTreeObjectId &&
+        args.includes("--name-status"),
+      gitResult("A\0file.ts\0"),
+      "initial working-tree changes",
+    );
+    fixture.expectGit(
+      (args) =>
+        args[0] === "diff" &&
         args.includes(emptyTreeObjectId) &&
         args.includes("file.ts"),
-      gitResult("patch:file.ts"),
+      gitResult(addedPatch("file.ts")),
       "initial tracked patch",
     );
 
@@ -331,6 +357,68 @@ const runGit = (
   );
 
 describe("GitService temporary repository integration", () => {
+  test("preserves copy status, score, and source identity", async () => {
+    const repository = await FileSystem.FileSystem.pipe(
+      Effect.flatMap((fileSystem) =>
+        fileSystem.makeTempDirectory({ prefix: "reviewstuff-git-copy-" })
+      ),
+      Effect.provide(BunServices.layer),
+      Effect.runPromise,
+    );
+
+    await runGit(repository, ["init", "--quiet"]).pipe(Effect.runPromise);
+    await runGit(repository, ["config", "user.email", "test@example.com"])
+      .pipe(Effect.runPromise);
+    await runGit(repository, ["config", "user.name", "Test"])
+      .pipe(Effect.runPromise);
+    const original = "export const copied = true;\n";
+    await Bun.write(`${repository}/original.ts`, original);
+    await runGit(repository, ["add", "original.ts"]).pipe(Effect.runPromise);
+    await runGit(repository, ["commit", "--quiet", "-m", "base"])
+      .pipe(Effect.runPromise);
+    await Bun.write(`${repository}/copy.ts`, original);
+    await runGit(repository, ["add", "copy.ts"]).pipe(Effect.runPromise);
+
+    const liveRunner = await CommandRunner.pipe(
+      Effect.provide(commandRunnerLive),
+      Effect.runPromise,
+    );
+    const repositoryRunner: Service = {
+      run: (request) =>
+        liveRunner.run({
+          ...request,
+          workingDirectory: request.workingDirectory ?? repository,
+        }),
+    };
+    const diff = await readDiff(repositoryRunner, "staged").pipe(
+      Effect.runPromise,
+    );
+
+    expect(diff.files).toEqual([{
+      kind: "text",
+      path: "copy.ts",
+      previousPath: "original.ts",
+      score: 100,
+      source: "staged",
+      status: "C",
+      patch: [
+        "diff --git a/original.ts b/copy.ts",
+        "similarity index 100%",
+        "copy from original.ts",
+        "copy to copy.ts",
+        "",
+      ].join("\n"),
+      fileHeader: [
+        "diff --git a/original.ts b/copy.ts",
+        "similarity index 100%",
+        "copy from original.ts",
+        "copy to copy.ts",
+        "",
+      ].join("\n"),
+      hunks: [],
+    }]);
+  });
+
   test("blocks staged review when the repository has merge conflicts", async () => {
     const repository = await FileSystem.FileSystem.pipe(
       Effect.flatMap((fileSystem) =>
@@ -404,6 +492,7 @@ describe("GitService temporary repository integration", () => {
       "export const included = true;\n",
     );
     await Bun.write(`${repository}/binary.dat`, new Uint8Array([0, 1, 2, 3]));
+    await Bun.write(`${repository}/empty.txt`, "");
     await Bun.write(
       `${repository}/large.txt`,
       `large\n${"x".repeat(600 * 1024)}`,
@@ -447,9 +536,9 @@ describe("GitService temporary repository integration", () => {
 
     expect(cliResult.exitCode).toBe(0);
     expect(report.summary).toEqual({
-      changedFiles: 3,
-      reviewedFiles: 1,
-      skippedFiles: 2,
+      changedFiles: 4,
+      reviewedFiles: 3,
+      skippedFiles: 1,
       findings: 0,
     });
     expect(report.coverage.complete).toBe(false);
@@ -461,6 +550,11 @@ describe("GitService temporary repository integration", () => {
         reason: "binary",
       },
       {
+        path: "empty.txt",
+        source: "untracked",
+        status: "reviewed",
+      },
+      {
         path: "included.ts",
         source: "working-tree",
         status: "reviewed",
@@ -468,10 +562,7 @@ describe("GitService temporary repository integration", () => {
       {
         path: "large.txt",
         source: "untracked",
-        status: "skipped",
-        reason: "file-too-large",
-        sizeBytes: String("large\n".length + 600 * 1024),
-        limitBytes: 512 * 1024,
+        status: "reviewed",
       },
     ]);
   });

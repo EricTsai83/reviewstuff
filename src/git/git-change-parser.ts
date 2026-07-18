@@ -15,12 +15,12 @@ export type GitChangeStatus =
 export interface GitPatchTarget {
   readonly path: string;
   readonly pathspecs: ReadonlyArray<string>;
-}
-
-export interface GitChange extends GitPatchTarget {
   readonly status: GitChangeStatus;
   readonly score?: number;
+  readonly previousPath?: string;
 }
+
+export type GitChange = GitPatchTarget;
 
 const invalidGitOutput = (
   operation: string,
@@ -108,6 +108,7 @@ export const parseNulSeparatedChanges = (
             ...parsedStatus,
             path: targetPath,
             pathspecs: [sourcePath, targetPath],
+            previousPath: sourcePath,
           });
           index += 3;
           continue;
@@ -137,23 +138,3 @@ export const findUnmergedPaths = (
       .filter((change) => change.status === "U")
       .map((change) => change.path),
   )].sort((left, right) => (left < right ? -1 : left > right ? 1 : 0));
-
-export const mergePatchTargetsByPath = (
-  changes: ReadonlyArray<GitChange>,
-): ReadonlyArray<GitPatchTarget> => {
-  const pathspecsByPath = new Map<string, Set<string>>();
-
-  for (const change of changes) {
-    const pathspecs = pathspecsByPath.get(change.path) ?? new Set<string>();
-    for (const pathspec of change.pathspecs) {
-      pathspecs.add(pathspec);
-    }
-    pathspecsByPath.set(change.path, pathspecs);
-  }
-
-  return [...pathspecsByPath.entries()]
-    .map(([path, pathspecs]) => ({ path, pathspecs: [...pathspecs].sort() }))
-    .sort((left, right) =>
-      left.path < right.path ? -1 : left.path > right.path ? 1 : 0
-    );
-};

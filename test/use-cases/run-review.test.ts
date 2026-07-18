@@ -22,6 +22,19 @@ const config = Layer.succeed(ConfigService, {
   load: (overrides) => Effect.succeed(resolveReviewConfig(undefined, overrides)),
 });
 const services = Layer.merge(config, fakeReviewEngine);
+const gitTextFile = (
+  path: string,
+  source: "staged" | "working-tree" | "untracked",
+  patch: string,
+) => ({
+  kind: "text" as const,
+  path,
+  source,
+  status: source === "untracked" ? "A" as const : "M" as const,
+  patch,
+  fileHeader: "",
+  hunks: [],
+});
 
 test("runReview rejects selections that cannot execute yet", async () => {
   const git = Layer.succeed(GitService, {
@@ -68,13 +81,12 @@ test("runReview applies the same resolved timeout to engine work", async () => {
     readDiff: () =>
       Effect.succeed({
         files: [
-          {
-            path: "src/example.ts",
-            source: "working-tree" as const,
-            patch: "@@ -0,0 +1 @@\n+export const example = true;\n",
-          },
+          gitTextFile(
+            "src/example.ts",
+            "working-tree",
+            "@@ -0,0 +1 @@\n+export const example = true;\n",
+          ),
         ],
-        skippedFiles: [],
       }),
   });
   const engine = Layer.succeed(ReviewEngine, {
@@ -93,13 +105,18 @@ test("runReview applies the same resolved timeout to engine work", async () => {
 });
 
 test("runReview builds the normalized request before invoking the engine", async () => {
-  const file = {
+  const requestFile = {
     path: "src/example.ts",
     source: "working-tree" as const,
     patch: "@@ -0,0 +1 @@\n+export const example = true;\n",
   };
+  const file = gitTextFile(
+    requestFile.path,
+    requestFile.source,
+    requestFile.patch,
+  );
   const git = Layer.succeed(GitService, {
-    readDiff: () => Effect.succeed({ files: [file], skippedFiles: [] }),
+    readDiff: () => Effect.succeed({ files: [file] }),
   });
   let received: ReviewRequestV1 | undefined;
   const engine = Layer.succeed(ReviewEngine, {
@@ -126,7 +143,7 @@ test("runReview builds the normalized request before invoking the engine", async
     context: {
       contentType: "untrusted-repository-data",
       repository: { scope: "working-tree" },
-      files: [file],
+      files: [requestFile],
     },
     options: {
       profile: "quick",
@@ -141,18 +158,17 @@ test("runReview produces deterministic findings from added marker lines", async 
     readDiff: () =>
       Effect.succeed({
         files: [
-          {
-            path: "src/example.ts",
-            source: "working-tree" as const,
-            patch: [
+          gitTextFile(
+            "src/example.ts",
+            "working-tree",
+            [
               "@@ -2,2 +2,3 @@",
               " context",
               "+const marker = 'REVIEWSTUFF_FAKE_FINDING';",
               " context",
             ].join("\n"),
-          },
+          ),
         ],
-        skippedFiles: [],
       }),
   });
   const report = await runReview("working-tree").pipe(
@@ -204,14 +220,12 @@ test("finding IDs do not change when the same patch is staged", async () => {
           readDiff: () =>
             Effect.succeed({
               files: [
-                {
-                  path: "src/example.ts",
+                gitTextFile(
+                  "src/example.ts",
                   source,
-                  patch:
-                    "@@ -0,0 +1 @@\n+// REVIEWSTUFF_FAKE_FINDING stable\n",
-                },
+                  "@@ -0,0 +1 @@\n+// REVIEWSTUFF_FAKE_FINDING stable\n",
+                ),
               ],
-              skippedFiles: [],
             }),
         }),
       ),
@@ -230,24 +244,16 @@ test("runReview reports deterministic incomplete coverage", async () => {
         readDiff: () =>
           Effect.succeed({
             files: [
+              gitTextFile(
+                "src/reviewed.ts",
+                "working-tree",
+                "@@ -0,0 +1 @@\n+export const reviewed = true;\n",
+              ),
               {
-                path: "src/reviewed.ts",
-                source: "working-tree" as const,
-                patch: "@@ -0,0 +1 @@\n+export const reviewed = true;\n",
-              },
-            ],
-            skippedFiles: [
-              {
+                kind: "binary" as const,
                 path: "assets/image.dat",
                 source: "untracked" as const,
-                reason: "binary" as const,
-              },
-              {
-                path: "fixtures/large.json",
-                source: "working-tree" as const,
-                reason: "file-too-large" as const,
-                sizeBytes: "600000",
-                limitBytes: 524288,
+                status: "A" as const,
               },
             ],
           }),
@@ -258,9 +264,9 @@ test("runReview reports deterministic incomplete coverage", async () => {
   );
 
   expect(report.summary).toEqual({
-    changedFiles: 3,
+    changedFiles: 2,
     reviewedFiles: 1,
-    skippedFiles: 2,
+    skippedFiles: 1,
     findings: 0,
   });
   expect(report.coverage).toEqual({
@@ -271,14 +277,6 @@ test("runReview reports deterministic incomplete coverage", async () => {
         path: "assets/image.dat",
         source: "untracked",
         reason: "binary",
-        status: "skipped",
-      },
-      {
-        path: "fixtures/large.json",
-        source: "working-tree",
-        reason: "file-too-large",
-        sizeBytes: "600000",
-        limitBytes: 524288,
         status: "skipped",
       },
       {
@@ -299,13 +297,12 @@ test("runReview propagates typed engine failures", async () => {
     readDiff: () =>
       Effect.succeed({
         files: [
-          {
-            path: "src/example.ts",
-            source: "working-tree" as const,
-            patch: "@@ -0,0 +1 @@\n+export const example = true;\n",
-          },
+          gitTextFile(
+            "src/example.ts",
+            "working-tree",
+            "@@ -0,0 +1 @@\n+export const example = true;\n",
+          ),
         ],
-        skippedFiles: [],
       }),
   });
   const engine = Layer.succeed(ReviewEngine, {

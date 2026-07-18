@@ -3,10 +3,8 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import type { ReviewScope } from "../domain/scope";
 import * as CommandRunner from "../platform/command-runner";
-import * as FileInspector from "../platform/file-inspector";
 import {
   findUnmergedPaths,
-  mergePatchTargetsByPath,
   parseNulSeparatedChanges,
   parseNulSeparatedPaths,
   type GitChange,
@@ -32,10 +30,12 @@ import {
 } from "./git-errors";
 
 export type {
+  GitBinaryFile,
   GitDiff,
-  GitFilePatch,
-  GitSkippedFile,
+  GitFile,
+  GitTextFile,
 } from "./git-diff";
+export type { GitDiffHunk } from "./unified-diff-parser";
 export {
   GitChangedFileUnavailableError,
   GitCommandError,
@@ -56,8 +56,8 @@ export class GitService extends Context.Service<
   GitService,
   {
     /**
-     * Collects reviewable text patches for the selected scope and reports
-     * binary or oversized files separately.
+     * Collects normalized metadata for every selected file and complete text
+     * hunks when the file is not binary.
      */
     readonly readDiff: (
       scope: ReviewScope,
@@ -67,7 +67,7 @@ export class GitService extends Context.Service<
 
 const diffSourceCollectionConcurrency = 2;
 const trackedChangeListingArguments = [
-  "--find-renames",
+  "--find-copies-harder",
   "--name-status",
   "-z",
   "--diff-filter=ACDMRTUXB",
@@ -157,6 +157,27 @@ const listTrackedChanges = (
   );
 };
 
+const listWorkingTreeChanges = (
+  runner: CommandRunner.Service,
+  repositoryRoot: string,
+  reviewBase: string,
+): Effect.Effect<ReadonlyArray<GitChange>, GitError> => {
+  const operation = "list working-tree files";
+
+  return requireGitSuccess(
+    runner,
+    operation,
+    [
+      "diff",
+      reviewBase,
+      ...trackedChangeListingArguments,
+    ],
+    repositoryRoot,
+  ).pipe(
+    Effect.flatMap((output) => parseNulSeparatedChanges(output, operation)),
+  );
+};
+
 const listUntrackedFiles = (
   runner: CommandRunner.Service,
   repositoryRoot: string,
@@ -215,7 +236,6 @@ const resolveReviewBase = Effect.fn("GitService.resolveReviewBase")(
 const collectStagedDiff = Effect.fn("GitService.collectStagedDiff")(
   (
     runner: CommandRunner.Service,
-    inspector: FileInspector.Service,
     repositoryRoot: string,
     stagedChanges: ReadonlyArray<GitChange>,
   ): Effect.Effect<GitDiff, GitError> =>
@@ -223,7 +243,6 @@ const collectStagedDiff = Effect.fn("GitService.collectStagedDiff")(
       Effect.andThen(
         collectDiffPatches({
           runner,
-          inspector,
           targets: stagedChanges,
           source: "staged",
           repositoryRoot,
@@ -236,7 +255,6 @@ const collectWorkingTreeDiff = Effect.fn(
   "GitService.collectWorkingTreeDiff",
 )(function* (
   runner: CommandRunner.Service,
-  inspector: FileInspector.Service,
   repositoryRoot: string,
   stagedChanges: ReadonlyArray<GitChange>,
 ): Effect.fn.Return<GitDiff, GitError> {
@@ -250,27 +268,27 @@ const collectWorkingTreeDiff = Effect.fn(
 
   const untrackedFiles = yield* listUntrackedFiles(runner, repositoryRoot);
   const reviewBase = yield* resolveReviewBase(runner, repositoryRoot);
-
-  // A file may appear in both staged and unstaged changes. Merge its
-  // pathspecs so the working-tree diff reads every tracked file only once.
-  const trackedPatchTargets = mergePatchTargetsByPath(trackedChanges);
+  const workingTreeChanges = yield* listWorkingTreeChanges(
+    runner,
+    repositoryRoot,
+    reviewBase,
+  );
   const untrackedPatchTargets = untrackedFiles.map((path) => ({
     path,
     pathspecs: [path],
+    status: "A" as const,
   }));
   const [trackedDiff, untrackedDiff] = yield* Effect.all(
     [
       collectDiffPatches({
         runner,
-        inspector,
-        targets: trackedPatchTargets,
+        targets: workingTreeChanges,
         source: "working-tree",
         repositoryRoot,
         diffBase: reviewBase,
       }),
       collectDiffPatches({
         runner,
-        inspector,
         targets: untrackedPatchTargets,
         source: "untracked",
         repositoryRoot,
@@ -281,16 +299,11 @@ const collectWorkingTreeDiff = Effect.fn(
 
   return {
     files: [...trackedDiff.files, ...untrackedDiff.files],
-    skippedFiles: [
-      ...trackedDiff.skippedFiles,
-      ...untrackedDiff.skippedFiles,
-    ],
   };
 });
 
 const readDiff = Effect.fn("GitService.readDiff")(function* (
   runner: CommandRunner.Service,
-  inspector: FileInspector.Service,
   scope: ReviewScope,
 ): Effect.fn.Return<GitDiff, GitError> {
   yield* ensureReviewableWorkingTree(runner);
@@ -304,7 +317,6 @@ const readDiff = Effect.fn("GitService.readDiff")(function* (
   if (scope === "staged") {
     return yield* collectStagedDiff(
       runner,
-      inspector,
       repositoryRoot,
       stagedChanges,
     );
@@ -312,7 +324,6 @@ const readDiff = Effect.fn("GitService.readDiff")(function* (
 
   return yield* collectWorkingTreeDiff(
     runner,
-    inspector,
     repositoryRoot,
     stagedChanges,
   );
@@ -321,15 +332,14 @@ const readDiff = Effect.fn("GitService.readDiff")(function* (
 export const layer: Layer.Layer<
   GitService,
   never,
-  CommandRunner.CommandRunner | FileInspector.FileInspector
+  CommandRunner.CommandRunner
 > = Layer.effect(
   GitService,
   Effect.gen(function* () {
     const runner = yield* CommandRunner.CommandRunner;
-    const inspector = yield* FileInspector.FileInspector;
 
     return {
-      readDiff: (scope) => readDiff(runner, inspector, scope),
+      readDiff: (scope) => readDiff(runner, scope),
     };
   }),
 );
