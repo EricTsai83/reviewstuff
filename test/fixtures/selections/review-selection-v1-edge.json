@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 1,
+  "files": [
+    {
+      "path": "src/partial.ts",
+      "source": "staged",
+      "patch": "@@ -1 +1 @@\n-old\n+new\n"
+    }
+  ],
+  "coverage": {
+    "schemaVersion": 1,
+    "complete": false,
+    "files": [
+      {
+        "path": "src/partial.ts",
+        "source": "staged",
+        "status": "truncated",
+        "reason": "request-budget",
+        "selectedHunks": 1,
+        "totalHunks": 2
+      },
+      {
+        "path": "src/skipped.ts",
+        "source": "untracked",
+        "status": "skipped",
+        "reason": "request-budget",
+        "selectedHunks": 0,
+        "totalHunks": 1
+      }
+    ]
+  },
+  "estimate": {
+    "schemaVersion": 1,
+    "unit": "tokens",
+    "maxTokens": 121,
+    "fixedRequestOverheadTokens": 20,
+    "outputReserveTokens": 20,
+    "selectedRequestTokens": 81,
+    "totalReservedTokens": 121,
+    "fitsBudget": true
+  }
+}

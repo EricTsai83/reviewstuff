@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "files": [
+    {
+      "path": "src/current.ts",
+      "source": "working-tree",
+      "patch": "@@ -0,0 +1 @@\n+export const current = true;\n"
+    }
+  ],
+  "coverage": {
+    "schemaVersion": 1,
+    "complete": true,
+    "files": [
+      {
+        "path": "src/current.ts",
+        "source": "working-tree",
+        "status": "reviewed",
+        "selectedHunks": 1,
+        "totalHunks": 1
+      }
+    ]
+  },
+  "estimate": {
+    "schemaVersion": 1,
+    "unit": "tokens",
+    "maxTokens": 512,
+    "fixedRequestOverheadTokens": 64,
+    "outputReserveTokens": 128,
+    "selectedRequestTokens": 108,
+    "totalReservedTokens": 300,
+    "fitsBudget": true
+  }
+}
