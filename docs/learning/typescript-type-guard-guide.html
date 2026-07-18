@@ -1,0 +1,842 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="從 string 與 number 的簡單 union 開始，理解 TypeScript Type Guard、型別縮窄、type predicate 與 value is T 的設計方式。"
+    />
+    <title>TypeScript Type Guard：從條件判斷到型別縮窄</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --clay: #d97757;
+        --slate: #141413;
+        --ivory: #faf9f5;
+        --oat: #e3dacc;
+        --white: #ffffff;
+        --gray-100: #f0eee6;
+        --gray-700: #3d3d3a;
+        --warning: #c78e3f;
+        --good: #4f7658;
+        --space-sm: 8px;
+        --space-md: 12px;
+        --space-lg: 16px;
+        --space-xl: 24px;
+        --space-2xl: 32px;
+        --space-3xl: 48px;
+        --radius-sm: 4px;
+        --radius-md: 8px;
+        --content-width: 68ch;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html {
+        scroll-behavior: smooth;
+      }
+
+      body {
+        margin: 0;
+        background: var(--ivory);
+        color: var(--slate);
+        font-family:
+          ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+          sans-serif;
+        font-size: 16px;
+        font-weight: 430;
+        line-height: 1.58;
+      }
+
+      main {
+        max-width: var(--content-width);
+        margin: 0 auto;
+        padding: var(--space-3xl) var(--space-xl);
+      }
+
+      article {
+        padding: 0;
+        border: 0;
+        border-radius: 0;
+        background: transparent;
+        box-shadow: none;
+      }
+
+      h1 {
+        max-width: none;
+        margin: 0;
+        font-size: 1.8rem;
+        font-weight: 720;
+        line-height: 1.18;
+        letter-spacing: -0.025em;
+        overflow-wrap: normal;
+        text-wrap: balance;
+      }
+
+      h2 {
+        margin: var(--space-3xl) 0 var(--space-lg);
+        font-size: 1.22rem;
+        line-height: 1.25;
+        letter-spacing: -0.01em;
+      }
+
+      h3 {
+        margin: var(--space-2xl) 0 var(--space-md);
+        font-size: 1rem;
+        line-height: 1.35;
+      }
+
+      p,
+      ul,
+      ol,
+      .deck,
+      .callout,
+      table,
+      pre {
+        max-width: var(--content-width);
+      }
+
+      p,
+      ul,
+      ol {
+        margin-top: 0;
+        margin-bottom: var(--space-lg);
+      }
+
+      li + li {
+        margin-top: var(--space-sm);
+      }
+
+      .deck {
+        margin: var(--space-lg) 0 var(--space-2xl);
+        color: var(--gray-700);
+        font-size: 1.05rem;
+        line-height: 1.62;
+      }
+
+      nav {
+        margin-bottom: var(--space-3xl);
+        padding: var(--space-lg) var(--space-xl);
+        border: 1px solid var(--oat);
+        border-radius: var(--radius-md);
+        background: var(--white);
+      }
+
+      nav strong {
+        display: block;
+        margin-bottom: var(--space-sm);
+        font-size: 0.92rem;
+      }
+
+      nav ol {
+        margin: 0;
+        padding-left: 1.25rem;
+      }
+
+      a {
+        color: var(--clay);
+        text-decoration: underline;
+        text-decoration-thickness: 1px;
+        text-underline-offset: 3px;
+      }
+
+      p code,
+      li code,
+      td code,
+      th code {
+        padding: 0.08em 0.3em;
+        border: 1px solid var(--oat);
+        border-radius: var(--radius-sm);
+        background: var(--gray-100);
+        color: var(--slate);
+        font-size: 0.92em;
+        overflow-wrap: anywhere;
+      }
+
+      .callout {
+        margin: var(--space-xl) 0;
+        padding: var(--space-lg) var(--space-xl);
+        border: 1px solid var(--oat);
+        border-left: 4px solid var(--clay);
+        border-radius: var(--radius-md);
+        background: var(--gray-100);
+      }
+
+      .callout.warning {
+        border-left-color: var(--warning);
+      }
+
+      .callout p:last-child {
+        margin-bottom: 0;
+      }
+
+      .comparison {
+        width: 100%;
+        margin: var(--space-xl) 0 var(--space-2xl);
+        overflow-x: auto;
+      }
+
+      table {
+        width: 100%;
+        min-width: 620px;
+        border-collapse: collapse;
+        background: var(--white);
+        font-size: 0.93rem;
+      }
+
+      th,
+      td {
+        padding: 10px 12px;
+        border: 1px solid var(--oat);
+        text-align: left;
+        vertical-align: top;
+      }
+
+      th {
+        background: var(--gray-100);
+        font-weight: 650;
+      }
+
+      .good {
+        color: var(--good);
+        font-weight: 650;
+      }
+
+      .risk {
+        color: #98622e;
+        font-weight: 650;
+      }
+
+      pre {
+        position: relative;
+        width: 100%;
+        margin: var(--space-lg) 0 var(--space-xl);
+        overflow: hidden;
+        border: 1px solid #26241f;
+        border-radius: var(--radius-md);
+        background: #11110f;
+        color: #d8d4ca;
+      }
+
+      pre code {
+        display: block;
+        padding: 18px 64px 18px 22px;
+        overflow-x: auto;
+        border: 0;
+        background: transparent;
+        color: inherit;
+        font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+        font-size: 0.875rem;
+        font-weight: 400;
+        line-height: 1.62;
+        scrollbar-width: none;
+        white-space: pre;
+      }
+
+      pre code::-webkit-scrollbar {
+        width: 0;
+        height: 0;
+      }
+
+      pre .label {
+        display: none;
+      }
+
+      .copy-code {
+        position: absolute;
+        top: 9px;
+        right: 9px;
+        z-index: 1;
+        display: inline-flex;
+        width: 30px;
+        height: 30px;
+        align-items: center;
+        justify-content: center;
+        padding: 0;
+        border: 1px solid rgb(250 249 245 / 14%);
+        border-radius: var(--radius-sm);
+        background: rgb(250 249 245 / 6%);
+        color: rgb(250 249 245 / 72%);
+        cursor: pointer;
+      }
+
+      .copy-code:hover,
+      .copy-code:focus-visible {
+        border-color: rgb(250 249 245 / 28%);
+        outline: none;
+        background: rgb(250 249 245 / 12%);
+        color: var(--ivory);
+      }
+
+      .copy-code.copied {
+        border-color: rgb(143 184 106 / 42%);
+        background: rgb(143 184 106 / 14%);
+        color: #b8d99a;
+      }
+
+      .copy-code svg {
+        width: 13px;
+        height: 13px;
+        fill: none;
+        stroke: currentcolor;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+        stroke-width: 1.8;
+        pointer-events: none;
+      }
+
+      .code-scrollbar {
+        position: absolute;
+        right: 0;
+        bottom: 0;
+        left: 0;
+        height: 3px;
+        border-radius: 999px;
+        background: rgb(250 249 245 / 10%);
+        cursor: pointer;
+      }
+
+      .code-scrollbar.hidden {
+        display: none;
+      }
+
+      .code-scrollbar-thumb {
+        height: 100%;
+        border-radius: inherit;
+        background: rgb(255 148 110 / 82%);
+        cursor: grab;
+        transform: translateX(0);
+      }
+
+      .code-scrollbar-thumb:active {
+        cursor: grabbing;
+      }
+
+      pre code .k {
+        color: #ff946e;
+      }
+
+      pre code .s {
+        color: #8fb86a;
+      }
+
+      pre code .n,
+      pre code .p {
+        color: #d8d4ca;
+      }
+
+      pre code .c {
+        color: #858177;
+        font-style: italic;
+      }
+
+      pre code .f,
+      pre code .t {
+        color: #cfc6a2;
+      }
+
+      pre code .o {
+        color: #ff946e;
+      }
+
+      footer {
+        margin-top: var(--space-3xl);
+        padding-top: var(--space-xl);
+        border-top: 1px solid var(--oat);
+        color: var(--gray-700);
+      }
+
+      footer p:last-child {
+        margin-bottom: 0;
+      }
+
+      @media (max-width: 640px) {
+        body {
+          font-size: 15px;
+        }
+
+        h1 {
+          font-size: 1.65rem;
+        }
+
+        main {
+          padding: var(--space-xl);
+        }
+
+        nav,
+        .callout {
+          padding: var(--space-lg);
+        }
+
+        pre code {
+          font-size: 0.8125rem;
+          line-height: 1.5;
+        }
+
+        p code,
+        li code,
+        td code {
+          font-size: 0.9em;
+        }
+
+        table,
+        .deck,
+        footer {
+          font-size: 0.875rem;
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        html {
+          scroll-behavior: auto;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <article>
+        <h1>TypeScript Type Guard：從條件判斷到型別縮窄</h1>
+        <p class="deck">
+          Type Guard 的工作，是把 runtime 的真假判斷轉換成 TypeScript 可以理解的型別資訊。本文從
+          <code>string | number</code> 開始，不需要先懂 <code>unknown</code>，再逐步解釋
+          <code>value is string</code>、discriminated union 與安全的 guard 設計。
+        </p>
+
+        <nav aria-label="文章目錄">
+          <strong>閱讀順序</strong>
+          <ol>
+            <li><a href="#problem">先看 Type Guard 解決什麼問題</a></li>
+            <li><a href="#built-in">使用內建 narrowing</a></li>
+            <li><a href="#relationship">理解 Type Guard 與 Type Predicate 的關係</a></li>
+            <li><a href="#predicate">理解 value is string</a></li>
+            <li><a href="#design">設計物件型別與 guard</a></li>
+            <li><a href="#boundary">最後才引入 unknown</a></li>
+            <li><a href="#mistakes">避開常見錯誤</a></li>
+          </ol>
+        </nav>
+
+        <section id="problem">
+          <h2>Type Guard 解決的問題：一個值有不只一種可能</h2>
+          <p>假設 function 接受字串或數字：</p>
+
+          <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">const</span> printValue <span class="o">=</span> <span class="o">(</span>value<span class="o">:</span> string <span class="o">|</span> number<span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span> <span class="o">{</span>
+  value<span class="o">.</span><span class="p">toUpperCase</span><span class="o">(</span><span class="o">)</span><span class="o">;</span>
+  <span class="c">//    ^ number 沒有 toUpperCase</span>
+<span class="o">}</span><span class="o">;</span></code></pre>
+
+          <p>
+            TypeScript 阻止這段程式，因為 <code>value</code> 可能是 <code>number</code>。在呼叫字串方法前，程式必須先證明它目前真的是字串。
+          </p>
+
+          <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">const</span> printValue <span class="o">=</span> <span class="o">(</span>value<span class="o">:</span> string <span class="o">|</span> number<span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span> <span class="o">{</span>
+  <span class="k">if</span> <span class="o">(</span>typeof value <span class="o">=</span><span class="o">=</span><span class="o">=</span> <span class="s">"string"</span><span class="o">)</span> <span class="o">{</span>
+    value<span class="o">.</span><span class="p">toUpperCase</span><span class="o">(</span><span class="o">)</span><span class="o">;</span> <span class="c">// 這裡是 string</span>
+  <span class="o">}</span> <span class="k">else</span> <span class="o">{</span>
+    value<span class="o">.</span><span class="p">toFixed</span><span class="o">(</span><span class="o">)</span><span class="o">;</span>     <span class="c">// 這裡是 number</span>
+  <span class="o">}</span>
+<span class="o">}</span><span class="o">;</span></code></pre>
+
+          <p>
+            <code>typeof value === "string"</code> 同時做了兩件事：runtime 判斷真假，以及讓 TypeScript
+            在不同程式區塊中縮小型別範圍。這個縮小範圍的動作稱為 <strong>narrowing</strong>。
+          </p>
+        </section>
+
+        <section id="built-in">
+          <h2>先學內建 Type Guard，很多情況不需要自訂 function</h2>
+
+          <div class="comparison" role="region" aria-label="TypeScript 內建 Type Guard 比較" tabindex="0">
+            <table>
+              <thead>
+                <tr>
+                  <th scope="col">寫法</th>
+                  <th scope="col">適合判斷</th>
+                  <th scope="col">例子</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>typeof</code></td>
+                  <td>string、number、boolean 等基本型別</td>
+                  <td><code>typeof value === "string"</code></td>
+                </tr>
+                <tr>
+                  <td><code>instanceof</code></td>
+                  <td>由 class 建立的 instance</td>
+                  <td><code>error instanceof Error</code></td>
+                </tr>
+                <tr>
+                  <td><code>"key" in value</code></td>
+                  <td>物件是否具有某個 property</td>
+                  <td><code>"message" in result</code></td>
+                </tr>
+                <tr>
+                  <td>共同辨識欄位</td>
+                  <td>Discriminated union</td>
+                  <td><code>result._tag === "Success"</code></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p>
+            判斷只使用一次時，直接寫在 <code>if</code> 裡通常最清楚。只有當相同判斷會重複使用，或判斷邏輯較長時，才值得抽成自訂 Type Guard。
+          </p>
+        </section>
+
+        <section id="relationship">
+          <h2>Type Guard 是目的，Type Predicate 是自訂 guard 的 signature 工具</h2>
+          <p>
+            這兩個名詞相關，但不是同一件事。<strong>Type Guard</strong> 泛指任何能讓 TypeScript
+            縮窄型別的 runtime 判斷；<strong>Type Predicate</strong> 則是
+            <code>parameter is Type</code> 這種 signature，用來描述可重用的自訂 guard function。
+          </p>
+
+          <div class="comparison" role="region" aria-label="Type Guard 與 Type Predicate 比較" tabindex="0">
+            <table>
+              <thead>
+                <tr>
+                  <th scope="col">名詞</th>
+                  <th scope="col">它是什麼</th>
+                  <th scope="col">是否一定要寫 <code>value is T</code></th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Type Guard</td>
+                  <td>讓某個程式分支中的型別變得更精確的判斷。</td>
+                  <td class="good">不一定；<code>typeof</code>、<code>instanceof</code>、tag 比較本身就是 guard。</td>
+                </tr>
+                <tr>
+                  <td>Type Predicate</td>
+                  <td>描述自訂判斷 function 成功後，參數應縮窄成什麼型別的 signature。</td>
+                  <td class="risk">語法本身就是 <code>value is T</code>；只在抽成 function 時考慮。</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="callout">
+            <p>
+              每個可信的 <code>value is T</code> function 都是在建立自訂 Type Guard；但大多數簡單 Type Guard
+              都可以直接寫在 <code>if</code> 中，完全不需要 Type Predicate。
+            </p>
+          </div>
+
+          <h3>建議的設計順序</h3>
+          <ol>
+            <li>
+              <strong>判斷很短而且只用一次：</strong>直接使用 <code>typeof</code>、<code>instanceof</code>、
+              <code>in</code> 或 tag 比較。
+            </li>
+            <li>
+              <strong>你能控制物件型別：</strong>優先設計 discriminated union，讓資料本身帶有可辨識欄位。
+            </li>
+            <li>
+              <strong>相同判斷會重複：</strong>再抽成自訂 Type Guard，避免每個呼叫端重寫檢查。
+            </li>
+            <li>
+              <strong>TypeScript 無法推論，或這是公開的 guard API：</strong>明確寫出 <code>value is T</code>
+              契約，並確保 runtime 檢查真的足以證明 <code>T</code>。
+            </li>
+            <li>
+              <strong>外部資料結構很大：</strong>使用 schema decoder；不要讓一個手寫 predicate 承擔整份資料驗證。
+            </li>
+          </ol>
+        </section>
+
+        <section id="predicate">
+          <h2><code>value is string</code> 是 Type Predicate，不是新的 runtime 型別</h2>
+          <p>把剛才的字串判斷抽成 function：</p>
+
+          <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">const</span> isString <span class="o">=</span> <span class="o">(</span>
+  value<span class="o">:</span> string <span class="o">|</span> number<span class="o">,</span>
+<span class="o">)</span><span class="o">:</span> value is string <span class="o">=</span><span class="o">&gt;</span> typeof value <span class="o">=</span><span class="o">=</span><span class="o">=</span> <span class="s">"string"</span><span class="o">;</span></code></pre>
+
+          <p>這段 signature 可以拆成三部分：</p>
+          <ul>
+            <li><code>value</code>：必須對應 function 的參數名稱。</li>
+            <li><code>is</code>：表示「當結果為 true 時」。</li>
+            <li><code>string</code>：true 分支中要縮窄成的型別。</li>
+          </ul>
+
+          <blockquote class="callout">
+            <p>
+              把 <code>value is string</code> 讀成：「如果這個 function 回傳 true，參數 value 就是 string。」
+            </p>
+          </blockquote>
+
+          <p>
+            它寫在 return type 的位置，但 function 在 runtime 回傳的仍然只是 <code>boolean</code>。Type predicate
+            額外描述的是「回傳結果和參數型別之間的關係」。
+          </p>
+
+          <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">const</span> printValue <span class="o">=</span> <span class="o">(</span>value<span class="o">:</span> string <span class="o">|</span> number<span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span> <span class="o">{</span>
+  <span class="k">if</span> <span class="o">(</span><span class="f">isString</span><span class="o">(</span>value<span class="o">)</span><span class="o">)</span> <span class="o">{</span>
+    value<span class="o">.</span><span class="p">toUpperCase</span><span class="o">(</span><span class="o">)</span><span class="o">;</span> <span class="c">// string</span>
+  <span class="o">}</span> <span class="k">else</span> <span class="o">{</span>
+    value<span class="o">.</span><span class="p">toFixed</span><span class="o">(</span><span class="o">)</span><span class="o">;</span>     <span class="c">// number</span>
+  <span class="o">}</span>
+<span class="o">}</span><span class="o">;</span></code></pre>
+
+          <h3>為什麼不能只寫 <code>: boolean</code>？</h3>
+          <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">const</span> isString <span class="o">=</span> <span class="o">(</span>
+  value<span class="o">:</span> string <span class="o">|</span> number<span class="o">,</span>
+<span class="o">)</span><span class="o">:</span> boolean <span class="o">=</span><span class="o">&gt;</span> typeof value <span class="o">=</span><span class="o">=</span><span class="o">=</span> <span class="s">"string"</span><span class="o">;</span>
+
+<span class="k">const</span> printValue <span class="o">=</span> <span class="o">(</span>value<span class="o">:</span> string <span class="o">|</span> number<span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span> <span class="o">{</span>
+  <span class="k">if</span> <span class="o">(</span><span class="f">isString</span><span class="o">(</span>value<span class="o">)</span><span class="o">)</span> <span class="o">{</span>
+    value<span class="o">.</span><span class="p">toUpperCase</span><span class="o">(</span><span class="o">)</span><span class="o">;</span>
+    <span class="c">//    ^ value 仍然是 string | number</span>
+  <span class="o">}</span>
+<span class="o">}</span><span class="o">;</span></code></pre>
+
+          <p>
+            <code>boolean</code> 只承諾回傳真假，沒有說明真假和 <code>value</code> 的關係。現代 TypeScript
+            有時能從簡單實作自動推論 predicate；但一旦明確標成普通 <code>boolean</code>，這層關係就不在 signature 裡。
+          </p>
+        </section>
+
+        <section id="design">
+          <h2>物件型別設計：優先讓資料自己帶有可辨識欄位</h2>
+          <p>
+            對物件 union，最容易理解的設計通常不是複雜 guard，而是讓每一種資料都有共同的辨識欄位。
+          </p>
+
+          <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">type</span> <span class="t">Success</span> <span class="o">=</span> <span class="o">{</span>
+  readonly _tag<span class="o">:</span> <span class="s">"Success"</span><span class="o">;</span>
+  readonly value<span class="o">:</span> string<span class="o">;</span>
+<span class="o">}</span><span class="o">;</span>
+
+<span class="k">type</span> <span class="t">Failure</span> <span class="o">=</span> <span class="o">{</span>
+  readonly _tag<span class="o">:</span> <span class="s">"Failure"</span><span class="o">;</span>
+  readonly error<span class="o">:</span> <span class="t">Error</span><span class="o">;</span>
+<span class="o">}</span><span class="o">;</span>
+
+<span class="k">type</span> <span class="t">Result</span> <span class="o">=</span> <span class="t">Success</span> <span class="o">|</span> <span class="t">Failure</span><span class="o">;</span>
+
+<span class="k">const</span> renderResult <span class="o">=</span> <span class="o">(</span>result<span class="o">:</span> <span class="t">Result</span><span class="o">)</span><span class="o">:</span> string <span class="o">=</span><span class="o">&gt;</span> <span class="o">{</span>
+  <span class="k">if</span> <span class="o">(</span>result<span class="o">.</span><span class="p">_tag</span> <span class="o">=</span><span class="o">=</span><span class="o">=</span> <span class="s">"Success"</span><span class="o">)</span> <span class="o">{</span>
+    <span class="k">return</span> result<span class="o">.</span><span class="p">value</span><span class="o">;</span>
+  <span class="o">}</span>
+
+  <span class="k">return</span> result<span class="o">.</span><span class="p">error</span><span class="o">.</span><span class="p">message</span><span class="o">;</span>
+<span class="o">}</span><span class="o">;</span></code></pre>
+
+          <p>
+            TypeScript 看見 <code>_tag</code> 後就能直接 narrowing，不需要額外的 <code>isSuccess</code>。這種設計稱為
+            <strong>discriminated union</strong>。
+          </p>
+
+          <h3>判斷會重複使用時，再抽成 guard</h3>
+          <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">const</span> isSuccess <span class="o">=</span> <span class="o">(</span>
+  result<span class="o">:</span> <span class="t">Result</span><span class="o">,</span>
+<span class="o">)</span><span class="o">:</span> result is <span class="t">Success</span> <span class="o">=</span><span class="o">&gt;</span> result<span class="o">.</span><span class="p">_tag</span> <span class="o">=</span><span class="o">=</span><span class="o">=</span> <span class="s">"Success"</span><span class="o">;</span>
+
+<span class="k">const</span> results<span class="o">:</span> <span class="t">ReadonlyArray</span><span class="o">&lt;</span><span class="t">Result</span><span class="o">&gt;</span> <span class="o">=</span> <span class="o">[</span><span class="o">]</span><span class="o">;</span>
+<span class="k">const</span> successfulResults <span class="o">=</span> results<span class="o">.</span><span class="p">filter</span><span class="o">(</span>isSuccess<span class="o">)</span><span class="o">;</span>
+<span class="c">//    ^ Success[]</span></code></pre>
+
+          <p>
+            Guard 的價值在於重用 narrowing 規則。若只使用一次，直接比較 <code>_tag</code> 往往更短、更容易檢查。
+          </p>
+        </section>
+
+        <section id="boundary">
+          <h2>什麼時候才需要 <code>unknown</code>？資料真的來自未知邊界時</h2>
+          <p>
+            前面的例子使用 <code>string | number</code>，因為可能性已知。當資料來自 JSON、網路 request
+            或第三方程式時，程式在驗證前確實不知道內容，這時 <code>unknown</code> 才是合理型別。
+          </p>
+
+          <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">type</span> <span class="t">User</span> <span class="o">=</span> <span class="o">{</span>
+  readonly name<span class="o">:</span> string<span class="o">;</span>
+<span class="o">}</span><span class="o">;</span>
+
+<span class="k">const</span> isUser <span class="o">=</span> <span class="o">(</span>value<span class="o">:</span> unknown<span class="o">)</span><span class="o">:</span> value is <span class="t">User</span> <span class="o">=</span><span class="o">&gt;</span>
+  typeof value <span class="o">=</span><span class="o">=</span><span class="o">=</span> <span class="s">"object"</span> <span class="o">&amp;</span><span class="o">&amp;</span>
+  value <span class="o">!</span><span class="o">=</span><span class="o">=</span> <span class="n">null</span> <span class="o">&amp;</span><span class="o">&amp;</span>
+  <span class="s">"name"</span> <span class="k">in</span> value <span class="o">&amp;</span><span class="o">&amp;</span>
+  typeof value<span class="o">.</span><span class="p">name</span> <span class="o">=</span><span class="o">=</span><span class="o">=</span> <span class="s">"string"</span><span class="o">;</span></code></pre>
+
+          <p>
+            這裡不是故意把已知的字串改標成 <code>unknown</code>。參數代表真正未驗證的外部資料，所以 guard
+            必須依序證明它是非 null object、具有 <code>name</code>，而且 <code>name</code> 真的是字串。
+          </p>
+
+          <div class="callout warning">
+            <p>
+              Type Guard 只靠實作邏輯保證安全，TypeScript 不會證明 predicate 寫得正確。面對大型外部資料格式，通常應使用 schema
+              decoder，而不是手寫大量 property check。
+            </p>
+          </div>
+        </section>
+
+        <section id="mistakes">
+          <h2>常見錯誤與設計規則</h2>
+
+          <h3>錯誤一：Predicate 說得比實際檢查更多</h3>
+          <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">const</span> isString <span class="o">=</span> <span class="o">(</span>
+  value<span class="o">:</span> string <span class="o">|</span> number<span class="o">,</span>
+<span class="o">)</span><span class="o">:</span> value is string <span class="o">=</span><span class="o">&gt;</span> <span class="n">true</span><span class="o">;</span></code></pre>
+
+          <p>
+            這段可以通過型別檢查，卻明顯是錯的。<code>value is T</code> 是開發者對 TypeScript 的承諾，不是 TypeScript
+            對 runtime 的驗證。
+          </p>
+
+          <h3>錯誤二：只檢查 property 存在，沒有檢查 property 型別</h3>
+          <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="c">// 不足以證明 name 是 string</span>
+<span class="k">const</span> hasName <span class="o">=</span> <span class="o">(</span>value<span class="o">:</span> object<span class="o">)</span><span class="o">:</span> value is <span class="t">User</span> <span class="o">=</span><span class="o">&gt;</span>
+  <span class="s">"name"</span> <span class="k">in</span> value<span class="o">;</span></code></pre>
+
+          <p>
+            <code>"name" in value</code> 只能證明 property 存在，不能證明內容是字串。Guard 宣告的結論越強，runtime
+            檢查就必須越完整。
+          </p>
+
+          <div class="comparison" role="region" aria-label="Type Guard 設計規則" tabindex="0">
+            <table>
+              <thead>
+                <tr>
+                  <th scope="col">問題</th>
+                  <th scope="col">建議</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>判斷只用一次嗎？</td>
+                  <td class="good">直接用 <code>typeof</code>、<code>instanceof</code> 或 tag 比較。</td>
+                </tr>
+                <tr>
+                  <td>同一判斷會重複嗎？</td>
+                  <td class="good">抽成小而純粹的 Type Guard。</td>
+                </tr>
+                <tr>
+                  <td>物件 union 能加共同 tag 嗎？</td>
+                  <td class="good">優先設計 discriminated union。</td>
+                </tr>
+                <tr>
+                  <td>資料來自外部嗎？</td>
+                  <td class="risk">從 <code>unknown</code> 開始並完整驗證；大型格式使用 decoder。</td>
+                </tr>
+                <tr>
+                  <td>Predicate 結論很強嗎？</td>
+                  <td class="risk">確定每個 true 路徑都真的滿足目標型別。</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <aside class="callout">
+          <p>
+            想理解一般 function 是否該明確標註回傳型別，請閱讀
+            <a href="typescript-explicit-return-type-pitfalls.html">TypeScript Return Type：何時該寫，何時交給推論？</a>
+          </p>
+        </aside>
+
+        <footer>
+          <p>
+            Type Guard 的核心不是特殊語法，而是讓 runtime 檢查和 compile-time 型別保持一致。先用內建 narrowing，物件資料優先採用
+            discriminated union；只有需要重用判斷時，再寫可信、完整的 type predicate。
+          </p>
+        </footer>
+      </article>
+    </main>
+
+    <script>
+      const copyIcon =
+        '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"></rect><path d="M15 9V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h3"></path></svg>';
+      const checkIcon =
+        '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"></path></svg>';
+
+      const copyText = async (text) => {
+        if (navigator.clipboard?.writeText) {
+          await navigator.clipboard.writeText(text);
+          return;
+        }
+
+        const textarea = document.createElement("textarea");
+        textarea.value = text;
+        textarea.style.position = "fixed";
+        textarea.style.opacity = "0";
+        document.body.append(textarea);
+        textarea.select();
+        document.execCommand("copy");
+        textarea.remove();
+      };
+
+      document.querySelectorAll("pre").forEach((pre) => {
+        const code = pre.querySelector("code");
+        if (!code) return;
+
+        const button = document.createElement("button");
+        button.className = "copy-code";
+        button.type = "button";
+        button.setAttribute("aria-label", "複製程式碼");
+        button.innerHTML = copyIcon;
+        button.addEventListener("click", async () => {
+          await copyText(code.textContent ?? "");
+          button.classList.add("copied");
+          button.innerHTML = checkIcon;
+          window.setTimeout(() => {
+            button.classList.remove("copied");
+            button.innerHTML = copyIcon;
+          }, 1400);
+        });
+        pre.append(button);
+
+        const scrollbar = document.createElement("div");
+        scrollbar.className = "code-scrollbar";
+        const thumb = document.createElement("div");
+        thumb.className = "code-scrollbar-thumb";
+        scrollbar.append(thumb);
+        pre.append(scrollbar);
+
+        const updateScrollbar = () => {
+          const visibleRatio = code.clientWidth / code.scrollWidth;
+          if (visibleRatio >= 1) {
+            scrollbar.classList.add("hidden");
+            return;
+          }
+
+          scrollbar.classList.remove("hidden");
+          const trackWidth = scrollbar.clientWidth;
+          const thumbWidth = Math.max(trackWidth * visibleRatio, 36);
+          const maxThumbLeft = trackWidth - thumbWidth;
+          const maxScrollLeft = code.scrollWidth - code.clientWidth;
+          const thumbLeft = maxScrollLeft === 0
+            ? 0
+            : (code.scrollLeft / maxScrollLeft) * maxThumbLeft;
+          thumb.style.width = thumbWidth + "px";
+          thumb.style.transform = "translateX(" + thumbLeft + "px)";
+        };
+
+        code.addEventListener("scroll", updateScrollbar, { passive: true });
+        window.addEventListener("resize", updateScrollbar, { passive: true });
+        requestAnimationFrame(updateScrollbar);
+
+        let dragStartX = 0;
+        let dragStartScrollLeft = 0;
+        thumb.addEventListener("pointerdown", (event) => {
+          dragStartX = event.clientX;
+          dragStartScrollLeft = code.scrollLeft;
+          thumb.setPointerCapture(event.pointerId);
+        });
+        thumb.addEventListener("pointermove", (event) => {
+          if (!thumb.hasPointerCapture(event.pointerId)) return;
+          const maxThumbLeft = scrollbar.clientWidth - thumb.clientWidth;
+          const maxScrollLeft = code.scrollWidth - code.clientWidth;
+          if (maxThumbLeft <= 0) return;
+          code.scrollLeft = dragStartScrollLeft +
+            ((event.clientX - dragStartX) / maxThumbLeft) * maxScrollLeft;
+        });
+      });
+    </script>
+  </body>
+</html>
