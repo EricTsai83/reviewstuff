@@ -462,8 +462,9 @@ test("runReview skips the engine when no hunk fits the request budget", async ()
   expect(report.findings).toEqual([]);
 });
 
-test("runReview skips the engine for metadata-only files with zero hunks", async () => {
+test("runReview sends metadata-only files to the engine", async () => {
   let engineCalls = 0;
+  let received: ReviewRequestV1 | undefined;
   const metadataOnly = gitTextFile("empty.ts", "untracked", "");
 
   const report = await runReview("working-tree").pipe(
@@ -475,9 +476,10 @@ test("runReview skips the engine for metadata-only files with zero hunks", async
     Effect.provide(config),
     Effect.provide(
       Layer.succeed(ReviewEngine, {
-        review: () =>
+        review: (request) =>
           Effect.sync(() => {
             engineCalls += 1;
+            received = request;
             return [];
           }),
       }),
@@ -485,7 +487,12 @@ test("runReview skips the engine for metadata-only files with zero hunks", async
     Effect.runPromise,
   );
 
-  expect(engineCalls).toBe(0);
+  expect(engineCalls).toBe(1);
+  expect(received?.context.files).toEqual([{
+    path: "empty.ts",
+    source: "untracked",
+    patch: "",
+  }]);
   expect(report.coverage.files).toEqual([{
     path: "empty.ts",
     source: "untracked",

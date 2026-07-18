@@ -202,10 +202,9 @@ export const runReview = (
         },
         files: selection.files,
       });
-      const hasSelectedHunks = selection.coverage.files.some(
-        (file) => file.selectedHunks > 0,
-      );
-      const findings = hasSelectedHunks ? yield* engine.review(request) : [];
+      const findings = selection.files.length > 0
+        ? yield* engine.review(request)
+        : [];
       return buildReviewReport(scope, diff, selection, findings);
     }).pipe(
       Effect.timeoutOrElse({

@@ -26,6 +26,51 @@ test("current report fixture passes the strict v4 decode boundary", async () => 
   );
 });
 
+test("v4 rejects contradictory summary, coverage, and budget values", async () => {
+  const report = decodeReviewReportV4(
+    await readFixture("review-report-v4.json"),
+  );
+  const reviewedFile = report.coverage.files[0];
+  if (reviewedFile?.status !== "reviewed") {
+    throw new Error("Expected the v4 fixture to start with a reviewed file");
+  }
+
+  const invalidReports: ReadonlyArray<unknown> = [
+    {
+      ...report,
+      summary: { ...report.summary, changedFiles: 0 },
+    },
+    {
+      ...report,
+      coverage: { ...report.coverage, complete: true },
+    },
+    {
+      ...report,
+      coverage: {
+        ...report.coverage,
+        files: [
+          { ...reviewedFile, selectedHunks: 2, totalHunks: 1 },
+          ...report.coverage.files.slice(1),
+        ],
+      },
+    },
+    {
+      ...report,
+      budget: { ...report.budget, totalReservedTokens: 0 },
+    },
+    {
+      ...report,
+      budget: { ...report.budget, fitsBudget: false },
+    },
+  ];
+
+  for (const invalidReport of invalidReports) {
+    expect(() => decodeReviewReportV4(invalidReport)).toThrow(
+      "Invalid review report",
+    );
+  }
+});
+
 test("previous v3 fixture is strictly decoded and explicitly migrated", async () => {
   const fixture = await readFixture("review-report-v3.json");
   const migrated = decodeReviewReport(fixture);

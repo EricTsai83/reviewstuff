@@ -32,9 +32,9 @@ describe("renderReviewError", () => {
     [
       new ConfigFileInvalidError({
         path: "reviewstuff.config.json",
-        message: "Invalid value\nat review.timeoutMs",
+        cause: undefined,
       }),
-      "Invalid config file reviewstuff.config.json: Invalid value\\u000aat review.timeoutMs",
+      "Invalid config file reviewstuff.config.json: Configuration does not match the supported schema.",
     ],
     [
       new UnsupportedReviewSelectionError({

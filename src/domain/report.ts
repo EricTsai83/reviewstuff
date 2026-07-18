@@ -156,10 +156,95 @@ export type ReviewReportV3 = typeof ReviewReportV3Schema.Type;
 export type ReviewReportV2 = typeof ReviewReportV2Schema.Type;
 export type ReviewReport = ReviewReportV4;
 
+const invalidReviewReport = (reason: string): never => {
+  throw new Error(`Invalid review report: ${reason}`);
+};
+
+const validateReviewReportV4 = (report: ReviewReportV4): ReviewReportV4 => {
+  const reviewedFiles = report.coverage.files.filter(
+    (file) => file.status === "reviewed",
+  ).length;
+  const truncatedFiles = report.coverage.files.filter(
+    (file) => file.status === "truncated",
+  ).length;
+  const skippedFiles = report.coverage.files.filter(
+    (file) => file.status === "skipped",
+  ).length;
+
+  if (
+    report.summary.changedFiles !== report.coverage.files.length ||
+    report.summary.reviewedFiles !== reviewedFiles ||
+    report.summary.truncatedFiles !== truncatedFiles ||
+    report.summary.skippedFiles !== skippedFiles ||
+    report.summary.findings !== report.findings.length
+  ) {
+    return invalidReviewReport("summary counts do not match report contents");
+  }
+
+  const coverageComplete = truncatedFiles === 0 && skippedFiles === 0;
+  if (report.coverage.complete !== coverageComplete) {
+    return invalidReviewReport("coverage completeness does not match file statuses");
+  }
+
+  const fileIdentities = new Set<string>();
+  for (const file of report.coverage.files) {
+    const identity = `${file.source}\0${file.path}`;
+    if (fileIdentities.has(identity)) {
+      return invalidReviewReport("coverage contains a duplicate file identity");
+    }
+    fileIdentities.add(identity);
+
+    if (
+      file.status === "reviewed" &&
+      file.selectedHunks !== file.totalHunks
+    ) {
+      return invalidReviewReport("reviewed file does not include every hunk");
+    }
+
+    if (
+      file.status === "truncated" &&
+      (file.selectedHunks === 0 || file.selectedHunks >= file.totalHunks)
+    ) {
+      return invalidReviewReport("truncated file has inconsistent hunk counts");
+    }
+  }
+
+  const budgetValues = [
+    report.budget.maxTokens,
+    report.budget.fixedRequestOverheadTokens,
+    report.budget.outputReserveTokens,
+    report.budget.selectedRequestTokens,
+    report.budget.totalReservedTokens,
+  ];
+  if (budgetValues.some((value) => !Number.isSafeInteger(value))) {
+    return invalidReviewReport("budget values must be safe integers");
+  }
+
+  const totalReservedTokens = report.budget.fixedRequestOverheadTokens +
+    report.budget.outputReserveTokens + report.budget.selectedRequestTokens;
+  if (
+    !Number.isSafeInteger(totalReservedTokens) ||
+    report.budget.totalReservedTokens !== totalReservedTokens
+  ) {
+    return invalidReviewReport("budget total does not match its components");
+  }
+
+  if (
+    report.budget.fitsBudget !==
+      (report.budget.totalReservedTokens <= report.budget.maxTokens)
+  ) {
+    return invalidReviewReport("budget fit flag does not match the total");
+  }
+
+  return report;
+};
+
 export const decodeReviewReportV4 = (input: unknown): ReviewReportV4 =>
-  Schema.decodeUnknownSync(ReviewReportV4Schema)(input, {
-    onExcessProperty: "error",
-  });
+  validateReviewReportV4(
+    Schema.decodeUnknownSync(ReviewReportV4Schema)(input, {
+      onExcessProperty: "error",
+    }),
+  );
 
 export const decodeReviewReportV3 = (input: unknown): ReviewReportV3 =>
   Schema.decodeUnknownSync(ReviewReportV3Schema)(input, {
