@@ -9,8 +9,7 @@ type GitCommandError = Extract<
 >;
 
 const renderGitCommandFailure = (error: GitCommandError): string => {
-  const summary =
-    `Git ${error.operation} failed with exit code ${error.exitCode}.`;
+  const summary = `Git ${error.operation} failed with exit code ${error.exitCode}.`;
   const guidance = (() => {
     switch (error.failure) {
       case "index-locked":

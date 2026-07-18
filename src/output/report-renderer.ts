@@ -1,14 +1,13 @@
 import type { ReviewFileCoverage } from "../domain/review-file";
-import {
-  decodeReviewReportV4,
-  type ReviewReportV4,
-} from "../domain/report";
+import { decodeReviewReportV4, type ReviewReportV4 } from "../domain/report";
 
 const terminalControlCharacter = /[\u0000-\u001f\u007f-\u009f\u2028\u2029]/gu;
 
 export const escapeTerminalText = (value: string): string =>
-  value.replace(terminalControlCharacter, (character) =>
-    `\\u${character.charCodeAt(0).toString(16).padStart(4, "0")}`
+  value.replace(
+    terminalControlCharacter,
+    (character) =>
+      `\\u${character.charCodeAt(0).toString(16).padStart(4, "0")}`,
   );
 
 const renderSkippedFile = (
@@ -51,13 +50,14 @@ export const renderTerminalReport = (input: ReviewReportV4): string => {
       `${escapeTerminalText(finding.file)}:${finding.line} [${escapeTerminalText(finding.severity)}/${escapeTerminalText(finding.category)} confidence=${finding.confidence}] ${escapeTerminalText(finding.message)} (${escapeTerminalText(finding.ruleId)})`,
   );
 
-  const reviewSummaryText = report.findings.length === 0
-    ? `Reviewed ${report.summary.reviewedFiles} changed file(s). No findings.`
-    : [
-        ...findings,
-        "",
-        `Found ${report.summary.findings} finding(s) in ${report.summary.reviewedFiles} reviewed file(s).`,
-      ].join("\n");
+  const reviewSummaryText =
+    report.findings.length === 0
+      ? `Reviewed ${report.summary.reviewedFiles} changed file(s). No findings.`
+      : [
+          ...findings,
+          "",
+          `Found ${report.summary.findings} finding(s) in ${report.summary.reviewedFiles} reviewed file(s).`,
+        ].join("\n");
 
   if (report.coverage.complete) {
     return [reviewSummaryText, "", renderBudget(report)].join("\n");
