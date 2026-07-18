@@ -10,8 +10,8 @@ import {
 import type { ReviewFindingV1 } from "../domain/finding";
 import type { ReviewFileCoverage } from "../domain/review-file";
 import {
-  decodeReviewReportV3,
-  type ReviewReportV3,
+  decodeReviewReportV4,
+  type ReviewReportV4,
 } from "../domain/report";
 import type { ReviewScope } from "../domain/scope";
 import {
@@ -24,6 +24,12 @@ import {
   type GitTextFile,
   GitService,
 } from "../git/git-service";
+import {
+  fallbackReviewRequestEstimator,
+  type ReviewBudgetPolicy,
+  type ReviewSelectionV1,
+  selectReviewHunks,
+} from "../review/review-budget";
 import { buildReviewRequestV1 } from "../review/review-request";
 
 export class ReviewTimeoutError extends Data.TaggedError(
@@ -53,52 +59,110 @@ const ensureSupportedFakeSelection = (
         }),
       );
 
-const buildCoverageFiles = (
-  diff: GitDiff,
-): ReadonlyArray<ReviewFileCoverage> =>
-  diff.files.map((file): ReviewFileCoverage =>
-    file.kind === "text"
-      ? {
-          path: file.path,
-          source: file.source,
-          status: "reviewed",
-        }
-      : {
-          path: file.path,
-          source: file.source,
-          status: "skipped",
-          reason: "binary",
-        }
-  ).sort((left, right) =>
-    left.path < right.path ? -1 : left.path > right.path ? 1 : 0
-  );
-
 const textFiles = (diff: GitDiff): ReadonlyArray<GitTextFile> =>
   diff.files.filter((file): file is GitTextFile => file.kind === "text");
+
+const compareCoverageFiles = (
+  left: ReviewFileCoverage,
+  right: ReviewFileCoverage,
+): number =>
+  left.path < right.path
+    ? -1
+    : left.path > right.path
+    ? 1
+    : left.source < right.source
+    ? -1
+    : left.source > right.source
+    ? 1
+    : 0;
+
+const buildCoverageFiles = (
+  diff: GitDiff,
+  selection: ReviewSelectionV1,
+): ReadonlyArray<ReviewFileCoverage> => {
+  const binaryCoverage = diff.files.flatMap((file) =>
+    file.kind === "binary"
+      ? [{
+        path: file.path,
+        source: file.source,
+        status: "skipped" as const,
+        reason: "binary" as const,
+      }]
+      : []
+  );
+
+  return [...selection.coverage.files, ...binaryCoverage].sort(
+    compareCoverageFiles,
+  );
+};
+
+const requestEnvelopeTokens = (
+  scope: ReviewScope,
+  config: ResolvedReviewConfig,
+): number => {
+  const emptyRequest = buildReviewRequestV1({
+    repository: { scope },
+    config: {
+      profile: config.profile,
+      model: config.model,
+      concurrency: config.concurrency,
+    },
+    files: [],
+  });
+  const emptyRequestTokens = fallbackReviewRequestEstimator.estimate(
+    JSON.stringify(emptyRequest),
+  );
+  const emptyFilesTokens = fallbackReviewRequestEstimator.estimate(
+    JSON.stringify([]),
+  );
+
+  return emptyRequestTokens - emptyFilesTokens;
+};
+
+const effectiveBudgetPolicy = (
+  scope: ReviewScope,
+  config: ResolvedReviewConfig,
+): ReviewBudgetPolicy => ({
+  ...config.requestBudget,
+  fixedRequestOverheadTokens: Math.max(
+    config.requestBudget.fixedRequestOverheadTokens,
+    requestEnvelopeTokens(scope, config),
+  ),
+});
 
 const buildReviewReport = (
   scope: ReviewScope,
   diff: GitDiff,
+  selection: ReviewSelectionV1,
   findings: ReadonlyArray<ReviewFindingV1>,
-): ReviewReportV3 => {
-  const coverageFiles = buildCoverageFiles(diff);
-  const reviewedFiles = textFiles(diff).length;
-  const skippedFiles = diff.files.length - reviewedFiles;
+): ReviewReportV4 => {
+  const coverageFiles = buildCoverageFiles(diff, selection);
+  const reviewedFiles = coverageFiles.filter((file) =>
+    file.status === "reviewed"
+  ).length;
+  const truncatedFiles = coverageFiles.filter((file) =>
+    file.status === "truncated"
+  ).length;
+  const skippedFiles = coverageFiles.filter((file) =>
+    file.status === "skipped"
+  ).length;
 
-  return decodeReviewReportV3({
-    schemaVersion: 3,
+  return decodeReviewReportV4({
+    schemaVersion: 4,
     scope,
     summary: {
       changedFiles: coverageFiles.length,
       reviewedFiles,
+      truncatedFiles,
       skippedFiles,
       findings: findings.length,
     },
     coverage: {
-      schemaVersion: 1,
-      complete: skippedFiles === 0,
+      schemaVersion: 2,
+      complete: truncatedFiles === 0 && skippedFiles === 0,
       files: coverageFiles,
     },
+    budget: selection.estimate,
     findings,
   });
 };
@@ -107,7 +171,7 @@ export const runReview = (
   scope: ReviewScope,
   overrides: ReviewConfigOverrides = {},
 ): Effect.Effect<
-  ReviewReportV3,
+  ReviewReportV4,
   RunReviewError,
   GitService | ConfigService | ReviewEngine
 > =>
@@ -120,6 +184,15 @@ export const runReview = (
     return yield* Effect.gen(function* () {
       const diff = yield* git.readDiff(scope);
       const reviewableFiles = textFiles(diff);
+      const selection = selectReviewHunks({
+        files: reviewableFiles.map(({ path, source, fileHeader, hunks }) => ({
+          path,
+          source,
+          fileHeader,
+          hunks: hunks.map(({ patch }) => ({ patch })),
+        })),
+        policy: effectiveBudgetPolicy(scope, config),
+      });
       const request = buildReviewRequestV1({
         repository: { scope },
         config: {
@@ -127,14 +200,13 @@ export const runReview = (
           model: config.model,
           concurrency: config.concurrency,
         },
-        files: reviewableFiles.map(({ path, source, patch }) => ({
-          path,
-          source,
-          patch,
-        })),
+        files: selection.files,
       });
-      const findings = yield* engine.review(request);
-      return buildReviewReport(scope, diff, findings);
+      const hasSelectedHunks = selection.coverage.files.some(
+        (file) => file.selectedHunks > 0,
+      );
+      const findings = hasSelectedHunks ? yield* engine.review(request) : [];
+      return buildReviewReport(scope, diff, selection, findings);
     }).pipe(
       Effect.timeoutOrElse({
         duration: config.timeoutMs,

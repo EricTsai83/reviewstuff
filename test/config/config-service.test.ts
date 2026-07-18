@@ -25,6 +25,11 @@ describe("config schema", () => {
             model: "fake-reviewer-v1",
             timeoutMs: 120_000,
             concurrency: 2,
+            requestBudget: {
+              maxTokens: 128_000,
+              fixedRequestOverheadTokens: 2_048,
+              outputReserveTokens: 16_384,
+            },
           },
         }),
       ),
@@ -37,6 +42,11 @@ describe("config schema", () => {
         model: "fake-reviewer-v1",
         timeoutMs: 120_000,
         concurrency: 2,
+        requestBudget: {
+          maxTokens: 128_000,
+          fixedRequestOverheadTokens: 2_048,
+          outputReserveTokens: 16_384,
+        },
       },
     });
   });
@@ -54,6 +64,19 @@ describe("config schema", () => {
     [
       { schemaVersion: 1, review: { concurrency: 1.5 } },
       "non-integer concurrency",
+    ],
+    [
+      {
+        schemaVersion: 1,
+        review: {
+          requestBudget: {
+            maxTokens: 128_000,
+            fixedRequestOverheadTokens: -1,
+            outputReserveTokens: 16_384,
+          },
+        },
+      },
+      "negative request budget overhead",
     ],
     [{ schemaVersion: 1, unknown: true }, "unknown property"],
   ])("rejects %s (%s)", async (input) => {
@@ -100,6 +123,7 @@ describe("review config resolution", () => {
       model: "cli-model",
       timeoutMs: 45_000,
       concurrency: 3,
+      requestBudget: profiles.standard.requestBudget,
     });
   });
 });

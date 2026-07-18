@@ -7,6 +7,7 @@ import * as Schema from "effect/Schema";
 import {
   type ReviewConfig,
   type ReviewProfile,
+  type ReviewRequestBudgetConfig,
   type ReviewstuffConfigV1,
   ReviewstuffConfigJsonSchema,
   reviewConfigFileName,
@@ -19,6 +20,7 @@ export interface ResolvedReviewConfig {
   readonly model: string;
   readonly timeoutMs: number;
   readonly concurrency: number;
+  readonly requestBudget: ReviewRequestBudgetConfig;
 }
 
 export type ReviewConfigOverrides = Partial<ResolvedReviewConfig>;
@@ -31,6 +33,11 @@ export const profiles: Readonly<Record<ReviewProfile, ResolvedReviewConfig>> = {
     model: "fake-reviewer-v1",
     timeoutMs: 30_000,
     concurrency: 1,
+    requestBudget: {
+      maxTokens: 128_000,
+      fixedRequestOverheadTokens: 2_048,
+      outputReserveTokens: 16_384,
+    },
   },
   standard: {
     profile: "standard",
@@ -39,6 +46,11 @@ export const profiles: Readonly<Record<ReviewProfile, ResolvedReviewConfig>> = {
     model: "fake-reviewer-v1",
     timeoutMs: 120_000,
     concurrency: 2,
+    requestBudget: {
+      maxTokens: 128_000,
+      fixedRequestOverheadTokens: 2_048,
+      outputReserveTokens: 16_384,
+    },
   },
 };
 

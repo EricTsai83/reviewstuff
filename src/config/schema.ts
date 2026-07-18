@@ -10,6 +10,15 @@ const NonEmptyStringSchema = Schema.String.check(
 const PositiveIntegerSchema = Schema.Int.check(
   Schema.isGreaterThan(0, { message: "must be greater than 0" }),
 );
+const NonNegativeIntegerSchema = Schema.Int.check(
+  Schema.isGreaterThanOrEqualTo(0, { message: "must not be negative" }),
+);
+
+export const ReviewRequestBudgetConfigSchema = Schema.Struct({
+  maxTokens: PositiveIntegerSchema,
+  fixedRequestOverheadTokens: NonNegativeIntegerSchema,
+  outputReserveTokens: NonNegativeIntegerSchema,
+});
 
 export const ReviewConfigSchema = Schema.Struct({
   profile: Schema.optionalKey(ReviewProfileSchema),
@@ -18,6 +27,7 @@ export const ReviewConfigSchema = Schema.Struct({
   model: Schema.optionalKey(NonEmptyStringSchema),
   timeoutMs: Schema.optionalKey(PositiveIntegerSchema),
   concurrency: Schema.optionalKey(PositiveIntegerSchema),
+  requestBudget: Schema.optionalKey(ReviewRequestBudgetConfigSchema),
 });
 
 export const ReviewstuffConfigV1Schema = Schema.Struct({
@@ -30,6 +40,7 @@ export const ReviewstuffConfigJsonSchema = Schema.fromJsonString(
 );
 
 export type ReviewProfile = typeof ReviewProfileSchema.Type;
+export type ReviewRequestBudgetConfig =
+  typeof ReviewRequestBudgetConfigSchema.Type;
 export type ReviewConfig = typeof ReviewConfigSchema.Type;
 export type ReviewstuffConfigV1 = typeof ReviewstuffConfigV1Schema.Type;
-

@@ -174,6 +174,24 @@ describe("review request budget selection", () => {
     });
   });
 
+  test("an unfittable request envelope reports its reserved components consistently", () => {
+    const selection = selectReviewHunks({
+      files: [file("code.ts", ["@@ -0,0 +1 @@\n+code\n"])],
+      policy: {
+        maxTokens: 10,
+        fixedRequestOverheadTokens: 20,
+        outputReserveTokens: 30,
+      },
+    });
+
+    expect(selection.files).toEqual([]);
+    expect(selection.estimate).toMatchObject({
+      selectedRequestTokens: 0,
+      totalReservedTokens: 50,
+      fitsBudget: false,
+    });
+  });
+
   test("fallback estimation includes UTF-8 bytes after JSON escaping", () => {
     const serialized = JSON.stringify({
       path: "src/雪.ts",

@@ -319,3 +319,31 @@ test("source modules preserve the documented dependency direction", async () => 
 
   expect(violations).toEqual([]);
 });
+
+test("request budget ownership stays outside Git and engine adapters", async () => {
+  const files = await sourceFiles();
+  const forbiddenOwners = files.filter((file) => {
+    const area = sourceArea(file);
+
+    return area === "git" || area === "engines";
+  });
+  const violations: Array<string> = [];
+
+  for (const file of forbiddenOwners) {
+    const imports = moduleSpecifiers(
+      await fs.readFileString(file).pipe(Effect.runPromise),
+    );
+    if (imports.some((moduleName) => moduleName.includes("review-budget"))) {
+      violations.push(path.relative(repoRoot, file));
+    }
+  }
+
+  const runReviewImports = moduleSpecifiers(
+    await fs.readFileString(
+      path.join(sourceRoot, "use-cases", "run-review.ts"),
+    ).pipe(Effect.runPromise),
+  );
+
+  expect(violations).toEqual([]);
+  expect(runReviewImports).toContain("../review/review-budget");
+});

@@ -518,6 +518,7 @@ describe("GitService temporary repository integration", () => {
       readonly summary: {
         readonly changedFiles: number;
         readonly reviewedFiles: number;
+        readonly truncatedFiles: number;
         readonly skippedFiles: number;
         readonly findings: number;
       };
@@ -526,8 +527,10 @@ describe("GitService temporary repository integration", () => {
         readonly files: ReadonlyArray<{
           readonly path: string;
           readonly source: "staged" | "working-tree" | "untracked";
-          readonly status: "reviewed" | "skipped";
-          readonly reason?: "binary" | "file-too-large";
+          readonly status: "reviewed" | "truncated" | "skipped";
+          readonly reason?: "binary" | "file-too-large" | "request-budget";
+          readonly selectedHunks?: number;
+          readonly totalHunks?: number;
           readonly sizeBytes?: string;
           readonly limitBytes?: number;
         }>;
@@ -537,8 +540,9 @@ describe("GitService temporary repository integration", () => {
     expect(cliResult.exitCode).toBe(0);
     expect(report.summary).toEqual({
       changedFiles: 4,
-      reviewedFiles: 3,
-      skippedFiles: 1,
+      reviewedFiles: 2,
+      truncatedFiles: 0,
+      skippedFiles: 2,
       findings: 0,
     });
     expect(report.coverage.complete).toBe(false);
@@ -553,16 +557,23 @@ describe("GitService temporary repository integration", () => {
         path: "empty.txt",
         source: "untracked",
         status: "reviewed",
+        selectedHunks: 0,
+        totalHunks: 0,
       },
       {
         path: "included.ts",
         source: "working-tree",
         status: "reviewed",
+        selectedHunks: 1,
+        totalHunks: 1,
       },
       {
         path: "large.txt",
         source: "untracked",
-        status: "reviewed",
+        status: "skipped",
+        reason: "request-budget",
+        selectedHunks: 0,
+        totalHunks: 1,
       },
     ]);
   });

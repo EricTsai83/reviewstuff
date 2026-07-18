@@ -13,6 +13,7 @@ import {
 } from "../../src/engines/review-engine";
 import { GitService } from "../../src/git/git-service";
 import type { ReviewRequestV1 } from "../../src/review/review-request";
+import { fallbackReviewRequestEstimator } from "../../src/review/review-budget";
 import {
   ReviewTimeoutError,
   runReview,
@@ -26,15 +27,26 @@ const gitTextFile = (
   path: string,
   source: "staged" | "working-tree" | "untracked",
   patch: string,
-) => ({
-  kind: "text" as const,
-  path,
-  source,
-  status: source === "untracked" ? "A" as const : "M" as const,
-  patch,
-  fileHeader: "",
-  hunks: [],
-});
+) => {
+  const header = patch.split("\n", 1)[0] ?? "";
+
+  return {
+    kind: "text" as const,
+    path,
+    source,
+    status: source === "untracked" ? "A" as const : "M" as const,
+    patch,
+    fileHeader: "",
+    hunks: patch.length === 0 ? [] : [{
+      header,
+      oldStartLine: 0,
+      oldLineCount: 0,
+      newStartLine: 1,
+      newLineCount: 1,
+      patch,
+    }],
+  };
+};
 
 test("runReview rejects selections that cannot execute yet", async () => {
   const git = Layer.succeed(GitService, {
@@ -177,23 +189,26 @@ test("runReview produces deterministic findings from added marker lines", async 
     Effect.runPromise,
   );
 
-  expect(report).toEqual({
-    schemaVersion: 3,
+  expect(report).toMatchObject({
+    schemaVersion: 4,
     scope: "working-tree",
     summary: {
       changedFiles: 1,
       reviewedFiles: 1,
+      truncatedFiles: 0,
       skippedFiles: 0,
       findings: 1,
     },
     coverage: {
-      schemaVersion: 1,
+      schemaVersion: 2,
       complete: true,
       files: [
         {
           path: "src/example.ts",
           source: "working-tree",
           status: "reviewed",
+          selectedHunks: 1,
+          totalHunks: 1,
         },
       ],
     },
@@ -209,6 +224,13 @@ test("runReview produces deterministic findings from added marker lines", async 
         line: 3,
       },
     ],
+  });
+  expect(report.budget).toMatchObject({
+    schemaVersion: 1,
+    unit: "tokens",
+    maxTokens: 128_000,
+    outputReserveTokens: 16_384,
+    fitsBudget: true,
   });
 });
 
@@ -266,11 +288,12 @@ test("runReview reports deterministic incomplete coverage", async () => {
   expect(report.summary).toEqual({
     changedFiles: 2,
     reviewedFiles: 1,
+    truncatedFiles: 0,
     skippedFiles: 1,
     findings: 0,
   });
   expect(report.coverage).toEqual({
-    schemaVersion: 1,
+    schemaVersion: 2,
     complete: false,
     files: [
       {
@@ -283,9 +306,194 @@ test("runReview reports deterministic incomplete coverage", async () => {
         path: "src/reviewed.ts",
         source: "working-tree",
         status: "reviewed",
+        selectedHunks: 1,
+        totalHunks: 1,
       },
     ],
   });
+});
+
+test("runReview sends only budget-selected hunks and reports the same coverage", async () => {
+  const smallHunk = "@@ -0,0 +1 @@\n+small\n";
+  const secondSmallHunk = "@@ -2,0 +3 @@\n+second\n";
+  const hugeHunk = `@@ -0,0 +1 @@\n+${"x".repeat(2_000)}\n`;
+  const partial = gitTextFile(
+    "b-partial.ts",
+    "working-tree",
+    `${smallHunk}${hugeHunk}`,
+  );
+  partial.hunks = [
+    { ...partial.hunks[0]!, patch: smallHunk },
+    { ...partial.hunks[0]!, header: hugeHunk.split("\n", 1)[0]!, patch: hugeHunk },
+  ];
+  const git = Layer.succeed(GitService, {
+    readDiff: () =>
+      Effect.succeed({
+        files: [
+          gitTextFile("a-oversized.ts", "working-tree", hugeHunk),
+          partial,
+          gitTextFile("c-reviewed.ts", "working-tree", secondSmallHunk),
+          {
+            kind: "binary" as const,
+            path: "image.dat",
+            source: "untracked" as const,
+            status: "A" as const,
+          },
+        ],
+      }),
+  });
+  let received: ReviewRequestV1 | undefined;
+  const engine = Layer.succeed(ReviewEngine, {
+    review: (request) =>
+      Effect.sync(() => {
+        received = request;
+        return [];
+      }),
+  });
+
+  const report = await runReview("working-tree", {
+    requestBudget: {
+      maxTokens: 1_800,
+      fixedRequestOverheadTokens: 0,
+      outputReserveTokens: 100,
+    },
+  }).pipe(
+    Effect.provide(git),
+    Effect.provide(config),
+    Effect.provide(engine),
+    Effect.runPromise,
+  );
+
+  expect(received?.context.files).toEqual([
+    {
+      path: "b-partial.ts",
+      source: "working-tree",
+      patch: smallHunk,
+    },
+    {
+      path: "c-reviewed.ts",
+      source: "working-tree",
+      patch: secondSmallHunk,
+    },
+  ]);
+  expect(report.summary).toEqual({
+    changedFiles: 4,
+    reviewedFiles: 1,
+    truncatedFiles: 1,
+    skippedFiles: 2,
+    findings: 0,
+  });
+  expect(
+    report.coverage.files.map(({ path, status }) => ({ path, status })),
+  ).toEqual([
+    { path: "a-oversized.ts", status: "skipped" },
+    { path: "b-partial.ts", status: "truncated" },
+    { path: "c-reviewed.ts", status: "reviewed" },
+    { path: "image.dat", status: "skipped" },
+  ]);
+  expect(new Set(report.coverage.files.map(({ path, source }) =>
+    `${source}\0${path}`
+  )).size).toBe(4);
+  expect(received).toBeDefined();
+  const requestTokens = fallbackReviewRequestEstimator.estimate(
+    JSON.stringify(received),
+  );
+  expect(requestTokens + report.budget.outputReserveTokens).toBeLessThanOrEqual(
+    report.budget.maxTokens,
+  );
+  expect(report.budget.selectedRequestTokens).toBe(
+    fallbackReviewRequestEstimator.estimate(
+      JSON.stringify(received?.context.files),
+    ),
+  );
+  expect(report.budget.totalReservedTokens).toBe(
+    report.budget.fixedRequestOverheadTokens +
+      report.budget.outputReserveTokens +
+      report.budget.selectedRequestTokens,
+  );
+});
+
+test("runReview skips the engine when no hunk fits the request budget", async () => {
+  const hugeHunk = `@@ -0,0 +1 @@\n+${"x".repeat(4_000)}\n`;
+  let engineCalls = 0;
+  const report = await runReview("staged", {
+    requestBudget: {
+      maxTokens: 1_000,
+      fixedRequestOverheadTokens: 0,
+      outputReserveTokens: 100,
+    },
+  }).pipe(
+    Effect.provide(
+      Layer.succeed(GitService, {
+        readDiff: () =>
+          Effect.succeed({
+            files: [gitTextFile("oversized.ts", "staged", hugeHunk)],
+          }),
+      }),
+    ),
+    Effect.provide(config),
+    Effect.provide(
+      Layer.succeed(ReviewEngine, {
+        review: () =>
+          Effect.sync(() => {
+            engineCalls += 1;
+            return [];
+          }),
+      }),
+    ),
+    Effect.runPromise,
+  );
+
+  expect(engineCalls).toBe(0);
+  expect(report.coverage.files).toEqual([{
+    path: "oversized.ts",
+    source: "staged",
+    status: "skipped",
+    reason: "request-budget",
+    selectedHunks: 0,
+    totalHunks: 1,
+  }]);
+  expect(report.budget.fitsBudget).toBe(true);
+  expect(report.budget.totalReservedTokens).toBe(
+    report.budget.fixedRequestOverheadTokens +
+      report.budget.outputReserveTokens +
+      report.budget.selectedRequestTokens,
+  );
+  expect(report.findings).toEqual([]);
+});
+
+test("runReview skips the engine for metadata-only files with zero hunks", async () => {
+  let engineCalls = 0;
+  const metadataOnly = gitTextFile("empty.ts", "untracked", "");
+
+  const report = await runReview("working-tree").pipe(
+    Effect.provide(
+      Layer.succeed(GitService, {
+        readDiff: () => Effect.succeed({ files: [metadataOnly] }),
+      }),
+    ),
+    Effect.provide(config),
+    Effect.provide(
+      Layer.succeed(ReviewEngine, {
+        review: () =>
+          Effect.sync(() => {
+            engineCalls += 1;
+            return [];
+          }),
+      }),
+    ),
+    Effect.runPromise,
+  );
+
+  expect(engineCalls).toBe(0);
+  expect(report.coverage.files).toEqual([{
+    path: "empty.ts",
+    source: "untracked",
+    status: "reviewed",
+    selectedHunks: 0,
+    totalHunks: 0,
+  }]);
+  expect(report.findings).toEqual([]);
 });
 
 test("runReview propagates typed engine failures", async () => {

@@ -205,16 +205,24 @@ describe("reviewstuff binary", () => {
 
     expect(
       JSON.parse(await runCli(["review", "--json"], { cwd })),
-    ).toEqual({
-      schemaVersion: 3,
+    ).toMatchObject({
+      schemaVersion: 4,
       scope: "working-tree",
       summary: {
         changedFiles: 0,
         reviewedFiles: 0,
+        truncatedFiles: 0,
         skippedFiles: 0,
         findings: 0,
       },
-      coverage: { schemaVersion: 1, complete: true, files: [] },
+      coverage: { schemaVersion: 2, complete: true, files: [] },
+      budget: {
+        schemaVersion: 1,
+        unit: "tokens",
+        maxTokens: 128_000,
+        selectedRequestTokens: 0,
+        fitsBudget: true,
+      },
       findings: [],
     });
   });
@@ -258,7 +266,7 @@ describe("reviewstuff binary", () => {
       ),
     ) as { schemaVersion: number };
 
-    expect(report.schemaVersion).toBe(3);
+    expect(report.schemaVersion).toBe(4);
   });
 
   test("invalid config is rendered as a usage error without a stack trace", async () => {
@@ -317,6 +325,7 @@ describe("reviewstuff binary", () => {
       summary: {
         changedFiles: number;
         reviewedFiles: number;
+        truncatedFiles: number;
         skippedFiles: number;
         findings: number;
       };
@@ -326,6 +335,7 @@ describe("reviewstuff binary", () => {
     expect(report.summary).toEqual({
       changedFiles: 3,
       reviewedFiles: 3,
+      truncatedFiles: 0,
       skippedFiles: 0,
       findings: 3,
     });
@@ -355,6 +365,7 @@ describe("reviewstuff binary", () => {
       summary: {
         changedFiles: number;
         reviewedFiles: number;
+        truncatedFiles: number;
         skippedFiles: number;
         findings: number;
       };
@@ -365,6 +376,7 @@ describe("reviewstuff binary", () => {
     expect(report.summary).toEqual({
       changedFiles: 1,
       reviewedFiles: 1,
+      truncatedFiles: 0,
       skippedFiles: 0,
       findings: 1,
     });
@@ -408,6 +420,7 @@ describe("reviewstuff binary", () => {
         summary: {
           changedFiles: number;
           reviewedFiles: number;
+          truncatedFiles: number;
           skippedFiles: number;
           findings: number;
         };
@@ -417,6 +430,7 @@ describe("reviewstuff binary", () => {
       expect(report.summary).toEqual({
         changedFiles: 1,
         reviewedFiles: 1,
+        truncatedFiles: 0,
         skippedFiles: 0,
         findings: 0,
       });
@@ -449,6 +463,7 @@ describe("reviewstuff binary", () => {
       summary: {
         changedFiles: number;
         reviewedFiles: number;
+        truncatedFiles: number;
         skippedFiles: number;
         findings: number;
       };
@@ -458,6 +473,7 @@ describe("reviewstuff binary", () => {
     expect(report.summary).toEqual({
       changedFiles: 2,
       reviewedFiles: 2,
+      truncatedFiles: 0,
       skippedFiles: 0,
       findings: 2,
     });
@@ -467,7 +483,7 @@ describe("reviewstuff binary", () => {
     ]);
   });
 
-  test("default review skips binary and large changed files", async () => {
+  test("default review budgets oversized hunks without skipping small text diffs", async () => {
     const cwd = await makeRepository();
     const largeBase = `first line\n${"unchanged line\n".repeat(50_000)}`;
     await Bun.write(`${cwd}/large-staged.txt`, largeBase);
@@ -502,6 +518,7 @@ describe("reviewstuff binary", () => {
       summary: {
         changedFiles: number;
         reviewedFiles: number;
+        truncatedFiles: number;
         skippedFiles: number;
         findings: number;
       };
@@ -509,7 +526,7 @@ describe("reviewstuff binary", () => {
         complete: boolean;
         files: ReadonlyArray<{
           path: string;
-          status: "reviewed" | "skipped";
+          status: "reviewed" | "truncated" | "skipped";
           reason?: string;
         }>;
       };
@@ -518,9 +535,10 @@ describe("reviewstuff binary", () => {
 
     expect(report.summary).toEqual({
       changedFiles: 5,
-      reviewedFiles: 1,
-      skippedFiles: 4,
-      findings: 1,
+      reviewedFiles: 3,
+      truncatedFiles: 0,
+      skippedFiles: 2,
+      findings: 3,
     });
     expect(report.coverage.complete).toBe(false);
     expect(
@@ -532,20 +550,14 @@ describe("reviewstuff binary", () => {
     ).toEqual([
       { path: "binary.dat", status: "skipped", reason: "binary" },
       { path: "included.ts", status: "reviewed" },
-      {
-        path: "large-staged.txt",
-        status: "skipped",
-        reason: "file-too-large",
-      },
-      {
-        path: "large-unstaged.txt",
-        status: "skipped",
-        reason: "file-too-large",
-      },
-      { path: "large.txt", status: "skipped", reason: "file-too-large" },
+      { path: "large-staged.txt", status: "reviewed" },
+      { path: "large-unstaged.txt", status: "reviewed" },
+      { path: "large.txt", status: "skipped", reason: "request-budget" },
     ]);
     expect(report.findings.map((finding) => finding.file)).toEqual([
       "included.ts",
+      "large-staged.txt",
+      "large-unstaged.txt",
     ]);
   });
 });

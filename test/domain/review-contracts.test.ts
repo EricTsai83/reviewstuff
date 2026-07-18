@@ -5,6 +5,7 @@ import {
 import {
   decodeReviewReport,
   decodeReviewReportV3,
+  decodeReviewReportV4,
 } from "../../src/domain/report";
 
 const readFixture = async (name: string): Promise<unknown> =>
@@ -14,33 +15,45 @@ const readFixture = async (name: string): Promise<unknown> =>
     ).text(),
   );
 
-test("current report fixture passes the strict v3 decode boundary", async () => {
-  const fixture = await readFixture("review-report-v3.json");
+test("current report fixture passes the strict v4 decode boundary", async () => {
+  const fixture = await readFixture("review-report-v4.json");
 
   expect(JSON.stringify(decodeReviewReport(fixture))).toBe(
     JSON.stringify(fixture),
   );
-  expect(JSON.stringify(decodeReviewReportV3(fixture))).toBe(
+  expect(JSON.stringify(decodeReviewReportV4(fixture))).toBe(
     JSON.stringify(fixture),
   );
 });
 
-test("previous v2 fixture is strictly decoded and explicitly migrated", async () => {
-  const fixture = await readFixture("review-report-v2.json");
+test("previous v3 fixture is strictly decoded and explicitly migrated", async () => {
+  const fixture = await readFixture("review-report-v3.json");
   const migrated = decodeReviewReport(fixture);
 
-  expect(migrated.schemaVersion).toBe(3);
+  expect(migrated).toMatchObject({
+    schemaVersion: 4,
+    summary: { truncatedFiles: 0 },
+    coverage: { schemaVersion: 2 },
+    budget: { totalReservedTokens: 0, fitsBudget: true },
+  });
+  expect(() => decodeReviewReportV4(fixture)).toThrow();
+  expect(decodeReviewReportV3(fixture).schemaVersion).toBe(3);
+});
+
+test("v2 fixtures still migrate through v3 to the current report", async () => {
+  const migrated = decodeReviewReport(await readFixture("review-report-v2.json"));
+
+  expect(migrated.schemaVersion).toBe(4);
   expect(migrated.findings[0]).toMatchObject({
     severity: "medium",
     category: "correctness",
     confidence: 1,
   });
-  expect(() => decodeReviewReportV3(fixture)).toThrow();
 });
 
 test("unknown report versions are refused instead of guessed", () => {
-  expect(() => decodeReviewReport({ schemaVersion: 4 })).toThrow(
-    "Unsupported review report schema version: 4",
+  expect(() => decodeReviewReport({ schemaVersion: 5 })).toThrow(
+    "Unsupported review report schema version: 5",
   );
 });
 

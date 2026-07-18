@@ -23,6 +23,8 @@ export type ReviewEngineError = ReviewEngineFailure;
 export class ReviewEngine extends Context.Service<
   ReviewEngine,
   {
+    /** Reviews the exact normalized request. Budgeting and truncation are
+     * upstream policy decisions; engines must not silently truncate it. */
     readonly review: (
       request: ReviewRequestV1,
     ) => Effect.Effect<ReadonlyArray<ReviewFindingV1>, ReviewEngineError>;

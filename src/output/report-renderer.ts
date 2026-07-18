@@ -1,7 +1,7 @@
 import type { ReviewFileCoverage } from "../domain/review-file";
 import {
-  decodeReviewReportV3,
-  type ReviewReportV3,
+  decodeReviewReportV4,
+  type ReviewReportV4,
 } from "../domain/report";
 
 const terminalControlCharacter = /[\u0000-\u001f\u007f-\u009f\u2028\u2029]/gu;
@@ -17,16 +17,30 @@ const renderSkippedFile = (
   const path = escapeTerminalText(file.path);
   const source = escapeTerminalText(file.source);
 
-  return file.reason === "binary"
-    ? `- ${path} [${source}] — binary file`
-    : `- ${path} [${source}] — ${file.sizeBytes} bytes exceeds the ${file.limitBytes} byte file limit`;
+  if (file.reason === "binary") {
+    return `- ${path} [${source}] — binary file`;
+  }
+
+  if (file.reason === "request-budget") {
+    return `- ${path} [${source}] — 0 of ${file.totalHunks} hunks selected (request budget)`;
+  }
+
+  return `- ${path} [${source}] — ${file.sizeBytes} bytes exceeds the ${file.limitBytes} byte file limit`;
 };
 
-export const renderJsonReport = (report: ReviewReportV3): string =>
-  JSON.stringify(decodeReviewReportV3(report), undefined, 2);
+const renderTruncatedFile = (
+  file: Extract<ReviewFileCoverage, { readonly status: "truncated" }>,
+): string =>
+  `- ${escapeTerminalText(file.path)} [${escapeTerminalText(file.source)}] — ${file.selectedHunks} of ${file.totalHunks} hunks selected (request budget)`;
 
-export const renderTerminalReport = (input: ReviewReportV3): string => {
-  const report = decodeReviewReportV3(input);
+const renderBudget = (report: ReviewReportV4): string =>
+  `Request budget: ${report.budget.totalReservedTokens} of ${report.budget.maxTokens} tokens reserved (${report.budget.selectedRequestTokens} selected request, ${report.budget.fixedRequestOverheadTokens} fixed overhead, ${report.budget.outputReserveTokens} output reserve).`;
+
+export const renderJsonReport = (report: ReviewReportV4): string =>
+  JSON.stringify(decodeReviewReportV4(report), undefined, 2);
+
+export const renderTerminalReport = (input: ReviewReportV4): string => {
+  const report = decodeReviewReportV4(input);
 
   if (report.summary.changedFiles === 0) {
     return "No changes to review.";
@@ -46,9 +60,15 @@ export const renderTerminalReport = (input: ReviewReportV3): string => {
       ].join("\n");
 
   if (report.coverage.complete) {
-    return reviewSummaryText;
+    return [reviewSummaryText, "", renderBudget(report)].join("\n");
   }
 
+  const truncatedFiles = report.coverage.files.filter(
+    (
+      file,
+    ): file is Extract<ReviewFileCoverage, { readonly status: "truncated" }> =>
+      file.status === "truncated",
+  );
   const skippedFiles = report.coverage.files.filter(
     (
       file,
@@ -59,8 +79,13 @@ export const renderTerminalReport = (input: ReviewReportV3): string => {
   return [
     reviewSummaryText,
     "",
-    `Review coverage incomplete: reviewed ${report.summary.reviewedFiles} of ${report.summary.changedFiles} changed file(s).`,
-    "Skipped file(s):",
+    `Review coverage incomplete: fully reviewed ${report.summary.reviewedFiles}, truncated ${report.summary.truncatedFiles}, and skipped ${report.summary.skippedFiles} of ${report.summary.changedFiles} changed file(s).`,
+    ...(truncatedFiles.length === 0
+      ? []
+      : ["Truncated file(s):", ...truncatedFiles.map(renderTruncatedFile)]),
+    ...(skippedFiles.length === 0 ? [] : ["Skipped file(s):"]),
     ...skippedFiles.map(renderSkippedFile),
+    "",
+    renderBudget(report),
   ].join("\n");
 };
