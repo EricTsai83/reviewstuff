@@ -105,7 +105,9 @@ const review = (
     { concurrency: request.options.concurrency },
   ).pipe(Effect.map((fileFindings) => fileFindings.flat()));
 
+export const make: ReviewEngine["Service"] = ReviewEngine.of({ review });
+
 export const layer: Layer.Layer<ReviewEngine> = Layer.succeed(
   ReviewEngine,
-  { review },
+  make,
 );

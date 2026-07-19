@@ -8,7 +8,12 @@ type GitCommandError = Extract<
   { readonly _tag: "GitCommandError" }
 >;
 
-const renderGitCommandFailure = (error: GitCommandError): string => {
+type GitExecutionError = Extract<
+  RunReviewError,
+  { readonly _tag: "GitExecutionError" }
+>;
+
+function renderGitCommandFailure(error: GitCommandError): string {
   const summary = `Git ${error.operation} failed with exit code ${error.exitCode}.`;
   const guidance = (() => {
     switch (error.failure) {
@@ -26,20 +31,19 @@ const renderGitCommandFailure = (error: GitCommandError): string => {
   })();
 
   return `${summary} ${guidance}`;
-};
+}
 
-const renderUnmergedPaths = (paths: ReadonlyArray<string>): string =>
-  [
+function renderUnmergedPaths(paths: ReadonlyArray<string>): string {
+  return [
     "Review cannot start because unresolved merge conflicts exist:",
     "",
     ...paths.map((path) => `- ${escapeTerminalText(path)}`),
     "",
     "Resolve and stage these files, or abort the merge/rebase, then run review again.",
   ].join("\n");
+}
 
-const renderGitExecutionFailure = (
-  error: Extract<RunReviewError, { readonly _tag: "GitExecutionError" }>,
-): string => {
+function renderGitExecutionFailure(error: GitExecutionError): string {
   switch (error.failure) {
     case "command-start":
       return `Unable to start Git while attempting to ${error.operation}.`;
@@ -48,7 +52,7 @@ const renderGitExecutionFailure = (
     case "file-inspection":
       return `Unable to ${error.operation} because file inspection failed.`;
   }
-};
+}
 
 export const renderReviewError = (error: RunReviewError): string =>
   Match.valueTags(error, {

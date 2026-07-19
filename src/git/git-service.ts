@@ -329,17 +329,16 @@ const readDiff = Effect.fn("GitService.readDiff")(function* (
   );
 });
 
+export const make = Effect.gen(function* () {
+  const runner = yield* CommandRunner.CommandRunner;
+
+  return GitService.of({
+    readDiff: (scope) => readDiff(runner, scope),
+  });
+});
+
 export const layer: Layer.Layer<
   GitService,
   never,
   CommandRunner.CommandRunner
-> = Layer.effect(
-  GitService,
-  Effect.gen(function* () {
-    const runner = yield* CommandRunner.CommandRunner;
-
-    return {
-      readDiff: (scope) => readDiff(runner, scope),
-    };
-  }),
-);
+> = Layer.effect(GitService, make);

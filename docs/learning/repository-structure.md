@@ -30,6 +30,9 @@ Organize files by capability rather than by framework role. Do not create generi
 
 A single canonical module may import `platform/` internally, but its exported service contract must not expose platform types. Provider-specific modules may also depend on `platform/`; `ReviewEngine` consumers still see only normalized domain-facing input and output.
 
+Source declarations follow the project-wide contract-first and composition-last
+convention documented in [原始碼檔案排版規範](./source-file-layout.html).
+
 `shared/` is not a dependency-rule escape hatch. Keep a type or helper with its owning capability unless it is pure, has no natural feature owner, and is used by multiple unrelated source areas.
 
 ## Entry point and dependency rules

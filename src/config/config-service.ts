@@ -91,6 +91,15 @@ export type ConfigError =
   | ConfigFileInvalidError
   | UnsupportedReviewSelectionError;
 
+export class ConfigService extends Context.Service<
+  ConfigService,
+  {
+    readonly load: (
+      overrides?: ReviewConfigOverrides,
+    ) => Effect.Effect<ResolvedReviewConfig, ConfigError>;
+  }
+>()("reviewstuff/ConfigService") {}
+
 export const resolveReviewConfig = (
   config: ReviewstuffConfigV1 | undefined,
   overrides: ReviewConfigOverrides = {},
@@ -105,15 +114,6 @@ export const resolveReviewConfig = (
     profile,
   };
 };
-
-export class ConfigService extends Context.Service<
-  ConfigService,
-  {
-    readonly load: (
-      overrides?: ReviewConfigOverrides,
-    ) => Effect.Effect<ResolvedReviewConfig, ConfigError>;
-  }
->()("reviewstuff/ConfigService") {}
 
 export const decodeConfigContents = (
   contents: string,
@@ -153,17 +153,16 @@ const loadConfig = (
     }),
   );
 
-export const layer: Layer.Layer<ConfigService, never, FileSystem.FileSystem> =
-  Layer.effect(
-    ConfigService,
-    Effect.gen(function* () {
-      const fileSystem = yield* FileSystem.FileSystem;
+export const make = Effect.gen(function* () {
+  const fileSystem = yield* FileSystem.FileSystem;
 
-      return {
-        load: (overrides) =>
-          loadConfig(fileSystem).pipe(
-            Effect.map((config) => resolveReviewConfig(config, overrides)),
-          ),
-      };
-    }),
-  );
+  return ConfigService.of({
+    load: (overrides) =>
+      loadConfig(fileSystem).pipe(
+        Effect.map((config) => resolveReviewConfig(config, overrides)),
+      ),
+  });
+});
+
+export const layer: Layer.Layer<ConfigService, never, FileSystem.FileSystem> =
+  Layer.effect(ConfigService, make);

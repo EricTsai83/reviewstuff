@@ -224,23 +224,22 @@ const runCommand = (
   });
 };
 
+export const make = Effect.gen(function* () {
+  const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+
+  return CommandRunner.of({
+    run: (request) =>
+      runCommand(request).pipe(
+        Effect.provideService(
+          ChildProcessSpawner.ChildProcessSpawner,
+          spawner,
+        ),
+      ),
+  });
+});
+
 export const layer: Layer.Layer<
   CommandRunner,
   never,
   ChildProcessSpawner.ChildProcessSpawner
-> = Layer.effect(
-  CommandRunner,
-  Effect.gen(function* () {
-    const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-
-    return {
-      run: (request) =>
-        runCommand(request).pipe(
-          Effect.provideService(
-            ChildProcessSpawner.ChildProcessSpawner,
-            spawner,
-          ),
-        ),
-    };
-  }),
-);
+> = Layer.effect(CommandRunner, make);
