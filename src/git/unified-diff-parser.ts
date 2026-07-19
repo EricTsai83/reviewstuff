@@ -19,11 +19,6 @@ export interface ParsedUnifiedDiff {
 const hunkHeaderPattern =
   /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@(?:.*)$/u;
 const noNewlineMarker = "\\ No newline at end of file";
-const metadataPairs = [
-  ["old mode ", "new mode "],
-  ["rename from ", "rename to "],
-  ["copy from ", "copy to "],
-] as const;
 
 const invalidOutput = (
   operation: string,
@@ -108,6 +103,12 @@ const parseHunk = (
     patch: `${lines.join("\n")}\n`,
   });
 };
+
+const metadataPairs = [
+  ["old mode ", "new mode "],
+  ["rename from ", "rename to "],
+  ["copy from ", "copy to "],
+] as const;
 
 const countLinesStartingWith = (
   lines: ReadonlyArray<string>,

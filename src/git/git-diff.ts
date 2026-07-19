@@ -21,10 +21,6 @@ import {
 } from "./unified-diff-parser";
 
 export const gitPatchMaxOutputBytes = 4 * 1024 * 1024;
-const patchCollectionConcurrency = 4;
-const gitDiffExitCodes: ReadonlySet<number> = new Set([0]);
-const gitNoIndexDiffExitCodes: ReadonlySet<number> = new Set([0, 1]);
-const gitObjectIdPattern = /^(?:[0-9a-f]{40}|[0-9a-f]{64})\n$/iu;
 
 interface GitFileMetadata {
   readonly path: string;
@@ -51,6 +47,14 @@ export interface GitDiff {
   readonly files: ReadonlyArray<GitFile>;
 }
 
+export interface CollectDiffPatchesOptions {
+  readonly runner: CommandRunner.Service;
+  readonly targets: ReadonlyArray<GitPatchTarget>;
+  readonly source: ReviewFileSource;
+  readonly repositoryRoot: string;
+  readonly diffBase?: string;
+}
+
 interface ReadDiffPatchOptions {
   readonly runner: CommandRunner.Service;
   readonly operation: string;
@@ -61,13 +65,7 @@ interface ReadDiffPatchOptions {
   readonly repositoryRoot: string;
 }
 
-export interface CollectDiffPatchesOptions {
-  readonly runner: CommandRunner.Service;
-  readonly targets: ReadonlyArray<GitPatchTarget>;
-  readonly source: ReviewFileSource;
-  readonly repositoryRoot: string;
-  readonly diffBase?: string;
-}
+const gitObjectIdPattern = /^(?:[0-9a-f]{40}|[0-9a-f]{64})\n$/iu;
 
 const fileMetadata = (
   target: GitPatchTarget,
@@ -199,6 +197,10 @@ const readDiffPatch = ({
       );
     }),
   );
+
+const patchCollectionConcurrency = 4;
+const gitDiffExitCodes: ReadonlySet<number> = new Set([0]);
+const gitNoIndexDiffExitCodes: ReadonlySet<number> = new Set([0, 1]);
 
 export const collectDiffPatches = ({
   runner,
