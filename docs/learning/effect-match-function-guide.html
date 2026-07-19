@@ -1,0 +1,974 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="從心智模型、型別收窄、分支順序到 exhaustive completion，完整學會 Effect Match。">
+  <title>Effect Match function 教學：型別安全的 pattern matching</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --clay: #D97757;
+      --slate: #141413;
+      --ivory: #FAF9F5;
+      --oat: #E3DACC;
+      --white: #FFFFFF;
+      --gray-100: #F0EEE6;
+      --gray-300: #D1CFC5;
+      --gray-500: #87867F;
+      --gray-700: #3D3D3A;
+      --warning: #C78E3F;
+      --space-sm: 8px;
+      --space-md: 12px;
+      --space-lg: 16px;
+      --space-xl: 24px;
+      --space-2xl: 32px;
+      --space-3xl: 48px;
+      --radius-sm: 4px;
+      --radius-md: 8px;
+      --content-width: 68ch;
+    }
+
+    * { box-sizing: border-box; }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      margin: 0;
+      background: var(--ivory);
+      color: var(--slate);
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 16px;
+      font-weight: 430;
+      line-height: 1.55;
+      letter-spacing: 0;
+    }
+
+    main {
+      max-width: var(--content-width);
+      margin: 0 auto;
+      padding: var(--space-3xl) var(--space-xl);
+    }
+
+    article {
+      background: transparent;
+      border: 0;
+      border-radius: 0;
+      box-shadow: none;
+      padding: 0;
+    }
+
+    h1,
+    h2,
+    h3 { letter-spacing: -0.018em; }
+
+    h1 {
+      max-width: none;
+      margin: 0 0 var(--space-lg);
+      font-size: 1.8rem;
+      line-height: 1.18;
+      text-wrap: balance;
+      overflow-wrap: normal;
+    }
+
+    h2 {
+      margin: var(--space-3xl) 0 var(--space-lg);
+      font-size: 1.22rem;
+      line-height: 1.25;
+    }
+
+    h3 {
+      margin: var(--space-xl) 0 var(--space-md);
+      font-size: 1rem;
+      line-height: 1.35;
+    }
+
+    p,
+    ul,
+    ol,
+    .deck,
+    .callout,
+    table,
+    pre { max-width: var(--content-width); }
+
+    p { margin: 0 0 var(--space-lg); }
+    ul,
+    ol { margin: 0 0 var(--space-xl); padding-left: 1.35rem; }
+    li + li { margin-top: var(--space-sm); }
+
+    .deck {
+      margin: 0 0 var(--space-2xl);
+      color: var(--gray-700);
+      font-size: 1.08rem;
+    }
+
+    a {
+      color: var(--clay);
+      text-decoration: underline;
+      text-underline-offset: 0.18em;
+    }
+
+    a:hover { text-decoration-thickness: 2px; }
+
+    p code,
+    li code,
+    td code,
+    th code,
+    figcaption code {
+      padding: 0.08em 0.28em;
+      border: 1px solid var(--oat);
+      border-radius: var(--radius-sm);
+      background: var(--gray-100);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.9em;
+      overflow-wrap: anywhere;
+    }
+
+    .reading-path {
+      margin: 0 0 var(--space-2xl);
+      padding: var(--space-lg) var(--space-xl);
+      border-left: 3px solid var(--oat);
+      color: var(--gray-700);
+    }
+
+    .reading-path strong { color: var(--slate); }
+    .reading-path ol { margin: var(--space-md) 0 0; }
+
+    .callout {
+      margin: var(--space-xl) 0;
+      padding: var(--space-lg);
+      border: 1px solid var(--oat);
+      border-left: 4px solid var(--clay);
+      border-radius: 0 var(--radius-md) var(--radius-md) 0;
+      background: var(--gray-100);
+    }
+
+    .callout.warning { border-left-color: var(--warning); }
+    .callout p:last-child { margin-bottom: 0; }
+    .callout strong { display: block; margin-bottom: var(--space-sm); }
+
+    .table-wrap {
+      width: 100%;
+      margin: var(--space-lg) 0 var(--space-xl);
+      overflow-x: auto;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.94rem;
+    }
+
+    th,
+    td {
+      padding: 10px 12px;
+      border: 1px solid var(--oat);
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th { background: var(--gray-100); font-weight: 650; }
+    td { background: rgba(255, 255, 255, 0.35); }
+
+    pre {
+      position: relative;
+      width: 100%;
+      margin: var(--space-lg) 0 var(--space-xl);
+      border: 1px solid #26241f;
+      border-radius: var(--radius-md);
+      background: #11110f;
+      color: #d8d4ca;
+      overflow: hidden;
+    }
+
+    pre code {
+      display: block;
+      border: 0;
+      background: transparent;
+      padding: 18px 64px 18px 22px;
+      color: inherit;
+      overflow-x: auto;
+      white-space: pre;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.875rem;
+      font-weight: 400;
+      line-height: 1.62;
+      scrollbar-width: none;
+    }
+
+    pre code::-webkit-scrollbar { width: 0; height: 0; }
+    pre .label { display: none; }
+
+    .copy-code {
+      position: absolute;
+      top: 9px;
+      right: 9px;
+      z-index: 1;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 30px;
+      height: 30px;
+      padding: 0;
+      border: 1px solid rgba(250, 249, 245, 0.14);
+      border-radius: var(--radius-sm);
+      background: rgba(250, 249, 245, 0.06);
+      color: rgba(250, 249, 245, 0.72);
+      cursor: pointer;
+    }
+
+    .copy-code:hover,
+    .copy-code:focus-visible {
+      border-color: rgba(250, 249, 245, 0.28);
+      background: rgba(250, 249, 245, 0.12);
+      color: var(--ivory);
+      outline: none;
+    }
+
+    .copy-code.copied {
+      border-color: rgba(143, 184, 106, 0.42);
+      background: rgba(143, 184, 106, 0.14);
+      color: #b8d99a;
+    }
+
+    .copy-code svg {
+      width: 13px;
+      height: 13px;
+      stroke: currentColor;
+      stroke-width: 1.8;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      fill: none;
+      pointer-events: none;
+    }
+
+    .code-scrollbar {
+      position: absolute;
+      right: 0;
+      bottom: 0;
+      left: 0;
+      height: 3px;
+      border-radius: 999px;
+      background: rgba(250, 249, 245, 0.1);
+      cursor: pointer;
+    }
+
+    .code-scrollbar.hidden { display: none; }
+
+    .code-scrollbar-thumb {
+      height: 100%;
+      border-radius: inherit;
+      background: rgba(255, 148, 110, 0.82);
+      transform: translateX(0);
+      cursor: grab;
+    }
+
+    .code-scrollbar-thumb:active { cursor: grabbing; }
+
+    pre code .k { color: #ff946e; font-weight: 400; }
+    pre code .s { color: #8fb86a; }
+    pre code .n,
+    pre code .p { color: #d8d4ca; }
+    pre code .c { color: #858177; font-style: italic; }
+    pre code .f { color: #cfc6a2; }
+    pre code .t { color: #cfc6a2; font-weight: 400; }
+    pre code .o { color: #ff946e; }
+
+    .flow-figure { margin: var(--space-xl) 0; }
+
+    .flow-figure svg {
+      display: block;
+      width: 100%;
+      height: auto;
+    }
+
+    .flow-figure .flow-mobile { display: none; }
+
+    .flow-node rect {
+      fill: var(--white);
+      stroke: var(--oat);
+      stroke-width: 1.5;
+    }
+
+    .flow-node text {
+      fill: var(--slate);
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 14px;
+      font-weight: 650;
+    }
+
+    .flow-note {
+      fill: var(--gray-700);
+      font-size: 12px;
+      font-weight: 500;
+    }
+
+    .flow-arrow {
+      stroke: var(--clay);
+      stroke-width: 2;
+      fill: none;
+    }
+
+    figcaption {
+      margin-top: var(--space-md);
+      color: var(--gray-700);
+      font-size: 0.88rem;
+    }
+
+    .decision-list li::marker { color: var(--clay); font-weight: 700; }
+
+    .sources {
+      margin-top: var(--space-3xl);
+      padding-top: var(--space-xl);
+      border-top: 1px solid var(--oat);
+      color: var(--gray-700);
+      font-size: 0.9rem;
+    }
+
+    .sources h2 { margin-top: 0; }
+
+    @media (max-width: 640px) {
+      body { font-size: 15px; }
+      h1 { font-size: 1.65rem; }
+      main { padding: var(--space-xl); }
+      pre code { font-size: 0.8125rem; line-height: 1.5; }
+      p code,
+      li code,
+      td code { font-size: 0.9em; }
+      table,
+      .deck,
+      .sources { font-size: 0.875rem; }
+      .flow-figure .flow-desktop { display: none; }
+      .flow-figure .flow-mobile { display: block; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <article>
+      <h1>Effect Match function 教學：型別安全的 pattern matching</h1>
+      <p class="deck">Effect 的 <code>Match</code> 把一連串條件分支寫成可組合的 pipeline，並在每個 handler 內自動收窄型別。更重要的是，它能在編譯期檢查 discriminated union 是否已經處理完整。</p>
+
+      <nav class="reading-path" aria-label="閱讀路徑">
+        <strong>閱讀路徑</strong>
+        <ol>
+          <li><a href="#mental-model">先建立三階段心智模型</a></li>
+          <li><a href="#running-example">用付款狀態完成第一個 matcher</a></li>
+          <li><a href="#patterns">理解 pattern、順序與型別收窄</a></li>
+          <li><a href="#value-tags">用 valueTags 立即處理 tagged union</a></li>
+          <li><a href="#finishers">選擇正確的完成方式</a></li>
+          <li><a href="#pitfalls">避開常見陷阱</a></li>
+        </ol>
+      </nav>
+
+      <section aria-labelledby="why-match">
+        <h2 id="why-match">為什麼不只用 switch？</h2>
+        <p>TypeScript 的 <code>switch</code> 很適合比對單一欄位，但當條件開始包含巢狀物件、predicate、數個 pattern 共用 handler，或你想把分支邏輯存成可重用函式時，程式碼很快會出現重複的型別判斷。</p>
+        <p><code>Match</code> 的價值不是「換一種 if/else 語法」，而是同時處理三件事：執行期依序測試條件、編譯期收窄 handler 的參數型別，以及追蹤還有哪些 union 成員尚未處理。</p>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>需求</th>
+                <th><code>switch</code></th>
+                <th><code>Match</code></th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>依 discriminator 分支</td>
+                <td>直接、原生</td>
+                <td><code>Match.tag</code> 或 <code>Match.typeTags</code></td>
+              </tr>
+              <tr>
+                <td>比對巢狀 shape</td>
+                <td>需自行組合條件</td>
+                <td>直接傳入物件 pattern</td>
+              </tr>
+              <tr>
+                <td>檢查分支完整性</td>
+                <td>通常需額外的 <code>never</code> helper</td>
+                <td><code>Match.exhaustive</code></td>
+              </tr>
+              <tr>
+                <td>未命中時保留資訊</td>
+                <td>自行設計回傳值</td>
+                <td><code>Match.option</code> 或 <code>Match.result</code></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section aria-labelledby="mental-model">
+        <h2 id="mental-model">心智模型：建立、加分支、完成</h2>
+        <p>每個 matcher 都有三個階段。先決定要建立可重用函式，還是立刻處理一個值；接著按優先順序加入 cases；最後選擇未命中時的語意。完成函式不是裝飾，而是把 builder 轉成最後結果的必要步驟。</p>
+
+        <figure class="flow-figure">
+          <svg class="flow-desktop" role="img" aria-labelledby="match-flow-desktop-title match-flow-desktop-desc" viewBox="0 0 760 176">
+            <title id="match-flow-desktop-title">Effect Match 的三階段流程</title>
+            <desc id="match-flow-desktop-desc">先以 Match.type 或 Match.value 建立 matcher，再加入依序測試的分支，最後以 exhaustive、orElse、option 或 result 完成。</desc>
+            <defs>
+              <marker id="match-flow-arrow-desktop" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--clay)"></path>
+              </marker>
+            </defs>
+            <g class="flow-node">
+              <rect x="18" y="42" width="196" height="82" rx="8"></rect>
+              <text x="116" y="75" text-anchor="middle">1. 建立 matcher</text>
+              <text class="flow-note" x="116" y="99" text-anchor="middle">type&lt;T&gt; 或 value(input)</text>
+            </g>
+            <path class="flow-arrow" d="M 222 83 H 278" marker-end="url(#match-flow-arrow-desktop)"></path>
+            <g class="flow-node">
+              <rect x="288" y="42" width="184" height="82" rx="8"></rect>
+              <text x="380" y="75" text-anchor="middle">2. 加入 cases</text>
+              <text class="flow-note" x="380" y="99" text-anchor="middle">由上到下，先命中者勝</text>
+            </g>
+            <path class="flow-arrow" d="M 480 83 H 536" marker-end="url(#match-flow-arrow-desktop)"></path>
+            <g class="flow-node">
+              <rect x="546" y="42" width="196" height="82" rx="8"></rect>
+              <text x="644" y="75" text-anchor="middle">3. 完成 matcher</text>
+              <text class="flow-note" x="644" y="99" text-anchor="middle">決定未命中的語意</text>
+            </g>
+          </svg>
+
+          <svg class="flow-mobile" role="img" aria-labelledby="match-flow-mobile-title match-flow-mobile-desc" viewBox="0 0 340 440">
+            <title id="match-flow-mobile-title">Effect Match 的三階段流程</title>
+            <desc id="match-flow-mobile-desc">先建立 matcher，再加入依序測試的分支，最後選擇完成方式。</desc>
+            <defs>
+              <marker id="match-flow-arrow-mobile" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--clay)"></path>
+              </marker>
+            </defs>
+            <g class="flow-node">
+              <rect x="34" y="18" width="272" height="92" rx="8"></rect>
+              <text x="170" y="54" text-anchor="middle">1. 建立 matcher</text>
+              <text class="flow-note" x="170" y="80" text-anchor="middle">type&lt;T&gt; 或 value(input)</text>
+            </g>
+            <path class="flow-arrow" d="M 170 118 V 154" marker-end="url(#match-flow-arrow-mobile)"></path>
+            <g class="flow-node">
+              <rect x="34" y="164" width="272" height="92" rx="8"></rect>
+              <text x="170" y="200" text-anchor="middle">2. 加入 cases</text>
+              <text class="flow-note" x="170" y="226" text-anchor="middle">由上到下，先命中者勝</text>
+            </g>
+            <path class="flow-arrow" d="M 170 264 V 300" marker-end="url(#match-flow-arrow-mobile)"></path>
+            <g class="flow-node">
+              <rect x="34" y="310" width="272" height="92" rx="8"></rect>
+              <text x="170" y="346" text-anchor="middle">3. 完成 matcher</text>
+              <text class="flow-note" x="170" y="372" text-anchor="middle">決定未命中的語意</text>
+            </g>
+          </svg>
+          <figcaption><code>Match.type&lt;T&gt;()</code> 完成後得到可重用函式；<code>Match.value(input)</code> 完成後直接得到這次 input 的結果。</figcaption>
+        </figure>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>起點</th>
+                <th>用途</th>
+                <th>完成後</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>Match.type&lt;T&gt;()</code></td>
+                <td>先描述規則，之後處理多個 <code>T</code></td>
+                <td>通常是 <code>(input: T) =&gt; Output</code></td>
+              </tr>
+              <tr>
+                <td><code>Match.value(input)</code></td>
+                <td>現在就處理這一個值</td>
+                <td>直接是 <code>Output</code></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section aria-labelledby="first-example">
+        <h2 id="first-example">最小可用範例</h2>
+        <p>下面先建立一個能重複使用的函式。兩個分支都處理完後，<code>Match.exhaustive</code> 會確認剩餘型別已經是 <code>never</code>。</p>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">import</span> <span class="o">{</span> <span class="t">Match</span> <span class="o">}</span> <span class="k">from</span> <span class="s">"effect"</span>
+
+<span class="k">const</span> describe <span class="o">=</span> <span class="t">Match</span><span class="o">.</span><span class="k">type</span><span class="o">&lt;</span>string <span class="o">|</span> number<span class="o">&gt;</span><span class="o">(</span><span class="o">)</span><span class="o">.</span><span class="p">pipe</span><span class="o">(</span>
+  <span class="t">Match</span><span class="o">.</span><span class="p">when</span><span class="o">(</span><span class="t">Match</span><span class="o">.</span><span class="p">string</span><span class="o">,</span> <span class="o">(</span>text<span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span> <span class="s">`文字：${text}`</span><span class="o">)</span><span class="o">,</span>
+  <span class="t">Match</span><span class="o">.</span><span class="p">when</span><span class="o">(</span><span class="t">Match</span><span class="o">.</span><span class="p">number</span><span class="o">,</span> <span class="o">(</span>value<span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span> <span class="s">`數字：${value}`</span><span class="o">)</span><span class="o">,</span>
+  <span class="t">Match</span><span class="o">.</span><span class="p">exhaustive</span>
+<span class="o">)</span>
+
+<span class="f">describe</span><span class="o">(</span><span class="s">"hello"</span><span class="o">)</span> <span class="c">// "文字：hello"</span>
+<span class="f">describe</span><span class="o">(</span><span class="n">42</span><span class="o">)</span>      <span class="c">// "數字：42"</span></code></pre>
+
+        <p><code>text</code> 自動是 <code>string</code>，<code>value</code> 自動是 <code>number</code>。不需要手動寫型別 assertion，也不需要在 handler 裡再次檢查 <code>typeof</code>。</p>
+      </section>
+
+      <section aria-labelledby="running-example">
+        <h2 id="running-example">持續範例：付款狀態</h2>
+        <p>Discriminated union 是 <code>Match</code> 最能發揮價值的場景。以下每個付款狀態都用 <code>_tag</code> 識別，且攜帶不同資料。</p>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">type</span> <span class="t">PaymentState</span> <span class="o">=</span>
+  <span class="o">|</span> <span class="o">{</span> readonly _tag<span class="o">:</span> <span class="s">"Idle"</span> <span class="o">}</span>
+  <span class="o">|</span> <span class="o">{</span> readonly _tag<span class="o">:</span> <span class="s">"Processing"</span><span class="o">;</span> readonly attempt<span class="o">:</span> number <span class="o">}</span>
+  <span class="o">|</span> <span class="o">{</span> readonly _tag<span class="o">:</span> <span class="s">"Succeeded"</span><span class="o">;</span> readonly receiptId<span class="o">:</span> string <span class="o">}</span>
+  <span class="o">|</span> <span class="o">{</span>
+      readonly _tag<span class="o">:</span> <span class="s">"Failed"</span>
+      readonly reason<span class="o">:</span> string
+      readonly retryable<span class="o">:</span> boolean
+    <span class="o">}</span></code></pre>
+
+        <p>使用 <code>Match.tag</code> 時，handler 的參數會依 <code>_tag</code> 收窄。失敗狀態再用物件 pattern 區分是否可重試。</p>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">const</span> labelPayment <span class="o">=</span> <span class="t">Match</span><span class="o">.</span><span class="k">type</span><span class="o">&lt;</span><span class="t">PaymentState</span><span class="o">&gt;</span><span class="o">(</span><span class="o">)</span><span class="o">.</span><span class="p">pipe</span><span class="o">(</span>
+  <span class="t">Match</span><span class="o">.</span><span class="p">withReturnType</span><span class="o">&lt;</span>string<span class="o">&gt;</span><span class="o">(</span><span class="o">)</span><span class="o">,</span>
+  <span class="t">Match</span><span class="o">.</span><span class="p">tag</span><span class="o">(</span><span class="s">"Idle"</span><span class="o">,</span> <span class="o">(</span><span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span> <span class="s">"尚未付款"</span><span class="o">)</span><span class="o">,</span>
+  <span class="t">Match</span><span class="o">.</span><span class="p">tag</span><span class="o">(</span>
+    <span class="s">"Processing"</span><span class="o">,</span>
+    <span class="o">(</span><span class="o">{</span> attempt <span class="o">}</span><span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span> <span class="s">`處理中（第 ${attempt} 次）`</span>
+  <span class="o">)</span><span class="o">,</span>
+  <span class="t">Match</span><span class="o">.</span><span class="p">when</span><span class="o">(</span>
+    <span class="o">{</span> _tag<span class="o">:</span> <span class="s">"Failed"</span><span class="o">,</span> retryable<span class="o">:</span> <span class="n">true</span> <span class="o">}</span><span class="o">,</span>
+    <span class="o">(</span><span class="o">{</span> reason <span class="o">}</span><span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span> <span class="s">`付款失敗，可重試：${reason}`</span>
+  <span class="o">)</span><span class="o">,</span>
+  <span class="t">Match</span><span class="o">.</span><span class="p">tag</span><span class="o">(</span><span class="s">"Failed"</span><span class="o">,</span> <span class="o">(</span><span class="o">{</span> reason <span class="o">}</span><span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span> <span class="s">`付款失敗：${reason}`</span><span class="o">)</span><span class="o">,</span>
+  <span class="t">Match</span><span class="o">.</span><span class="p">tag</span><span class="o">(</span>
+    <span class="s">"Succeeded"</span><span class="o">,</span>
+    <span class="o">(</span><span class="o">{</span> receiptId <span class="o">}</span><span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span> <span class="s">`付款成功：${receiptId}`</span>
+  <span class="o">)</span><span class="o">,</span>
+  <span class="t">Match</span><span class="o">.</span><span class="p">exhaustive</span>
+<span class="o">)</span></code></pre>
+
+        <p>這裡的順序有實際語意：可重試的 <code>Failed</code> 必須放在一般 <code>Failed</code> 前面。輸入只會執行第一個命中的 handler，後面的 cases 不會再執行。</p>
+
+        <div class="callout">
+          <strong><code>withReturnType</code> 必須放在第一步</strong>
+          <p>它要求所有分支都回傳 <code>string</code>。若某個 handler 不小心回傳數字，TypeScript 會在該分支直接報錯，而不是最後才得到難讀的 union 型別。</p>
+        </div>
+      </section>
+
+      <section aria-labelledby="patterns">
+        <h2 id="patterns">Pattern 能寫什麼？</h2>
+        <p><code>Match.when(pattern, handler)</code> 的 pattern 可以是 literal、refinement、predicate，或由這些元素組成的物件 shape。物件 pattern 是部分結構比對：輸入可以有其他欄位，只要 pattern 指定的欄位存在且符合即可。</p>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Pattern</th>
+                <th>範例</th>
+                <th>適合場景</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Literal</td>
+                <td><code>"Idle"</code>、<code>404</code>、<code>null</code></td>
+                <td>精確值</td>
+              </tr>
+              <tr>
+                <td>內建 refinement</td>
+                <td><code>Match.string</code>、<code>Match.number</code>、<code>Match.defined</code></td>
+                <td>同時檢查並收窄型別</td>
+              </tr>
+              <tr>
+                <td>多個 literal</td>
+                <td><code>Match.is("Idle", "Paused")</code></td>
+                <td>數個值共用一個分支</td>
+              </tr>
+              <tr>
+                <td>物件 shape</td>
+                <td><code>{ _tag: "Failed", retryable: true }</code></td>
+                <td>部分結構與巢狀條件</td>
+              </tr>
+              <tr>
+                <td>Predicate</td>
+                <td><code>{ attempt: (n) =&gt; n &gt; 3 }</code></td>
+                <td>範圍或商業規則</td>
+              </tr>
+              <tr>
+                <td>Class instance</td>
+                <td><code>Match.instanceOf(Error)</code></td>
+                <td>依建構子安全收窄</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3><code>whenOr</code>：任一 pattern 成立</h3>
+        <p>當數個 pattern 共用同一個 handler，可用 <code>Match.whenOr</code> 合併。handler 參數是所有可能命中型別的 union。</p>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">const</span> groupInput <span class="o">=</span> <span class="t">Match</span><span class="o">.</span><span class="k">type</span><span class="o">&lt;</span>string <span class="o">|</span> number <span class="o">|</span> boolean<span class="o">&gt;</span><span class="o">(</span><span class="o">)</span><span class="o">.</span><span class="p">pipe</span><span class="o">(</span>
+  <span class="t">Match</span><span class="o">.</span><span class="p">whenOr</span><span class="o">(</span>
+    <span class="t">Match</span><span class="o">.</span><span class="p">string</span><span class="o">,</span>
+    <span class="t">Match</span><span class="o">.</span><span class="p">number</span><span class="o">,</span>
+    <span class="o">(</span><span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span> <span class="s">"文字或數字"</span>
+  <span class="o">)</span><span class="o">,</span>
+  <span class="t">Match</span><span class="o">.</span><span class="p">when</span><span class="o">(</span><span class="t">Match</span><span class="o">.</span><span class="p">boolean</span><span class="o">,</span> <span class="o">(</span><span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span> <span class="s">"布林值"</span><span class="o">)</span><span class="o">,</span>
+  <span class="t">Match</span><span class="o">.</span><span class="p">exhaustive</span>
+<span class="o">)</span></code></pre>
+
+        <h3><code>whenAnd</code>：所有 pattern 都成立</h3>
+        <p><code>Match.whenAnd</code> 適合把獨立條件組合在同一分支；下例必須同時是成年且為 admin。</p>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">type</span> <span class="t">User</span> <span class="o">=</span> <span class="o">{</span>
+  readonly age<span class="o">:</span> number
+  readonly role<span class="o">:</span> <span class="s">"admin"</span> <span class="o">|</span> <span class="s">"user"</span>
+<span class="o">}</span>
+
+<span class="k">const</span> checkAccess <span class="o">=</span> <span class="t">Match</span><span class="o">.</span><span class="k">type</span><span class="o">&lt;</span><span class="t">User</span><span class="o">&gt;</span><span class="o">(</span><span class="o">)</span><span class="o">.</span><span class="p">pipe</span><span class="o">(</span>
+  <span class="t">Match</span><span class="o">.</span><span class="p">whenAnd</span><span class="o">(</span>
+    <span class="o">{</span> age<span class="o">:</span> <span class="o">(</span>age<span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span> age <span class="o">&gt;</span><span class="o">=</span> <span class="n">18</span> <span class="o">}</span><span class="o">,</span>
+    <span class="o">{</span> role<span class="o">:</span> <span class="s">"admin"</span> <span class="o">}</span><span class="o">,</span>
+    <span class="o">(</span><span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span> <span class="s">"允許"</span>
+  <span class="o">)</span><span class="o">,</span>
+  <span class="t">Match</span><span class="o">.</span><span class="p">orElse</span><span class="o">(</span><span class="o">(</span><span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span> <span class="s">"拒絕"</span><span class="o">)</span>
+<span class="o">)</span></code></pre>
+
+        <h3><code>tag</code> 與 <code>typeTags</code></h3>
+        <p>如果資料使用 Effect 慣例的 <code>_tag</code>，有兩種常見寫法。需要混合 shape、predicate 或控制分支順序時，用 <code>Match.tag</code> pipeline；如果只是把每個 tag 一對一映射到 handler，<code>Match.typeTags</code> 更短。</p>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">const</span> renderPayment <span class="o">=</span> <span class="t">Match</span><span class="o">.</span><span class="p">typeTags</span><span class="o">&lt;</span><span class="t">PaymentState</span><span class="o">,</span> string<span class="o">&gt;</span><span class="o">(</span><span class="o">)</span><span class="o">(</span><span class="o">{</span>
+  <span class="t">Idle</span><span class="o">:</span> <span class="o">(</span><span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span> <span class="s">"尚未付款"</span><span class="o">,</span>
+  <span class="t">Processing</span><span class="o">:</span> <span class="o">(</span><span class="o">{</span> attempt <span class="o">}</span><span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span> <span class="s">`處理中：${attempt}`</span><span class="o">,</span>
+  <span class="t">Succeeded</span><span class="o">:</span> <span class="o">(</span><span class="o">{</span> receiptId <span class="o">}</span><span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span> <span class="s">`收據：${receiptId}`</span><span class="o">,</span>
+  <span class="t">Failed</span><span class="o">:</span> <span class="o">(</span><span class="o">{</span> reason <span class="o">}</span><span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span> <span class="s">`失敗：${reason}`</span>
+<span class="o">}</span><span class="o">)</span></code></pre>
+
+        <p><code>typeTags</code> 直接回傳可重用函式，而且 handler map 本身就是 exhaustive；少一個 key 或多一個不存在的 key，都會是型別錯誤。若手上已經有一個具體值，可改用 <code>Match.valueTags(input, handlers)</code> 直接取得結果。</p>
+      </section>
+
+      <section aria-labelledby="value-tags">
+        <h2 id="value-tags"><code>Match.valueTags</code>：立即處理一個 tagged union</h2>
+        <p><code>Match.valueTags</code> 專門處理帶有 <code>_tag</code> 的 discriminated union。它接收一個現成的值與一份 handler map，依 <code>_tag</code> 選出 handler，然後直接回傳結果。</p>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">const</span> current <span class="o">=</span> <span class="f">getCurrentPayment</span><span class="o">(</span><span class="o">)</span> <span class="c">// PaymentState</span>
+
+<span class="k">const</span> message <span class="o">=</span> <span class="t">Match</span><span class="o">.</span><span class="p">valueTags</span><span class="o">(</span>current<span class="o">,</span> <span class="o">{</span>
+  <span class="t">Idle</span><span class="o">:</span> <span class="o">(</span><span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span> <span class="s">"尚未付款"</span><span class="o">,</span>
+  <span class="t">Processing</span><span class="o">:</span> <span class="o">(</span><span class="o">{</span> attempt <span class="o">}</span><span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span> <span class="s">`處理中：${attempt}`</span><span class="o">,</span>
+  <span class="t">Succeeded</span><span class="o">:</span> <span class="o">(</span><span class="o">{</span> receiptId <span class="o">}</span><span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span> <span class="s">`收據：${receiptId}`</span><span class="o">,</span>
+  <span class="t">Failed</span><span class="o">:</span> <span class="o">(</span><span class="o">{</span> reason <span class="o">}</span><span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span> <span class="s">`失敗：${reason}`</span>
+<span class="o">}</span><span class="o">)</span>
+
+<span class="c">// message 是 string，不是 matcher，也不是函式</span></code></pre>
+
+        <p>每個 handler 的參數會自動收窄。例如 <code>Succeeded</code> handler 可以讀取 <code>receiptId</code>，但不能讀取只存在於 <code>Failed</code> 的 <code>reason</code>。handler map 同時是 exhaustive：少掉任何一個 <code>PaymentState["_tag"]</code>，TypeScript 都會報錯。這個完整性範圍以 value 的靜態型別為準；若 value 已經被收窄成單一 variant，就只會要求該 variant 的 handler。</p>
+
+        <div class="callout">
+          <strong>可以把它想成一個專用快捷方式</strong>
+          <p><code>Match.valueTags(value, handlers)</code> 約等於「從目前 value 開始、依 <code>_tag</code> 建立所有分支、要求完整、立刻取得結果」。因此它比通用的 <code>Match.value(value).pipe(...)</code> 短，但只能做 <code>_tag</code> 對 handler 的直接映射。</p>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>API</th>
+                <th>輸入時機</th>
+                <th>條件能力</th>
+                <th>輸出</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>Match.value(value)</code></td>
+                <td>已有一個值</td>
+                <td>literal、shape、predicate、tag</td>
+                <td>completion 後直接得到結果</td>
+              </tr>
+              <tr>
+                <td><code>Match.valueTags(value, handlers)</code></td>
+                <td>已有一個 tagged union 值</td>
+                <td>只依 <code>_tag</code> exhaustive dispatch</td>
+                <td>直接得到結果</td>
+              </tr>
+              <tr>
+                <td><code>Match.typeTags&lt;T&gt;()(handlers)</code></td>
+                <td>先定義規則</td>
+                <td>只依 <code>_tag</code> exhaustive dispatch</td>
+                <td>得到可重用的 <code>(value: T) =&gt; Result</code></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>本專案的實際用途：跨 error boundary 轉換錯誤</h3>
+        <p>本專案的 command runner 會產生五種帶 <code>_tag</code> 的 execution error。Git layer 已經拿到一個具體的 <code>cause</code>，因此使用 <code>valueTags</code> 將每種底層錯誤映射成對應的 Git domain error：</p>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">export</span> <span class="k">const</span> mapCommandExecutionError <span class="o">=</span> <span class="o">(</span>
+  operation<span class="o">:</span> string<span class="o">,</span>
+  cause<span class="o">:</span> <span class="t">CommandRunner</span><span class="o">.</span><span class="p">CommandExecutionError</span>
+<span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span>
+  <span class="t">Match</span><span class="o">.</span><span class="p">valueTags</span><span class="o">(</span>cause<span class="o">,</span> <span class="o">{</span>
+    <span class="t">CommandStartError</span><span class="o">:</span> <span class="o">(</span>cause<span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span>
+      <span class="k">new</span> <span class="f">GitExecutionError</span><span class="o">(</span><span class="o">{</span>
+        operation<span class="o">,</span>
+        failure<span class="o">:</span> <span class="s">"command-start"</span><span class="o">,</span>
+        cause
+      <span class="o">}</span><span class="o">)</span><span class="o">,</span>
+    <span class="t">CommandTimeoutError</span><span class="o">:</span> <span class="o">(</span>cause<span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span>
+      <span class="k">new</span> <span class="f">GitCommandTimeoutError</span><span class="o">(</span><span class="o">{</span>
+        operation<span class="o">,</span>
+        timeoutMilliseconds<span class="o">:</span> cause<span class="o">.</span><span class="p">timeoutMilliseconds</span><span class="o">,</span>
+        cause
+      <span class="o">}</span><span class="o">)</span><span class="o">,</span>
+    <span class="t">CommandOutputLimitError</span><span class="o">:</span> <span class="o">(</span>cause<span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span>
+      <span class="k">new</span> <span class="f">GitCommandOutputLimitError</span><span class="o">(</span><span class="o">{</span>
+        operation<span class="o">,</span>
+        maxOutputBytes<span class="o">:</span> cause<span class="o">.</span><span class="p">maxOutputBytes</span><span class="o">,</span>
+        observedOutputBytes<span class="o">:</span> cause<span class="o">.</span><span class="p">observedOutputBytes</span><span class="o">,</span>
+        cause
+      <span class="o">}</span><span class="o">)</span><span class="o">,</span>
+    <span class="t">CommandProcessError</span><span class="o">:</span> <span class="o">(</span>cause<span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span>
+      <span class="k">new</span> <span class="f">GitCommandProcessError</span><span class="o">(</span><span class="o">{</span>
+        operation<span class="o">,</span>
+        phase<span class="o">:</span> cause<span class="o">.</span><span class="p">phase</span><span class="o">,</span>
+        cause
+      <span class="o">}</span><span class="o">)</span><span class="o">,</span>
+    <span class="t">CommandTerminationError</span><span class="o">:</span> <span class="o">(</span>cause<span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span>
+      <span class="k">new</span> <span class="f">GitExecutionError</span><span class="o">(</span><span class="o">{</span>
+        operation<span class="o">,</span>
+        failure<span class="o">:</span> <span class="s">"command-termination"</span><span class="o">,</span>
+        cause
+      <span class="o">}</span><span class="o">)</span>
+  <span class="o">}</span><span class="o">)</span></code></pre>
+
+        <p>這個寫法讓 error boundary 的責任很清楚：底層 error 不會直接洩漏到 Git layer 之外，每個 handler 又只看得到該 tag 擁有的欄位。若 command runner 日後新增第六種 error，而這裡沒有新增 handler，型別檢查就會立刻指出缺漏。</p>
+
+        <p>同樣的模式也用在 review error renderer：輸入是一個 <code>RunReviewError</code>，每個 tag 的 handler 負責產生對應的終端機訊息。這類「一個 tagged union 值，完整映射成另一種輸出」就是 <code>Match.valueTags</code> 最合適的場景。</p>
+      </section>
+
+      <section aria-labelledby="finishers">
+        <h2 id="finishers">完成 matcher：決定未命中的語意</h2>
+        <p>cases 只是在累積規則。最後要選一個 completion function，明確說明「沒有任何分支命中」時應該發生什麼事。</p>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>完成方式</th>
+                <th>未命中時</th>
+                <th>何時使用</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>Match.exhaustive</code></td>
+                <td>編譯期要求剩餘型別為 <code>never</code></td>
+                <td>封閉且應完整處理的 union</td>
+              </tr>
+              <tr>
+                <td><code>Match.orElse(f)</code></td>
+                <td>把未命中的值交給 <code>f</code></td>
+                <td>需要 default 分支</td>
+              </tr>
+              <tr>
+                <td><code>Match.option</code></td>
+                <td>回傳 <code>Option.none()</code></td>
+                <td>找不到是正常情況，且不需要保留原值</td>
+              </tr>
+              <tr>
+                <td><code>Match.result</code></td>
+                <td>回傳 failure，並保留未命中的值</td>
+                <td>後續需要知道哪個值未命中</td>
+              </tr>
+              <tr>
+                <td><code>Match.orElseAbsurd</code></td>
+                <td>執行期拋出錯誤</td>
+                <td>只有在未命中確實代表程式缺陷時</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p><code>option</code> 與 <code>result</code> 很適合建立「嘗試抽取」函式，不必把缺少結果偽裝成空字串或 <code>undefined</code>。</p>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">const</span> maybeReceipt <span class="o">=</span> <span class="t">Match</span><span class="o">.</span><span class="k">type</span><span class="o">&lt;</span><span class="t">PaymentState</span><span class="o">&gt;</span><span class="o">(</span><span class="o">)</span><span class="o">.</span><span class="p">pipe</span><span class="o">(</span>
+  <span class="t">Match</span><span class="o">.</span><span class="p">tag</span><span class="o">(</span><span class="s">"Succeeded"</span><span class="o">,</span> <span class="o">(</span><span class="o">{</span> receiptId <span class="o">}</span><span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span> receiptId<span class="o">)</span><span class="o">,</span>
+  <span class="t">Match</span><span class="o">.</span><span class="p">option</span>
+<span class="o">)</span>
+
+<span class="k">const</span> receiptResult <span class="o">=</span> <span class="t">Match</span><span class="o">.</span><span class="k">type</span><span class="o">&lt;</span><span class="t">PaymentState</span><span class="o">&gt;</span><span class="o">(</span><span class="o">)</span><span class="o">.</span><span class="p">pipe</span><span class="o">(</span>
+  <span class="t">Match</span><span class="o">.</span><span class="p">tag</span><span class="o">(</span><span class="s">"Succeeded"</span><span class="o">,</span> <span class="o">(</span><span class="o">{</span> receiptId <span class="o">}</span><span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span> receiptId<span class="o">)</span><span class="o">,</span>
+  <span class="t">Match</span><span class="o">.</span><span class="p">result</span>
+<span class="o">)</span></code></pre>
+
+        <div class="callout warning">
+          <strong><code>exhaustive</code> 不是外部資料驗證器</strong>
+          <p>它證明的是「依 TypeScript 宣告的輸入型別，所有成員都已處理」。JSON、HTTP payload 或資料庫內容仍應先用 Schema 解碼；若用 assertion 把不合法資料硬轉成 <code>PaymentState</code>，執行期仍可能沒有分支命中。</p>
+        </div>
+      </section>
+
+      <section aria-labelledby="value-matching">
+        <h2 id="value-matching">只處理一個值：<code>Match.value</code></h2>
+        <p>當規則只在目前這個位置使用，不需要抽成函式，可以從具體值開始。completion 會直接回傳結果。</p>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">const</span> current <span class="o">=</span> <span class="f">getCurrentPayment</span><span class="o">(</span><span class="o">)</span> <span class="c">// 回傳型別是 PaymentState</span>
+
+<span class="k">const</span> receiptLabel <span class="o">=</span> <span class="t">Match</span><span class="o">.</span><span class="p">value</span><span class="o">(</span>current<span class="o">)</span><span class="o">.</span><span class="p">pipe</span><span class="o">(</span>
+  <span class="t">Match</span><span class="o">.</span><span class="p">when</span><span class="o">(</span>
+    <span class="o">{</span> _tag<span class="o">:</span> <span class="s">"Succeeded"</span> <span class="o">}</span><span class="o">,</span>
+    <span class="o">(</span><span class="o">{</span> receiptId <span class="o">}</span><span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span> <span class="s">`收據：${receiptId}`</span>
+  <span class="o">)</span><span class="o">,</span>
+  <span class="t">Match</span><span class="o">.</span><span class="p">orElse</span><span class="o">(</span><span class="o">(</span><span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span> <span class="s">"尚未取得收據"</span><span class="o">)</span>
+<span class="o">)</span>
+
+<span class="c">// receiptLabel 是 string，不是函式</span></code></pre>
+
+        <p>規則需要重複使用、測試或跨模組分享時，優先用 <code>Match.type&lt;T&gt;()</code>；只做一次局部轉換時，<code>Match.value(input)</code> 比先建立函式再呼叫更直接。</p>
+      </section>
+
+      <section aria-labelledby="pitfalls">
+        <h2 id="pitfalls">常見陷阱</h2>
+
+        <h3>1. 把廣泛分支放在精確分支前面</h3>
+        <p>cases 依宣告順序測試，第一個命中者勝。<code>Match.any</code>、一般 <code>Failed</code> 或父類別 <code>Error</code> 都應放在更具體條件之後。</p>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="c">// 不理想：第二個分支永遠沒有機會處理可重試錯誤</span>
+<span class="t">Match</span><span class="o">.</span><span class="p">tag</span><span class="o">(</span><span class="s">"Failed"</span><span class="o">,</span> <span class="o">(</span><span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span> <span class="s">"一般錯誤"</span><span class="o">)</span><span class="o">,</span>
+<span class="t">Match</span><span class="o">.</span><span class="p">when</span><span class="o">(</span>
+  <span class="o">{</span> _tag<span class="o">:</span> <span class="s">"Failed"</span><span class="o">,</span> retryable<span class="o">:</span> <span class="n">true</span> <span class="o">}</span><span class="o">,</span>
+  <span class="o">(</span><span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span> <span class="s">"可以重試"</span>
+<span class="o">)</span></code></pre>
+
+        <h3>2. 忘記 <code>type</code> 與 <code>value</code> 的輸出不同</h3>
+        <p><code>Match.type</code> 先建立規則，所以 completion 後通常得到函式；<code>Match.value</code> 已有輸入，所以 completion 後直接得到值。若變數型別對不上，先檢查是不是選錯起點。</p>
+
+        <h3>3. <code>Match.value</code> 或 <code>valueTags</code> 收到過度收窄的常數</h3>
+        <p>TypeScript 可能已經知道某個常數只能是 <code>Failed</code>。此時對它呼叫 <code>Match.value</code>，再寫 <code>Succeeded</code> 分支會被視為不可能；<code>valueTags</code> 也只會接受 <code>Failed</code> handler。若你需要為完整 union 預先定義規則，使用 <code>Match.type&lt;PaymentState&gt;()</code> 或 <code>Match.typeTags&lt;PaymentState&gt;()</code>，或確認輸入來源的靜態型別確實是完整 union。</p>
+
+        <h3>4. 把 predicate 當成完整性證明</h3>
+        <p><code>(n) =&gt; n &gt; 0</code> 能在執行期判斷正數，但 TypeScript 無法把一般 <code>number</code> 精確切成「正數」與「其餘數字」。這類 matcher 通常應以 <code>orElse</code>、<code>option</code> 或 <code>result</code> 完成，而不是勉強追求 <code>exhaustive</code>。</p>
+
+        <h3>5. 把物件 pattern 當成整個物件相等</h3>
+        <p><code>{ _tag: "Failed" }</code> 只要求輸入具有符合的 <code>_tag</code>；<code>reason</code>、<code>retryable</code> 等額外欄位不會讓比對失敗。這正是 shape matching 的用途，也意味著需要更精確時必須把條件明確寫進 pattern。</p>
+      </section>
+
+      <section aria-labelledby="decision-guide">
+        <h2 id="decision-guide">實務選擇指南</h2>
+        <ol class="decision-list">
+          <li>要重用規則：從 <code>Match.type&lt;T&gt;()</code> 開始；只處理當前值：用 <code>Match.value(input)</code>。</li>
+          <li>單純依 <code>_tag</code> 一對一映射：優先考慮 <code>Match.typeTags</code>；需要混合條件或控制優先順序：使用 pipeline。</li>
+          <li>手上已有一個 tagged union 值，而且只需要依 <code>_tag</code> 立即取得結果：使用 <code>Match.valueTags</code>。</li>
+          <li>封閉 union 且每個 case 都必須處理：用 <code>Match.exhaustive</code>。</li>
+          <li>未命中有合理預設值：用 <code>Match.orElse</code>。</li>
+          <li>未命中是正常的「找不到」：用 <code>Match.option</code>；還要保留原值：用 <code>Match.result</code>。</li>
+          <li>先放精確 pattern，再放廣泛 pattern；把 <code>Match.any</code> 留在最後。</li>
+        </ol>
+
+        <p>掌握這套判斷後，可以把 <code>Match</code> 看成一個有型別記憶的分支 builder：它一邊累積執行期規則，一邊從輸入 union 扣掉已處理的部分，直到你選擇合適的方式完成它。</p>
+      </section>
+
+      <section class="sources" aria-labelledby="version-notes">
+        <h2 id="version-notes">版本說明</h2>
+        <p>本文範例依 <code>effect@4.0.0-beta.98</code> 的 <code>Match</code> API 與型別定義撰寫並通過型別檢查。Effect 4 仍為 beta 時，升級後應重新確認 completion function、<code>Result</code> 命名與型別推論行為。</p>
+      </section>
+    </article>
+  </main>
+
+  <script>
+    (() => {
+      const copyIcon = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="10" height="10" rx="2"></rect><path d="M15 9V7a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2"></path></svg>'
+      const checkIcon = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"></path></svg>'
+
+      const copyText = async (text) => {
+        if (navigator.clipboard && window.isSecureContext) {
+          await navigator.clipboard.writeText(text)
+          return
+        }
+
+        const textarea = document.createElement("textarea")
+        textarea.value = text
+        textarea.setAttribute("readonly", "")
+        textarea.style.position = "fixed"
+        textarea.style.opacity = "0"
+        document.body.appendChild(textarea)
+        textarea.select()
+        document.execCommand("copy")
+        textarea.remove()
+      }
+
+      document.querySelectorAll("pre").forEach((pre) => {
+        const code = pre.querySelector("code")
+        if (!code) return
+
+        const button = document.createElement("button")
+        button.className = "copy-code"
+        button.type = "button"
+        button.setAttribute("aria-label", "複製程式碼")
+        button.innerHTML = copyIcon
+        button.addEventListener("click", async () => {
+          try {
+            await copyText(code.textContent || "")
+            button.classList.add("copied")
+            button.innerHTML = checkIcon
+            window.setTimeout(() => {
+              button.classList.remove("copied")
+              button.innerHTML = copyIcon
+            }, 1400)
+          } catch {
+            button.setAttribute("aria-label", "複製失敗")
+          }
+        })
+        pre.appendChild(button)
+
+        const scrollbar = document.createElement("div")
+        scrollbar.className = "code-scrollbar"
+        scrollbar.setAttribute("aria-hidden", "true")
+        const thumb = document.createElement("div")
+        thumb.className = "code-scrollbar-thumb"
+        scrollbar.appendChild(thumb)
+        pre.appendChild(scrollbar)
+
+        const updateScrollbar = () => {
+          const maxScroll = code.scrollWidth - code.clientWidth
+          if (maxScroll <= 0) {
+            scrollbar.classList.add("hidden")
+            return
+          }
+
+          scrollbar.classList.remove("hidden")
+          const ratio = code.clientWidth / code.scrollWidth
+          const thumbWidth = Math.max(32, scrollbar.clientWidth * ratio)
+          const maxThumbX = scrollbar.clientWidth - thumbWidth
+          const thumbX = maxScroll === 0 ? 0 : (code.scrollLeft / maxScroll) * maxThumbX
+          thumb.style.width = `${thumbWidth}px`
+          thumb.style.transform = `translateX(${thumbX}px)`
+        }
+
+        code.addEventListener("scroll", updateScrollbar, { passive: true })
+        window.addEventListener("resize", updateScrollbar, { passive: true })
+
+        let dragStartX = 0
+        let startScrollLeft = 0
+        thumb.addEventListener("pointerdown", (event) => {
+          dragStartX = event.clientX
+          startScrollLeft = code.scrollLeft
+          thumb.setPointerCapture(event.pointerId)
+        })
+        thumb.addEventListener("pointermove", (event) => {
+          if (!thumb.hasPointerCapture(event.pointerId)) return
+          const maxScroll = code.scrollWidth - code.clientWidth
+          const maxThumbX = scrollbar.clientWidth - thumb.clientWidth
+          if (maxScroll <= 0 || maxThumbX <= 0) return
+          code.scrollLeft = startScrollLeft + (event.clientX - dragStartX) * (maxScroll / maxThumbX)
+        })
+        scrollbar.addEventListener("click", (event) => {
+          if (event.target === thumb) return
+          const rect = scrollbar.getBoundingClientRect()
+          const ratio = (event.clientX - rect.left) / rect.width
+          code.scrollLeft = ratio * (code.scrollWidth - code.clientWidth)
+        })
+
+        updateScrollbar()
+      })
+    })()
+  </script>
+</body>
+</html>
