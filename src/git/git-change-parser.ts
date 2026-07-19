@@ -130,6 +130,12 @@ export const parseNulSeparatedChanges = (
     }),
   );
 
+/**
+ * Returns paths Git marks as `U` ("unmerged").
+ *
+ * In Git, an unmerged path has unresolved conflict entries in the index. It
+ * does not mean that the file simply has not been merged from another branch.
+ */
 export const findUnmergedPaths = (
   changes: ReadonlyArray<GitChange>,
 ): ReadonlyArray<string> =>

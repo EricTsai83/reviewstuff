@@ -81,6 +81,10 @@ export class GitInvalidOutputError extends Data.TaggedError(
   readonly outputBytes: number;
 }> {}
 
+/**
+ * Signals that review cannot start while Git's index contains paths with
+ * unresolved conflicts. The paths use Git's "unmerged" terminology.
+ */
 export class GitUnmergedPathsError extends Data.TaggedError(
   "GitUnmergedPathsError",
 )<{
