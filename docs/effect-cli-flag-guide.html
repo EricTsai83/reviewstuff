@@ -1,0 +1,631 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Effect CLI Flag 教學：理解 effect/unstable/cli 的 Flag 建構函式、型別推導、optional、filter、default 與 Command handler 整合。">
+  <title>Effect CLI Flag 教學</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --clay: #d97757;
+      --slate: #141413;
+      --ivory: #faf9f5;
+      --oat: #e3dacc;
+      --white: #ffffff;
+      --gray-100: #f0eee6;
+      --gray-500: #87867f;
+      --gray-700: #3d3d3a;
+      --warning: #c78e3f;
+      --space-sm: 8px;
+      --space-md: 12px;
+      --space-lg: 16px;
+      --space-xl: 24px;
+      --space-2xl: 32px;
+      --space-3xl: 48px;
+      --radius-sm: 4px;
+      --radius-md: 8px;
+      --content-width: 68ch;
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      background: var(--ivory);
+      color: var(--slate);
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 16px;
+      font-weight: 430;
+      line-height: 1.55;
+    }
+    main {
+      max-width: var(--content-width);
+      margin: 0 auto;
+      padding: var(--space-3xl) var(--space-xl);
+    }
+    article {
+      padding: 0;
+      border: 0;
+      border-radius: 0;
+      background: transparent;
+      box-shadow: none;
+    }
+    h1, h2, h3 { text-wrap: balance; }
+    h1 { margin: 0; font-size: 1.8rem; line-height: 1.18; }
+    h2 {
+      margin: var(--space-3xl) 0 var(--space-lg);
+      padding-top: var(--space-sm);
+      font-size: 1.22rem;
+      line-height: 1.25;
+    }
+    h3 {
+      margin: var(--space-2xl) 0 var(--space-sm);
+      font-size: 1rem;
+      line-height: 1.35;
+    }
+    p { margin: var(--space-md) 0; }
+    a { color: var(--clay); text-underline-offset: 0.16em; }
+    code {
+      padding: 0.08em 0.28em;
+      border: 1px solid var(--oat);
+      border-radius: var(--radius-sm);
+      background: var(--gray-100);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.9em;
+      overflow-wrap: anywhere;
+    }
+    .deck { margin-top: var(--space-md); color: var(--gray-700); font-size: 1.05rem; }
+    .version-note { color: var(--gray-500); font-size: 0.875rem; }
+    .toc {
+      margin: var(--space-2xl) 0 0;
+      padding: var(--space-lg);
+      border: 1px solid var(--oat);
+      border-left: 3px solid var(--clay);
+      background: var(--gray-100);
+    }
+    .toc strong { display: block; margin-bottom: var(--space-sm); }
+    .toc ol { columns: 2; gap: var(--space-2xl); margin: 0; padding-left: var(--space-xl); }
+    .toc li { break-inside: avoid; }
+    .callout {
+      margin: var(--space-lg) 0 var(--space-xl);
+      padding: var(--space-lg);
+      border: 1px solid var(--oat);
+      border-left: 3px solid var(--clay);
+      background: var(--gray-100);
+    }
+    .callout.warning { border-left-color: var(--warning); }
+    .callout strong { display: block; margin-bottom: 4px; }
+    .callout p { margin: 0; }
+    .mental-model {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      margin: var(--space-xl) 0;
+      overflow: hidden;
+      border: 1px solid var(--oat);
+      border-radius: var(--radius-md);
+      background: var(--oat);
+    }
+    .mental-model > div {
+      min-height: 124px;
+      padding: var(--space-lg);
+      border: 0.5px solid var(--oat);
+      background: var(--white);
+    }
+    .step-number {
+      display: block;
+      color: var(--clay);
+      font: 700 0.76rem/1 ui-monospace, monospace;
+      letter-spacing: 0.08em;
+    }
+    .mental-model strong { display: block; margin: var(--space-sm) 0 4px; }
+    .mental-model p { margin: 0; color: var(--gray-700); font-size: 0.9rem; }
+    .table-wrap {
+      margin: var(--space-lg) 0 var(--space-xl);
+      overflow-x: auto;
+      border: 1px solid var(--oat);
+      border-radius: var(--radius-md);
+    }
+    table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+    th, td {
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--oat);
+      vertical-align: top;
+      text-align: left;
+    }
+    th {
+      color: var(--gray-700);
+      background: var(--gray-100);
+      font-size: 0.75rem;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+    tr:last-child td { border-bottom: 0; }
+    td code { white-space: nowrap; }
+    pre {
+      position: relative;
+      width: 100%;
+      margin: var(--space-lg) 0 var(--space-xl);
+      overflow: hidden;
+      border: 1px solid #26241f;
+      border-radius: var(--radius-md);
+      background: #11110f;
+      color: #d8d4ca;
+    }
+    pre code {
+      display: block;
+      padding: 18px 64px 18px 22px;
+      overflow-x: auto;
+      border: 0;
+      background: transparent;
+      color: inherit;
+      font-size: 0.875rem;
+      font-weight: 400;
+      line-height: 1.62;
+      tab-size: 2;
+      white-space: pre;
+      scrollbar-width: none;
+    }
+    pre code::-webkit-scrollbar { width: 0; height: 0; }
+    pre .label { display: none; }
+    .copy-code {
+      position: absolute;
+      top: 9px;
+      right: 9px;
+      z-index: 1;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 30px;
+      height: 30px;
+      padding: 0;
+      border: 1px solid rgba(250, 249, 245, 0.14);
+      border-radius: var(--radius-sm);
+      background: rgba(250, 249, 245, 0.06);
+      color: rgba(250, 249, 245, 0.72);
+      cursor: pointer;
+    }
+    .copy-code:hover,
+    .copy-code:focus-visible {
+      border-color: rgba(250, 249, 245, 0.28);
+      background: rgba(250, 249, 245, 0.12);
+      color: var(--ivory);
+      outline: none;
+    }
+    .copy-code.copied {
+      border-color: rgba(143, 184, 106, 0.42);
+      background: rgba(143, 184, 106, 0.14);
+      color: #b8d99a;
+    }
+    .copy-code svg {
+      width: 13px;
+      height: 13px;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 1.8;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      pointer-events: none;
+    }
+    .code-scrollbar {
+      position: absolute;
+      right: 0;
+      bottom: 0;
+      left: 0;
+      height: 3px;
+      border-radius: 999px;
+      background: rgba(250, 249, 245, 0.1);
+      cursor: pointer;
+    }
+    .code-scrollbar.hidden { display: none; }
+    .code-scrollbar-thumb {
+      height: 100%;
+      border-radius: inherit;
+      background: rgba(255, 148, 110, 0.82);
+      transform: translateX(0);
+      cursor: grab;
+    }
+    .code-scrollbar-thumb:active { cursor: grabbing; }
+    pre code .k { color: #ff946e; font-weight: 400; }
+    pre code .s { color: #8fb86a; }
+    pre code .n,
+    pre code .p { color: #d8d4ca; }
+    pre code .c { color: #858177; font-style: italic; }
+    pre code .f,
+    pre code .t { color: #cfc6a2; font-weight: 400; }
+    pre code .o { color: #ff946e; }
+    pre.language-shell { background: #11110f; }
+    pre code .sh-command { color: #ff946e; font-weight: 400; }
+    pre code .sh-flag { color: #cfc6a2; font-weight: 400; }
+    pre code .sh-string { color: #8fb86a; }
+    pre code .sh-var { color: #cfc6a2; }
+    pre code .sh-comment { color: #858177; font-style: italic; }
+    pre code .sh-prompt { color: #ff946e; font-weight: 400; }
+    ul, ol { padding-left: var(--space-xl); }
+    li + li { margin-top: 6px; }
+    footer {
+      margin-top: var(--space-3xl);
+      padding-top: var(--space-lg);
+      border-top: 1px solid var(--oat);
+      color: var(--gray-500);
+      font-size: 0.875rem;
+    }
+    @media (max-width: 640px) {
+      body { font-size: 15px; }
+      h1 { font-size: 1.65rem; }
+      main { padding: var(--space-xl); }
+      .toc ol { columns: 1; }
+      .mental-model { grid-template-columns: 1fr; }
+      .mental-model > div { min-height: auto; }
+      pre code { font-size: 0.8125rem; line-height: 1.5; }
+      p code, li code, td code { font-size: 0.9em; }
+      table, .deck { font-size: 0.875rem; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <article>
+      <h1>Effect CLI Flag 教學</h1>
+      <p class="deck"><code>Flag</code> 是 Effect CLI 專門用來描述具名命令列參數的 API 模組。<code>Flag.boolean</code>、<code>Flag.string</code>、<code>Flag.integer</code> 等都是 Effect CLI 的建構函式；它們定義解析、驗證與輸出型別，再由 <code>Command</code> 將結果交給 handler。</p>
+      <p class="version-note">本文範例以 <code>effect@4.0.0-beta.98</code> 為準，匯入路徑是 <code>effect/unstable/cli</code>。</p>
+
+      <div class="callout">
+        <strong>先釐清範圍：這是 Effect CLI 的 Flag</strong>
+        <p>本文的 <code>Flag</code> 不是 feature flag、Effect runtime 設定或一般 boolean 變數。它是 <code>effect/unstable/cli</code> 匯出的模組；模組裡的 <code>Flag.string</code>、<code>Flag.boolean</code>、<code>Flag.integer</code> 才是實際呼叫的函式，而且用途限定在 Effect CLI 的輸入描述。</p>
+      </div>
+
+      <nav class="toc" aria-label="文章目錄">
+        <strong>閱讀路徑</strong>
+        <ol>
+          <li><a href="#definition">Flag 到底是什麼</a></li>
+          <li><a href="#model">解析心智模型</a></li>
+          <li><a href="#constructors">常用 constructors</a></li>
+          <li><a href="#combinators">常用 combinators</a></li>
+          <li><a href="#command">接進 Command</a></li>
+          <li><a href="#absence">optional 與 default</a></li>
+          <li><a href="#validation">驗證責任</a></li>
+          <li><a href="#recipes">實用寫法</a></li>
+        </ol>
+      </nav>
+
+      <section id="definition">
+        <h2><code>Flag</code> 是模組，<code>Flag.integer</code> 才是函式</h2>
+        <p>Effect CLI 使用 named import 提供 <code>Flag</code> 模組。模組中的 constructor 是普通函式；呼叫後得到的不是使用者輸入值，而是一個 <code>Flag&lt;A&gt;</code> 描述器。</p>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">import</span> <span class="o">{</span> <span class="t">Command</span><span class="o">,</span> <span class="t">Flag</span> <span class="o">}</span> <span class="k">from</span> <span class="s">"effect/unstable/cli"</span>
+
+<span class="k">const</span> portFlag <span class="o">=</span> <span class="t">Flag</span><span class="o">.</span><span class="p">integer</span><span class="o">(</span><span class="s">"port"</span><span class="o">)</span>
+<span class="c">// portFlag: Flag&lt;number&gt;</span>
+
+<span class="k">const</span> verboseFlag <span class="o">=</span> <span class="t">Flag</span><span class="o">.</span><span class="p">boolean</span><span class="o">(</span><span class="s">"verbose"</span><span class="o">)</span>
+<span class="c">// verboseFlag: Flag&lt;boolean&gt;</span></code></pre>
+
+        <p><code>Flag.integer("port")</code> 表示：「尋找名為 <code>--port</code> 的 CLI flag，把它的文字值解析成整數，成功後產生 <code>number</code>。」實際的數字要等 command 解析 argv 時才會出現。</p>
+
+        <div class="callout warning">
+          <strong>Flag 與 Argument 不同</strong>
+          <p>Flag 是具名輸入，例如 <code>--port 3000</code>；Argument 是依位置解析的輸入，例如 <code>deploy production</code> 裡的 <code>production</code>。兩者都屬於 Effect CLI，但用途不同。</p>
+        </div>
+      </section>
+
+      <section id="model">
+        <h2>讀取 Flag 宣告的四階段心智模型</h2>
+        <p>遇到一串 <code>.pipe(...)</code> 時，依序問以下四個問題，就能預測 handler 最後會拿到什麼。</p>
+
+        <div class="mental-model" aria-label="Effect CLI Flag 四階段心智模型">
+          <div>
+            <span class="step-number">01 · CONSTRUCT</span>
+            <strong>原始格式是什麼？</strong>
+            <p><code>string</code>、<code>integer</code>、<code>boolean</code> 或 <code>choice</code> 決定基礎型別。</p>
+          </div>
+          <div>
+            <span class="step-number">02 · REFINE</span>
+            <strong>還有哪些限制？</strong>
+            <p><code>filter</code>、<code>filterMap</code> 等 combinator 對解析後的值增加規則。</p>
+          </div>
+          <div>
+            <span class="step-number">03 · ABSENCE</span>
+            <strong>使用者沒提供時呢？</strong>
+            <p><code>optional</code>、<code>withDefault</code> 或 boolean 自身的缺席語意決定結果。</p>
+          </div>
+          <div>
+            <span class="step-number">04 · CONSUME</span>
+            <strong>handler 如何取得它？</strong>
+            <p><code>Command.make</code> config 的 key 決定 handler 欄位名稱與巢狀結構。</p>
+          </div>
+        </div>
+      </section>
+
+      <section id="constructors">
+        <h2>四個最常用的 Flag constructors</h2>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Constructor</th><th>CLI 範例</th><th>產生型別</th><th>用途</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><code>Flag.string("host")</code></td><td><code>--host localhost</code></td><td><code>Flag&lt;string&gt;</code></td><td>自由文字、識別碼、名稱。</td></tr>
+              <tr><td><code>Flag.integer("port")</code></td><td><code>--port 3000</code></td><td><code>Flag&lt;number&gt;</code></td><td>只接受整數；範圍仍需另外驗證。</td></tr>
+              <tr><td><code>Flag.boolean("verbose")</code></td><td><code>--verbose</code></td><td><code>Flag&lt;boolean&gt;</code></td><td>開／關 switch；缺席時預設為 <code>false</code>。</td></tr>
+              <tr><td><code>Flag.choice("format", ["json", "text"])</code></td><td><code>--format json</code></td><td><code>Flag&lt;"json" | "text"&gt;</code></td><td>封閉選項，同時得到 runtime 驗證與 literal union。</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>Boolean flag 的特殊行為</h3>
+        <p><code>Flag.boolean</code> 不需要值也能啟用：<code>--verbose</code> 代表 <code>true</code>，完全不提供則為 <code>false</code>。本文對應的 Effect CLI 版本也支援 <code>--no-verbose</code>，以及 <code>--verbose false</code> 這類明確值。</p>
+
+        <h3>Choice 為什麼比 string 更好</h3>
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">const</span> formatFlag <span class="o">=</span> <span class="t">Flag</span><span class="o">.</span><span class="p">choice</span><span class="o">(</span><span class="s">"format"</span><span class="o">,</span> <span class="o">[</span><span class="s">"json"</span><span class="o">,</span> <span class="s">"text"</span><span class="o">]</span><span class="o">)</span>
+<span class="c">// Flag&lt;"json" | "text"&gt;</span>
+
+<span class="c">// --format json  → "json"</span>
+<span class="c">// --format yaml  → 在 handler 執行前產生 CLI usage error</span></code></pre>
+        <p>如果合法值是有限集合，<code>choice</code> 能讓型別與 runtime parser 共用同一份來源，避免 TypeScript 宣告和手寫驗證互相漂移。</p>
+      </section>
+
+      <section id="combinators">
+        <h2>Combinator 把基礎 Flag 變成真正的輸入規格</h2>
+        <p>Constructor 決定基礎資料型別；combinator 則補上驗證、缺席策略與 help metadata。透過 <code>pipe</code>，前一個步驟的 Flag 會依序交給後面的 combinator。</p>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">const</span> portFlag <span class="o">=</span> <span class="t">Flag</span><span class="o">.</span><span class="p">integer</span><span class="o">(</span><span class="s">"port"</span><span class="o">)</span><span class="o">.</span><span class="p">pipe</span><span class="o">(</span>
+  <span class="t">Flag</span><span class="o">.</span><span class="p">filter</span><span class="o">(</span>
+    <span class="o">(</span>port<span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span> port <span class="o">&gt;</span><span class="o">=</span> <span class="n">1</span> <span class="o">&amp;</span><span class="o">&amp;</span> port <span class="o">&lt;</span><span class="o">=</span> <span class="n">65_535</span><span class="o">,</span>
+    <span class="o">(</span>port<span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span> <span class="s">`Port ${port} must be between 1 and 65535`</span><span class="o">,</span>
+  <span class="o">)</span><span class="o">,</span>
+  <span class="t">Flag</span><span class="o">.</span><span class="p">withDefault</span><span class="o">(</span><span class="n">3000</span><span class="o">)</span><span class="o">,</span>
+  <span class="t">Flag</span><span class="o">.</span><span class="p">withDescription</span><span class="o">(</span><span class="s">"Port used by the HTTP server."</span><span class="o">)</span><span class="o">,</span>
+<span class="o">)</span></code></pre>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Combinator</th><th>作用</th><th>型別影響</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><code>Flag.filter</code></td><td>用 predicate 驗證已解析的值；失敗時回報自訂訊息。</td><td>保持 <code>A</code>。</td></tr>
+              <tr><td><code>Flag.filterMap</code></td><td>同時驗證與轉換；回傳 <code>Option.none()</code> 代表失敗。</td><td>可由 <code>A</code> 轉成 <code>B</code>。</td></tr>
+              <tr><td><code>Flag.optional</code></td><td>允許整個 flag 缺席。</td><td><code>A</code> 變成 <code>Option&lt;A&gt;</code>。</td></tr>
+              <tr><td><code>Flag.withDefault</code></td><td>缺席時提供值。</td><td>handler 直接取得值，不需要 Option。</td></tr>
+              <tr><td><code>Flag.withDescription</code></td><td>加入 help 與 completion 使用的說明。</td><td>不變。</td></tr>
+              <tr><td><code>Flag.withAlias</code></td><td>加入短名稱或替代名稱，例如 <code>-v</code>。</td><td>不變。</td></tr>
+              <tr><td><code>Flag.withMetavar</code></td><td>自訂 help 中的值提示，例如 <code>PORT</code>。</td><td>不變。</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p>順序具有語意。上例先把文字解析成整數，再驗證範圍，最後處理缺席與 help metadata。把每一層分開看，比把整條 pipe 當成黑盒子容易得多。</p>
+      </section>
+
+      <section id="command">
+        <h2>Flag 要交給 Command，才會成為 handler 的輸入</h2>
+        <p><code>Command.make</code> 接受一個 config object。每個 key 是 handler 看到的欄位名稱，每個 value 則是 Effect CLI 用來解析輸入的 Flag 描述器。</p>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">import</span> <span class="o">*</span> <span class="k">as</span> <span class="t">Console</span> <span class="k">from</span> <span class="s">"effect/Console"</span>
+<span class="k">import</span> <span class="o">{</span> <span class="t">Command</span><span class="o">,</span> <span class="t">Flag</span> <span class="o">}</span> <span class="k">from</span> <span class="s">"effect/unstable/cli"</span>
+
+<span class="k">const</span> serveCommand <span class="o">=</span> <span class="t">Command</span><span class="o">.</span><span class="p">make</span><span class="o">(</span><span class="s">"serve"</span><span class="o">,</span> <span class="o">{</span>
+  host<span class="o">:</span> <span class="t">Flag</span><span class="o">.</span><span class="p">string</span><span class="o">(</span><span class="s">"host"</span><span class="o">)</span><span class="o">.</span><span class="p">pipe</span><span class="o">(</span>
+    <span class="t">Flag</span><span class="o">.</span><span class="p">withDefault</span><span class="o">(</span><span class="s">"127.0.0.1"</span><span class="o">)</span><span class="o">,</span>
+  <span class="o">)</span><span class="o">,</span>
+  port<span class="o">:</span> <span class="t">Flag</span><span class="o">.</span><span class="p">integer</span><span class="o">(</span><span class="s">"port"</span><span class="o">)</span><span class="o">.</span><span class="p">pipe</span><span class="o">(</span>
+    <span class="t">Flag</span><span class="o">.</span><span class="p">filter</span><span class="o">(</span>
+      <span class="o">(</span>port<span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span> port <span class="o">&gt;</span> <span class="n">0</span><span class="o">,</span>
+      <span class="o">(</span><span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span> <span class="s">"port must be greater than 0"</span><span class="o">,</span>
+    <span class="o">)</span><span class="o">,</span>
+    <span class="t">Flag</span><span class="o">.</span><span class="p">withDefault</span><span class="o">(</span><span class="n">3000</span><span class="o">)</span><span class="o">,</span>
+  <span class="o">)</span><span class="o">,</span>
+  verbose<span class="o">:</span> <span class="t">Flag</span><span class="o">.</span><span class="p">boolean</span><span class="o">(</span><span class="s">"verbose"</span><span class="o">)</span><span class="o">,</span>
+<span class="o">}</span><span class="o">)</span><span class="o">.</span><span class="p">pipe</span><span class="o">(</span>
+  <span class="t">Command</span><span class="o">.</span><span class="p">withHandler</span><span class="o">(</span><span class="o">(</span><span class="o">{</span> host<span class="o">,</span> port<span class="o">,</span> verbose <span class="o">}</span><span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span>
+    <span class="t">Console</span><span class="o">.</span><span class="p">log</span><span class="o">(</span><span class="o">{</span> host<span class="o">,</span> port<span class="o">,</span> verbose <span class="o">}</span><span class="o">)</span><span class="o">,</span>
+  <span class="o">)</span><span class="o">,</span>
+<span class="o">)</span></code></pre>
+
+        <p>Effect 會推導 handler 參數為 <code>{ readonly host: string; readonly port: number; readonly verbose: boolean }</code>。不需要手寫 interface，也不應在 handler 裡再次解析 <code>process.argv</code>。</p>
+
+        <div class="callout">
+          <strong>CLI 名稱與 handler key 是兩件事</strong>
+          <p><code>timeoutMs: Flag.integer("timeout-ms")</code> 讓使用者輸入 <code>--timeout-ms 5000</code>，handler 則讀取 <code>options.timeoutMs</code>。kebab-case 不會自動變成 camelCase；對應關係來自 config object 的 key。</p>
+        </div>
+      </section>
+
+      <section id="absence">
+        <h2><code>optional</code> 與 <code>withDefault</code> 表達不同需求</h2>
+        <p>兩者都允許使用者不提供 flag，但 handler 得到的型別與後續決策方式不同。</p>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>需求</th><th>寫法</th><th>缺席時</th><th>適合情境</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>需要知道使用者有沒有指定</td><td><code>Flag.optional(flag)</code></td><td><code>Option.none()</code></td><td>CLI override、延後查詢設定檔、三態布林值。</td></tr>
+              <tr><td>缺席時立刻採用固定值</td><td><code>flag.pipe(Flag.withDefault(value))</code></td><td>直接得到 default value</td><td>單一 CLI 的自足預設行為。</td></tr>
+              <tr><td>單純開／關</td><td><code>Flag.boolean(name)</code></td><td><code>false</code></td><td>verbose、dry-run、force 等 switches。</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">import</span> <span class="o">{</span> <span class="t">Flag</span> <span class="o">}</span> <span class="k">from</span> <span class="s">"effect/unstable/cli"</span>
+
+<span class="k">const</span> modelOverride <span class="o">=</span> <span class="t">Flag</span><span class="o">.</span><span class="p">string</span><span class="o">(</span><span class="s">"model"</span><span class="o">)</span><span class="o">.</span><span class="p">pipe</span><span class="o">(</span><span class="t">Flag</span><span class="o">.</span><span class="p">optional</span><span class="o">)</span>
+<span class="c">// Flag&lt;Option&lt;string&gt;&gt;</span>
+
+<span class="k">const</span> model <span class="o">=</span> <span class="t">Flag</span><span class="o">.</span><span class="p">string</span><span class="o">(</span><span class="s">"model"</span><span class="o">)</span><span class="o">.</span><span class="p">pipe</span><span class="o">(</span>
+  <span class="t">Flag</span><span class="o">.</span><span class="p">withDefault</span><span class="o">(</span><span class="s">"default-model"</span><span class="o">)</span><span class="o">,</span>
+<span class="o">)</span>
+<span class="c">// Flag&lt;string&gt;</span>
+
+<span class="k">const</span> debug <span class="o">=</span> <span class="t">Flag</span><span class="o">.</span><span class="p">boolean</span><span class="o">(</span><span class="s">"debug"</span><span class="o">)</span>
+<span class="c">// Flag&lt;boolean&gt;</span></code></pre>
+
+        <p>如果 CLI 只是眾多設定來源之一，通常應保留 <code>Option</code>，讓後續程式區分「使用者明確覆寫」和「沒有指定」。若在 Flag 層過早套 default，設定檔或環境變數就可能失去介入機會。</p>
+      </section>
+
+      <section id="validation">
+        <h2>Flag 負責單欄位解析；handler 負責跨欄位語意</h2>
+        <p>好的邊界是：只需要觀察單一輸入就能判斷的規則，放進 Flag；需要其他欄位、服務能力或外部狀態的規則，留在 handler 或 use-case。</p>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>規則</th><th>適合的位置</th><th>原因</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>port 必須是整數</td><td><code>Flag.integer</code></td><td>基礎解析規則。</td></tr>
+              <tr><td>port 必須介於 1–65535</td><td><code>Flag.filter</code></td><td>只依賴單一已解析值。</td></tr>
+              <tr><td>format 只能是 json 或 text</td><td><code>Flag.choice</code></td><td>封閉集合可直接由 parser 表達。</td></tr>
+              <tr><td>TLS 開啟時必須同時提供 cert 與 key</td><td>handler／use-case</td><td>涉及多個 flags 的組合。</td></tr>
+              <tr><td>指定的檔案目前是否可讀</td><td>Effect workflow／service</td><td>需要 FileSystem 與有型別的 I/O failure。</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p>Flag 解析或 filter 失敗時，Effect CLI 會在執行 handler 前產生 usage error。handler 因此可以假設收到的基礎型別與單欄位 constraints 已經成立。</p>
+      </section>
+
+      <section id="recipes">
+        <h2>可以直接套用的 Flag 寫法</h2>
+
+        <h3>可選的非空文字</h3>
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">const</span> optionalNonEmptyString <span class="o">=</span> <span class="o">(</span>
+  name<span class="o">:</span> string<span class="o">,</span>
+  description<span class="o">:</span> string<span class="o">,</span>
+<span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span>
+  <span class="t">Flag</span><span class="o">.</span><span class="p">string</span><span class="o">(</span>name<span class="o">)</span><span class="o">.</span><span class="p">pipe</span><span class="o">(</span>
+    <span class="t">Flag</span><span class="o">.</span><span class="p">filter</span><span class="o">(</span>
+      <span class="o">(</span>value<span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span> value<span class="o">.</span><span class="p">length</span> <span class="o">&gt;</span> <span class="n">0</span><span class="o">,</span>
+      <span class="o">(</span><span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span> <span class="s">`${name} must not be empty`</span><span class="o">,</span>
+    <span class="o">)</span><span class="o">,</span>
+    <span class="t">Flag</span><span class="o">.</span><span class="p">optional</span><span class="o">,</span>
+    <span class="t">Flag</span><span class="o">.</span><span class="p">withDescription</span><span class="o">(</span>description<span class="o">)</span><span class="o">,</span>
+  <span class="o">)</span></code></pre>
+
+        <h3>可選的正整數</h3>
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">const</span> optionalPositiveInteger <span class="o">=</span> <span class="o">(</span>
+  name<span class="o">:</span> string<span class="o">,</span>
+  description<span class="o">:</span> string<span class="o">,</span>
+<span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span>
+  <span class="t">Flag</span><span class="o">.</span><span class="p">integer</span><span class="o">(</span>name<span class="o">)</span><span class="o">.</span><span class="p">pipe</span><span class="o">(</span>
+    <span class="t">Flag</span><span class="o">.</span><span class="p">filter</span><span class="o">(</span>
+      <span class="o">(</span>value<span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span> value <span class="o">&gt;</span> <span class="n">0</span><span class="o">,</span>
+      <span class="o">(</span><span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span> <span class="s">`${name} must be greater than 0`</span><span class="o">,</span>
+    <span class="o">)</span><span class="o">,</span>
+    <span class="t">Flag</span><span class="o">.</span><span class="p">optional</span><span class="o">,</span>
+    <span class="t">Flag</span><span class="o">.</span><span class="p">withDescription</span><span class="o">(</span>description<span class="o">)</span><span class="o">,</span>
+  <span class="o">)</span></code></pre>
+
+        <h3>帶短名稱的 boolean switch</h3>
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">const</span> verboseFlag <span class="o">=</span> <span class="t">Flag</span><span class="o">.</span><span class="p">boolean</span><span class="o">(</span><span class="s">"verbose"</span><span class="o">)</span><span class="o">.</span><span class="p">pipe</span><span class="o">(</span>
+  <span class="t">Flag</span><span class="o">.</span><span class="p">withAlias</span><span class="o">(</span><span class="s">"v"</span><span class="o">)</span><span class="o">,</span>
+  <span class="t">Flag</span><span class="o">.</span><span class="p">withDescription</span><span class="o">(</span><span class="s">"Print detailed execution information."</span><span class="o">)</span><span class="o">,</span>
+<span class="o">)</span>
+
+<span class="c">// --verbose 與 -v 都會得到 true</span></code></pre>
+
+        <h3>設計檢查清單</h3>
+        <ol>
+          <li>從最窄的 constructor 開始：能用 <code>choice</code> 就不要用寬泛的 <code>string</code>。</li>
+          <li>先解析、再 refinement，最後決定 optional 或 default。</li>
+          <li>需要保留「沒有指定」時使用 <code>Flag.optional</code>。</li>
+          <li>單純開／關時直接使用 <code>Flag.boolean</code>。</li>
+          <li>單欄位規則放進 Flag，跨欄位規則留在 handler／use-case。</li>
+          <li>description 說明使用者效果，不要只重複資料型別。</li>
+          <li>測試有效值、缺席值，以及 parser／filter 的錯誤案例。</li>
+        </ol>
+
+        <div class="callout warning">
+          <strong><code>unstable</code> 是真實的版本邊界</strong>
+          <p>目前匯入路徑明確包含 <code>unstable</code>。升級 Effect 時，除了 TypeScript typecheck，也應重新確認 boolean negation、help 輸出、error 格式與 shell completion。</p>
+        </div>
+      </section>
+
+      <footer>
+        <p>判讀 Effect CLI Flag 的核心順序是：先看 constructor 決定 <code>A</code>，再看 combinators 如何驗證或改變 <code>A</code>，接著確認缺席策略，最後查看 <code>Command.make</code> 如何把結果命名並交給 handler。</p>
+      </footer>
+    </article>
+  </main>
+  <script>
+    (() => {
+      const copyIcon = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="11" height="11" rx="2"></rect><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"></path></svg>';
+      const checkIcon = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"></path></svg>';
+
+      const copyText = async (value) => {
+        if (navigator.clipboard && window.isSecureContext) {
+          await navigator.clipboard.writeText(value);
+          return;
+        }
+
+        const textarea = document.createElement("textarea");
+        textarea.value = value;
+        textarea.style.position = "fixed";
+        textarea.style.opacity = "0";
+        document.body.append(textarea);
+        textarea.select();
+        document.execCommand("copy");
+        textarea.remove();
+      };
+
+      document.querySelectorAll("pre").forEach((pre) => {
+        const code = pre.querySelector("code");
+        if (!code) return;
+
+        const button = document.createElement("button");
+        button.className = "copy-code";
+        button.type = "button";
+        button.setAttribute("aria-label", "複製程式碼");
+        button.innerHTML = copyIcon;
+        button.addEventListener("click", async () => {
+          try {
+            await copyText(code.textContent || "");
+            button.classList.add("copied");
+            button.setAttribute("aria-label", "已複製");
+            button.innerHTML = checkIcon;
+            window.setTimeout(() => {
+              button.classList.remove("copied");
+              button.setAttribute("aria-label", "複製程式碼");
+              button.innerHTML = copyIcon;
+            }, 1400);
+          } catch {
+            button.setAttribute("aria-label", "無法複製");
+          }
+        });
+        pre.append(button);
+
+        const track = document.createElement("div");
+        const thumb = document.createElement("div");
+        track.className = "code-scrollbar";
+        thumb.className = "code-scrollbar-thumb";
+        track.append(thumb);
+        pre.append(track);
+
+        const sync = () => {
+          const overflow = code.scrollWidth - code.clientWidth;
+          track.classList.toggle("hidden", overflow <= 1);
+          const ratio = code.clientWidth / code.scrollWidth;
+          const thumbWidth = Math.max(36, track.clientWidth * ratio);
+          const travel = Math.max(0, track.clientWidth - thumbWidth);
+          const offset = overflow > 0 ? travel * (code.scrollLeft / overflow) : 0;
+          thumb.style.width = `${thumbWidth}px`;
+          thumb.style.transform = `translateX(${offset}px)`;
+        };
+
+        code.addEventListener("scroll", sync, { passive: true });
+        window.addEventListener("resize", sync, { passive: true });
+        track.addEventListener("pointerdown", (event) => {
+          const rect = track.getBoundingClientRect();
+          const ratio = (event.clientX - rect.left) / rect.width;
+          code.scrollLeft = ratio * (code.scrollWidth - code.clientWidth);
+        });
+        sync();
+      });
+    })();
+  </script>
+</body>
+</html>
