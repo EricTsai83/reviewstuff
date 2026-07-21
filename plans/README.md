@@ -42,7 +42,7 @@ service skeleton、flag 或空目錄。
 | [x] DONE | 003 | [Local CLI Workflow](./003-local-cli-workflow.md) | 本機 binary workflow |
 | [x] DONE | 004 | [Repository Structure Boundaries](./004-repository-structure-boundaries.md) | module boundary 固定 |
 | [x] DONE | 005 | [Git Diff Review MVP](./005-git-diff-review-mvp.md) | deterministic Git diff review |
-| [x] DONE | 006 | [Config Profiles](./006-config-profiles-and-prompts.md) | versioned config/profile |
+| [x] DONE | 006 | [Config Profiles](./006-config-profiles-and-prompts.md) | versioned config v1/legacy profile |
 | [x] DONE | 007 | [Normalize Review Contracts](./007-normalize-review-contracts.md) | Safe cloud dogfood |
 | [x] DONE | 008 | [Extract The Fake Review Engine](./008-extract-the-fake-review-engine.md) | Safe cloud dogfood |
 | [x] DONE | 009 | [Build A Pure Review Request](./009-build-a-pure-review-request.md) | Safe cloud dogfood |
@@ -62,7 +62,7 @@ service skeleton、flag 或空目錄。
 | [ ] TODO | 023 | [Filter Review Paths Explicitly](./023-filter-review-paths-explicitly.md) | Real repository UX |
 | [ ] TODO | 024 | [Apply `.reviewstuffignore` As Exclusion-only Policy](./024-apply-reviewstuffignore-as-exclusion-only-policy.md) | Real repository UX |
 | [ ] TODO | 025 | [Centralize File Skip Policy](./025-centralize-file-skip-policy.md) | Real repository UX |
-| [ ] TODO | 026 | [Add One Fast Review Policy](./026-add-one-fast-review-policy.md) | Real repository UX |
+| [ ] TODO | 026 | [Add The Light Review Workload](./026-add-light-review-workload.md) | Real repository UX |
 | [ ] TODO | 027 | [Define The Persisted Review Session Schema](./027-define-the-persisted-review-session-schema.md) | Durable automation beta |
 | [ ] TODO | 028 | [Store And Load Sessions Atomically](./028-store-and-load-sessions-atomically.md) | Durable automation beta |
 | [ ] TODO | 029 | [Persist Successful Review Sessions](./029-persist-successful-review-sessions.md) | Durable automation beta |
@@ -91,7 +91,7 @@ service skeleton、flag 或空目錄。
 | --- | --- | --- |
 | Baseline closure | 005 | 現有 deterministic review pipeline 正式關閉 |
 | Safe cloud dogfood | 007–017 | 有 budget、privacy、redaction、preview 的 OpenAI review |
-| Real repository UX | 018–026 | repo root、commit/branch scopes、filters、skip policy、fast mode |
+| Real repository UX | 018–026 | repo root、commit/branch scopes、filters、skip policy、light workload |
 | Durable automation beta | 027–036 | sessions、queries、NDJSON、doctor、Codex CLI、provider reliability |
 | Supported macOS v1 | 037–045 | CI、signed artifact、Homebrew/npm、docs、readiness gate |
 

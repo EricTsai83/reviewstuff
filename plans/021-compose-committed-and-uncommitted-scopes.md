@@ -8,11 +8,10 @@
 unstaged、untracked changes。
 
 **In:** scope union/dedup、`--staged`/`--working-tree` shortcuts、compatibility matrix、source metadata。
-**Out:** automatic base inference、path filters、fast profile。
+**Out:** automatic base inference、path filters、light workload。
 
 **Steps:** 建立 pure scope planner；GitService 執行 planner operations；以 path+source 保留 coverage；測 staged
 and unstaged same file、untracked、conflict、mutually exclusive flags。
 
 **Accept:** shortcuts 只代表 uncommitted variants；`all` deterministic 且不重複計數；unmerged paths fail fast；
 no-change zero engine calls。
-

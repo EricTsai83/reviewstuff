@@ -1,5 +1,10 @@
 # 006 - Config Profiles
 
+> Historical contract: this plan intentionally records the shipped config v1
+> `profile: "quick" | "standard"` behavior. Plan 026 replaces that terminology
+> with the `workload` contract through an explicit config migration; do not
+> rewrite this completed plan as though v2 existed here.
+
 ## Goal
 
 加入 config 與最小 profile 機制，讓 review 行為開始可以被設定控制。
