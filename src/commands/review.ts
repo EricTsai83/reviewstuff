@@ -67,26 +67,30 @@ export const reviewCommand = Command.make("review", {
   timeoutMs: timeoutFlag,
 }).pipe(
   Command.withDescription("Review local Git changes."),
-  Command.withHandler((options) =>
-    runReview(options.staged ? stagedScope : workingTreeScope, {
-      ...(Option.isSome(options.profile)
-        ? { profile: options.profile.value }
+  Command.withHandler((cliOptions) =>
+    runReview(cliOptions.staged ? stagedScope : workingTreeScope, {
+      ...(Option.isSome(cliOptions.profile)
+        ? { profile: cliOptions.profile.value }
         : {}),
-      ...(Option.isSome(options.engine) ? { engine: options.engine.value } : {}),
-      ...(Option.isSome(options.provider)
-        ? { provider: options.provider.value }
+      ...(Option.isSome(cliOptions.engine)
+        ? { engine: cliOptions.engine.value }
         : {}),
-      ...(Option.isSome(options.model) ? { model: options.model.value } : {}),
-      ...(Option.isSome(options.timeoutMs)
-        ? { timeoutMs: options.timeoutMs.value }
+      ...(Option.isSome(cliOptions.provider)
+        ? { provider: cliOptions.provider.value }
         : {}),
-      ...(Option.isSome(options.concurrency)
-        ? { concurrency: options.concurrency.value }
+      ...(Option.isSome(cliOptions.model)
+        ? { model: cliOptions.model.value }
+        : {}),
+      ...(Option.isSome(cliOptions.timeoutMs)
+        ? { timeoutMs: cliOptions.timeoutMs.value }
+        : {}),
+      ...(Option.isSome(cliOptions.concurrency)
+        ? { concurrency: cliOptions.concurrency.value }
         : {}),
     }).pipe(
       Effect.flatMap((report) =>
         Console.log(
-          options.json
+          cliOptions.json
             ? renderJsonReport(report)
             : renderTerminalReport(report),
         ),
