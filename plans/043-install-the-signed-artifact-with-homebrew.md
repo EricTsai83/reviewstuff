@@ -1,10 +1,10 @@
-# 041 — Install the signed artifact with Homebrew
+# 043 — Install the signed artifact with Homebrew
 
 [← Plan index](./README.md)
 
-**Depends on:** 040。 **Learning:** one installation channel consuming canonical bytes。
+**Depends on:** 042。 **Learning:** one installation channel consuming canonical bytes。
 
-**Working state:** test-only tap formula下載 040 的 exact signed tarball/checksum，安裝後可執行 version與 fake/no-change smoke。
+**Working state:** test-only tap formula下載 042 的 exact signed tarball/checksum，安裝後可執行 version與 fake/no-change smoke。
 
 **In:** formula、checksum pin、unique temporary tap harness、audit/test/cleanup、doctor channel contribution。
 **Out:** automatic tap publication、source build、multi-arch formula、self-update。

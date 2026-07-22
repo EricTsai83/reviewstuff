@@ -1,8 +1,8 @@
-# 035 — Retry only safe provider failures
+# 036 — Retry only safe provider failures
 
 [← Plan index](./README.md)
 
-**Depends on:** 034。 **Learning:** retry taxonomy and idempotence。
+**Depends on:** 035。 **Learning:** retry taxonomy and idempotence。
 
 **Working state:** cloud engine對 rate-limit/temporary server errors使用 bounded backoff；auth、policy、schema、refusal與 budget
 錯誤不 retry。Codex local engine預設不 retry。

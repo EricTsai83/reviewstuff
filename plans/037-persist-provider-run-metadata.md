@@ -1,8 +1,8 @@
-# 036 — Persist provider run metadata
+# 037 — Persist provider run metadata
 
 [← Plan index](./README.md)
 
-**Depends on:** 035。 **Learning:** observability without sensitive payloads。
+**Depends on:** 036。 **Learning:** observability without sensitive payloads。
 
 **Working state:** report/session記錄 provider/model/transport、attempt latency/status、usage tokens（若 provider提供）與
 unknown-aware cost metadata。

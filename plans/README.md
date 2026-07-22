@@ -68,20 +68,22 @@ service skeleton、flag 或空目錄。
 | [ ] TODO | 029 | [Persist Successful Review Sessions](./029-persist-successful-review-sessions.md) | Durable automation beta |
 | [ ] TODO | 030 | [Query Stored Findings](./030-query-stored-findings.md) | Durable automation beta |
 | [ ] TODO | 031 | [Replay A Deterministic Repair Prompt](./031-replay-a-deterministic-repair-prompt.md) | Durable automation beta |
-| [ ] TODO | 032 | [Stream Review Events As NDJSON](./032-stream-review-events-as-ndjson.md) | Durable automation beta |
-| [ ] TODO | 033 | [Aggregate A Minimal Doctor Report](./033-aggregate-a-minimal-doctor-report.md) | Durable automation beta |
-| [ ] TODO | 034 | [Add A Sandboxed Codex CLI Engine](./034-add-a-sandboxed-codex-cli-engine.md) | Durable automation beta |
-| [ ] TODO | 035 | [Retry Only Safe Provider Failures](./035-retry-only-safe-provider-failures.md) | Durable automation beta |
-| [ ] TODO | 036 | [Persist Provider Run Metadata](./036-persist-provider-run-metadata.md) | Durable automation beta |
-| [ ] TODO | 037 | [Establish The Pull-request CI Gate](./037-establish-the-pull-request-ci-gate.md) | Supported macOS v1 |
-| [ ] TODO | 038 | [Package One Release Artifact Deterministically](./038-package-one-release-artifact-deterministically.md) | Supported macOS v1 |
-| [ ] TODO | 039 | [Sign And Notarize The macOS Executable](./039-sign-and-notarize-the-macos-executable.md) | Supported macOS v1 |
-| [ ] TODO | 040 | [Automate A Draft Signed Release](./040-automate-a-draft-signed-release.md) | Supported macOS v1 |
-| [ ] TODO | 041 | [Install The Signed Artifact With Homebrew](./041-install-the-signed-artifact-with-homebrew.md) | Supported macOS v1 |
-| [ ] TODO | 042 | [Install The Signed Artifact From One npm Platform Package](./042-install-the-signed-artifact-from-one-npm-platform-package.md) | Supported macOS v1 |
-| [ ] TODO | 043 | [Document The Privacy And Security Contract](./043-document-the-privacy-and-security-contract.md) | Supported macOS v1 |
-| [ ] TODO | 044 | [Document Installation And First Review](./044-document-installation-and-first-review.md) | Supported macOS v1 |
-| [ ] TODO | 045 | [Pass The Read-only macOS v1 Readiness Gate](./045-pass-the-read-only-macos-v1-readiness-gate.md) | Supported macOS v1 |
+| [ ] TODO | 032 | [Define The Review Exit-code Contract](./032-define-the-review-exit-code-contract.md) | Durable automation beta |
+| [ ] TODO | 033 | [Stream Review Events As NDJSON](./033-stream-review-events-as-ndjson.md) | Durable automation beta |
+| [ ] TODO | 034 | [Aggregate A Minimal Doctor Report](./034-aggregate-a-minimal-doctor-report.md) | Durable automation beta |
+| [ ] TODO | 035 | [Add A Sandboxed Codex CLI Engine](./035-add-a-sandboxed-codex-cli-engine.md) | Durable automation beta |
+| [ ] TODO | 036 | [Retry Only Safe Provider Failures](./036-retry-only-safe-provider-failures.md) | Durable automation beta |
+| [ ] TODO | 037 | [Persist Provider Run Metadata](./037-persist-provider-run-metadata.md) | Durable automation beta |
+| [ ] TODO | 038 | [Polish The Human Review Report](./038-polish-the-human-review-report.md) | Supported macOS v1 |
+| [ ] TODO | 039 | [Establish The Pull-request CI Gate](./039-establish-the-pull-request-ci-gate.md) | Supported macOS v1 |
+| [ ] TODO | 040 | [Package One Release Artifact Deterministically](./040-package-one-release-artifact-deterministically.md) | Supported macOS v1 |
+| [ ] TODO | 041 | [Sign And Notarize The macOS Executable](./041-sign-and-notarize-the-macos-executable.md) | Supported macOS v1 |
+| [ ] TODO | 042 | [Automate A Draft Signed Release](./042-automate-a-draft-signed-release.md) | Supported macOS v1 |
+| [ ] TODO | 043 | [Install The Signed Artifact With Homebrew](./043-install-the-signed-artifact-with-homebrew.md) | Supported macOS v1 |
+| [ ] TODO | 044 | [Install The Signed Artifact From One npm Platform Package](./044-install-the-signed-artifact-from-one-npm-platform-package.md) | Supported macOS v1 |
+| [ ] TODO | 045 | [Document The Privacy And Security Contract](./045-document-the-privacy-and-security-contract.md) | Supported macOS v1 |
+| [ ] TODO | 046 | [Document Installation And First Review](./046-document-installation-and-first-review.md) | Supported macOS v1 |
+| [ ] TODO | 047 | [Pass The Read-only macOS v1 Readiness Gate](./047-pass-the-read-only-macos-v1-readiness-gate.md) | Supported macOS v1 |
 
 狀態只能由 `TODO` → `IN PROGRESS` → `DONE`；從 007 開始維持嚴格順序。
 
@@ -92,8 +94,8 @@ service skeleton、flag 或空目錄。
 | Baseline closure | 005 | 現有 deterministic review pipeline 正式關閉 |
 | Safe cloud dogfood | 007–017 | 有 budget、privacy、redaction、preview 的 OpenAI review |
 | Real repository UX | 018–026 | repo root、commit/branch scopes、filters、skip policy、light workload |
-| Durable automation beta | 027–036 | sessions、queries、NDJSON、doctor、Codex CLI、provider reliability |
-| Supported macOS v1 | 037–045 | CI、signed artifact、Homebrew/npm、docs、readiness gate |
+| Durable automation beta | 027–037 | sessions、queries、exit-code contract、NDJSON、doctor、Codex CLI、provider reliability |
+| Supported macOS v1 | 038–047 | report polish、CI、signed artifact、Homebrew/npm、docs、readiness gate |
 
 ## Plan completion checklist
 

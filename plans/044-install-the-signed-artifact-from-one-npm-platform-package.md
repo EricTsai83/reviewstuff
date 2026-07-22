@@ -1,8 +1,8 @@
-# 042 — Install the signed artifact from one npm platform package
+# 044 — Install the signed artifact from one npm platform package
 
 [← Plan index](./README.md)
 
-**Depends on:** 041。 **Learning:** npm meta + optional platform package pattern。
+**Depends on:** 043。 **Learning:** npm meta + optional platform package pattern。
 
 **Working state:** local packed `reviewstuff` + `@reviewstuff/darwin-arm64` 在 temporary project安裝並執行同一 signed binary。
 

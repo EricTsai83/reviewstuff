@@ -1,8 +1,8 @@
-# 040 — Automate a draft signed release
+# 042 — Automate a draft signed release
 
 [← Plan index](./README.md)
 
-**Depends on:** 039。 **Learning:** release pipeline separated from PR CI。
+**Depends on:** 041。 **Learning:** release pipeline separated from PR CI。
 
 **Working state:** manual dispatch或 version tag在 trusted runner建立 signed/notarized darwin-arm64 draft release與 release notes；
 不自動 promote/publish channels。

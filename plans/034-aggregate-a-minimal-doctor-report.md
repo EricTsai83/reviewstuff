@@ -1,8 +1,8 @@
-# 033 — Aggregate a minimal doctor report
+# 034 — Aggregate a minimal doctor report
 
 [← Plan index](./README.md)
 
-**Depends on:** 032。 **Learning:** health contributions without layer leakage。
+**Depends on:** 033。 **Learning:** health contributions without layer leakage。
 
 **Working state:** `reviewstuff doctor [--json]` 聚合 runtime、Git、config、storage、privacy與已註冊 engine availability。
 

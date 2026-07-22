@@ -1,8 +1,8 @@
-# 045 — Pass the read-only macOS v1 readiness gate
+# 047 — Pass the read-only macOS v1 readiness gate
 
 [← Plan index](./README.md)
 
-**Depends on:** 044。 **Learning:** release criteria without adding features。
+**Depends on:** 046。 **Learning:** release criteria without adding features。
 
 **Working state:** 可正式發布「macOS arm64、read-only、OpenAI cloud或Codex CLI local」v1；其他能力明確列為 unsupported。
 

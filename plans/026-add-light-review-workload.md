@@ -116,6 +116,7 @@ coverage 必須照常揭露 reviewed、truncated 與 skipped hunks/files。
 
 - `ReviewWorkload` schema/type 與 standard/light presets。
 - config v2、v1 migration、strict decode 與 precedence tests。
+- config decode 失敗時渲染欄位級錯誤細節（路徑、欄位、期望值），同時涵蓋 v1 與 v2。
 - `--workload`、`--light` shortcut 與 conflict validation。
 - 將 effective workload 傳給 budget selection。
 - report schema evolution、migration、terminal/JSON rendering。
@@ -147,6 +148,7 @@ coverage 必須照常揭露 reviewed、truncated 與 skipped hunks/files。
 - 相同 diff 下，light 只能減少 selected context，不能改變 selection ordering。
 - 不切換 engine/provider/model/timeout/concurrency。
 - v1 config migration 保留既有 effective execution settings。
+- invalid config 的錯誤訊息包含欄位級 schema 細節，不再只回報整份檔案不符。
 - `ReviewRequestV1` 與 Plan 016 adapter contract 不需改版。
 - privacy、redaction、preview、path filtering、skip policy 與 coverage contracts 全部維持。
 - source CLI 與重新 build 後的 standalone binary 都通過 smoke/e2e。

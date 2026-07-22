@@ -1,8 +1,8 @@
-# 034 — Add a sandboxed Codex CLI engine
+# 035 — Add a sandboxed Codex CLI engine
 
 [← Plan index](./README.md)
 
-**Depends on:** 033。 **Learning:** local subprocess provider as a constrained adapter。
+**Depends on:** 034。 **Learning:** local subprocess provider as a constrained adapter。
 
 **Working state:** `reviewstuff review --engine codex-cli --model <id> --json` 將 normalized request交給 non-interactive
 Codex，並得到 schema-constrained findings。

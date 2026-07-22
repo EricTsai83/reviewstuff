@@ -1,8 +1,8 @@
-# 038 — Package one release artifact deterministically
+# 040 — Package one release artifact deterministically
 
 [← Plan index](./README.md)
 
-**Depends on:** 037。 **Learning:** artifact identity and provenance。
+**Depends on:** 039。 **Learning:** artifact identity and provenance。
 
 **Working state:** local/CI可產生單一 `darwin-arm64` tarball、`SHA256SUMS`、versioned manifest與 build provenance。
 

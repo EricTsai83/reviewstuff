@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>JavaScript WeakMap：不綁住物件生命週期的鍵值集合</title>
+  <style>
+    :root { color-scheme: light; --clay:#D97757; --slate:#141413; --ivory:#FAF9F5; --oat:#E3DACC; --gray-100:#F0EEE6; --gray-500:#87867F; --gray-700:#3D3D3A; --space-sm:8px; --space-md:12px; --space-lg:16px; --space-xl:24px; --space-2xl:32px; --space-3xl:48px; --radius-sm:4px; --radius-md:8px; --content-width:68ch; }
+    * { box-sizing: border-box; }
+    body { margin:0; background:var(--ivory); color:var(--slate); font-family:ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; font-size:16px; font-weight:430; line-height:1.55; }
+    main { max-width:var(--content-width); margin:0 auto; padding:var(--space-3xl) var(--space-xl); }
+    article { background:transparent; border:0; padding:0; }
+    h1 { margin:0 0 var(--space-lg); font-size:1.8rem; line-height:1.18; text-wrap:balance; }
+    h2 { margin:var(--space-3xl) 0 var(--space-md); font-size:1.22rem; line-height:1.25; }
+    h3 { margin:var(--space-xl) 0 var(--space-sm); font-size:1rem; line-height:1.35; }
+    p, ul, .deck, .callout, table, pre { max-width:var(--content-width); }
+    p { margin:0 0 var(--space-lg); }
+    ul { padding-left:1.35rem; margin:0 0 var(--space-xl); }
+    li + li { margin-top:var(--space-sm); }
+    .deck { color:var(--gray-700); font-size:1.06rem; margin-bottom:var(--space-2xl); }
+    a { color:var(--clay); text-decoration:underline; text-underline-offset:3px; }
+    p code, li code, td code { background:var(--gray-100); border:1px solid var(--oat); border-radius:var(--radius-sm); padding:.08em .3em; overflow-wrap:anywhere; }
+    table { width:100%; border-collapse:collapse; margin:var(--space-lg) 0 var(--space-xl); }
+    th, td { border:1px solid var(--oat); padding:10px 12px; text-align:left; vertical-align:top; }
+    th { background:var(--gray-100); font-weight:650; }
+    .callout { margin:var(--space-xl) 0; padding:var(--space-lg); background:var(--gray-100); border:1px solid var(--oat); border-left:4px solid var(--clay); border-radius:var(--radius-sm); }
+    .callout p:last-child { margin-bottom:0; }
+    pre { position:relative; width:100%; margin:var(--space-lg) 0 var(--space-xl); border:1px solid #26241f; border-radius:var(--radius-md); background:#11110f; color:#d8d4ca; overflow:hidden; }
+    pre code { display:block; border:0; background:transparent; padding:18px 64px 18px 22px; color:inherit; overflow-x:auto; white-space:pre; font-size:.875rem; font-weight:400; line-height:1.62; scrollbar-width:none; }
+    pre code::-webkit-scrollbar { width:0; height:0; }
+    pre .label { display:none; }
+    .copy-code { position:absolute; top:9px; right:9px; z-index:1; display:inline-flex; align-items:center; justify-content:center; width:30px; height:30px; padding:0; border:1px solid rgba(250,249,245,.14); border-radius:var(--radius-sm); background:rgba(250,249,245,.06); color:rgba(250,249,245,.72); cursor:pointer; }
+    .copy-code:hover,.copy-code:focus-visible { border-color:rgba(250,249,245,.28); background:rgba(250,249,245,.12); color:var(--ivory); outline:none; }
+    .copy-code.copied { border-color:rgba(143,184,106,.42); background:rgba(143,184,106,.14); color:#b8d99a; }
+    .copy-code svg { width:13px; height:13px; stroke:currentColor; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; fill:none; pointer-events:none; }
+    .code-scrollbar { position:absolute; right:0; bottom:0; left:0; height:3px; border-radius:999px; background:rgba(250,249,245,.1); cursor:pointer; }
+    .code-scrollbar.hidden { display:none; }
+    .code-scrollbar-thumb { height:100%; border-radius:inherit; background:rgba(255,148,110,.82); transform:translateX(0); cursor:grab; }
+    pre code .k { color:#ff946e; } pre code .s { color:#8fb86a; } pre code .n,pre code .p { color:#d8d4ca; } pre code .c { color:#858177; font-style:italic; } pre code .f,pre code .t { color:#cfc6a2; } pre code .o { color:#ff946e; }
+    @media (max-width:640px) { body{font-size:15px} h1{font-size:1.65rem} main{padding:var(--space-xl)} pre code{font-size:.8125rem;line-height:1.5} p code,li code,td code{font-size:.9em} table,.deck{font-size:.875rem} .table-wrap{overflow-x:auto} }
+  </style>
+</head>
+<body>
+<main>
+<article>
+  <h1>JavaScript WeakMap：不綁住物件生命週期的鍵值集合</h1>
+  <p class="deck"><code>WeakMap</code> 適合把額外資料附加在物件上。當那個物件不再被程式使用時，對應資料也有機會自動回收，因此特別適合快取、物件狀態與私有 metadata。</p>
+
+  <h2>先從 Map 理解 WeakMap</h2>
+  <p><code>Map</code> 與 <code>WeakMap</code> 都能建立「key 對應 value」的關係。不同之處在於：一般 <code>Map</code> 會持續持有 key；<code>WeakMap</code> 不會因為自己保存了 key，就阻止該物件被垃圾回收。</p>
+  <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">const</span> metadata <span class="o">=</span> <span class="k">new</span> <span class="t">WeakMap</span><span class="o">&lt;</span>object<span class="o">,</span> <span class="o">{</span> visited<span class="o">:</span> boolean <span class="o">}</span><span class="o">&gt;</span><span class="o">(</span><span class="o">)</span>
+
+<span class="k">const</span> user <span class="o">=</span> <span class="o">{</span> name<span class="o">:</span> <span class="s">"Eric"</span> <span class="o">}</span>
+
+metadata<span class="o">.</span><span class="p">set</span><span class="o">(</span>user<span class="o">,</span> <span class="o">{</span> visited<span class="o">:</span> <span class="n">true</span> <span class="o">}</span><span class="o">)</span>
+metadata<span class="o">.</span><span class="p">get</span><span class="o">(</span>user<span class="o">)</span> <span class="c">// { visited: true }</span>
+metadata<span class="o">.</span><span class="p">has</span><span class="o">(</span>user<span class="o">)</span> <span class="c">// true</span></code></pre>
+  <p>這裡的 <code>user</code> 是 key，而造訪狀態是 value。如果程式其他地方之後都不再持有 <code>user</code>，<code>WeakMap</code> 不會為了保留這筆狀態而強迫 <code>user</code> 繼續留在記憶體中。</p>
+
+  <div class="callout">
+    <p><strong>心智模型：</strong><code>WeakMap</code> 是「不綁架 key 生命週期的 Map」。value 跟著 key 存在，但集合本身不保證 key 會一直活著。</p>
+  </div>
+
+  <h2>「Weak」弱在哪裡？</h2>
+  <p>它的「弱」指的是對 key 的弱引用語意，而不是功能較差或型別較鬆。垃圾回收器判定某個物件已無法從程式的其他有效路徑存取時，可以回收該物件及其 <code>WeakMap</code> 關聯。</p>
+  <p>回收時間由 JavaScript 執行環境決定，程式不能要求它立刻發生，也不應依賴某個確切時間點。</p>
+
+  <h2>WeakMap 與 Map 的差異</h2>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>特性</th><th><code>WeakMap</code></th><th><code>Map</code></th></tr></thead>
+      <tbody>
+        <tr><td>key</td><td>物件或非註冊的 Symbol</td><td>任何值</td></tr>
+        <tr><td>是否阻止物件 key 被回收</td><td>不會</td><td>會</td></tr>
+        <tr><td>可否遍歷</td><td>不可</td><td>可以</td></tr>
+        <tr><td><code>size</code></td><td>沒有</td><td>有</td></tr>
+        <tr><td>主要用途</td><td>物件附屬資料、快取、私有狀態</td><td>可列舉的一般鍵值集合</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p><code>WeakMap</code> 不能提供 <code>keys()</code>、<code>values()</code> 或 <code>entries()</code>。如果它能列出所有 key，垃圾回收的時機便會變成可觀察行為，弱引用語意也難以成立。</p>
+
+  <h2>典型用途：以物件為單位的快取</h2>
+  <p>假設一個昂貴運算的結果只對某個輸入物件有意義，可以用該物件作為快取 key：</p>
+  <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">const</span> cache <span class="o">=</span> <span class="k">new</span> <span class="t">WeakMap</span><span class="o">&lt;</span>object<span class="o">,</span> string<span class="o">&gt;</span><span class="o">(</span><span class="o">)</span>
+
+<span class="k">function</span> <span class="f">calculate</span><span class="o">(</span>input<span class="o">:</span> object<span class="o">)</span><span class="o">:</span> string <span class="o">{</span>
+  <span class="k">const</span> cached <span class="o">=</span> cache<span class="o">.</span><span class="p">get</span><span class="o">(</span>input<span class="o">)</span>
+  <span class="k">if</span> <span class="o">(</span>cached <span class="o">!</span><span class="o">=</span><span class="o">=</span> <span class="n">undefined</span><span class="o">)</span> <span class="k">return</span> cached
+
+  <span class="k">const</span> result <span class="o">=</span> <span class="f">expensiveCalculation</span><span class="o">(</span>input<span class="o">)</span>
+  cache<span class="o">.</span><span class="p">set</span><span class="o">(</span>input<span class="o">,</span> result<span class="o">)</span>
+  <span class="k">return</span> result
+<span class="o">}</span></code></pre>
+  <p>只要同一個 <code>input</code> 仍在使用，結果就能重複利用；當它不再被使用，快取關聯也不會單獨讓它留在記憶體中。</p>
+
+  <h2>什麼時候該用？</h2>
+  <ul>
+    <li>資料只屬於某個物件，且生命週期應跟著該物件。</li>
+    <li>想建立以物件為 key 的快取，又不希望快取阻止物件被回收。</li>
+    <li>需要保存 DOM 元素狀態、實例 metadata 或外部不可見的物件關聯。</li>
+  </ul>
+  <p>如果需要列出所有項目、計算數量、使用字串或數字作為 key，應選擇 <code>Map</code>。如果需要資料在 key 消失後仍可靠保留，也不該使用 <code>WeakMap</code>。</p>
+
+  <h2>實用判斷方式</h2>
+  <p>先問：「這筆 value 是否只在 key 物件仍存在時才有意義？」如果答案是肯定的，而且不需要遍歷所有關聯，<code>WeakMap</code> 通常是合適選擇。反之，使用 <code>Map</code> 會更直接，也更容易觀察與管理。</p>
+</article>
+</main>
+<script>
+  const copyIcon = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>'
+  const checkIcon = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"></path></svg>'
+  document.querySelectorAll('pre').forEach((pre) => {
+    const code = pre.querySelector('code')
+    const button = document.createElement('button')
+    button.className = 'copy-code'; button.type = 'button'; button.setAttribute('aria-label', '複製程式碼'); button.innerHTML = copyIcon
+    button.addEventListener('click', async () => {
+      try { await navigator.clipboard.writeText(code.textContent) } catch { const area=document.createElement('textarea'); area.value=code.textContent; document.body.append(area); area.select(); document.execCommand('copy'); area.remove() }
+      button.classList.add('copied'); button.innerHTML=checkIcon
+      setTimeout(() => { button.classList.remove('copied'); button.innerHTML=copyIcon }, 1400)
+    })
+    pre.append(button)
+    const bar=document.createElement('div'); bar.className='code-scrollbar'; const thumb=document.createElement('div'); thumb.className='code-scrollbar-thumb'; bar.append(thumb); pre.append(bar)
+    const sync=()=>{ const ratio=code.clientWidth/code.scrollWidth; bar.classList.toggle('hidden',ratio>=1); thumb.style.width=`${Math.min(100,ratio*100)}%`; const max=code.scrollWidth-code.clientWidth; thumb.style.transform=`translateX(${max ? code.scrollLeft/max*(bar.clientWidth-thumb.clientWidth) : 0}px)` }
+    code.addEventListener('scroll',sync); new ResizeObserver(sync).observe(code); sync()
+    bar.addEventListener('click',(event)=>{ if(event.target===thumb)return; const rect=bar.getBoundingClientRect(); code.scrollLeft=((event.clientX-rect.left)/rect.width)*code.scrollWidth-code.clientWidth/2 })
+  })
+</script>
+</body>
+</html>

@@ -1,8 +1,8 @@
-# 037 — Establish the pull-request CI gate
+# 039 — Establish the pull-request CI gate
 
 [← Plan index](./README.md)
 
-**Depends on:** 036。 **Learning:** reproducible verification in an untrusted PR context。
+**Depends on:** 038。 **Learning:** reproducible verification in an untrusted PR context。
 
 **Working state:** PR/main workflow以 frozen Bun lockfile執行 typecheck、tests、authorized build與 binary e2e，完全使用
 fake providers/fixtures。

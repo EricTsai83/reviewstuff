@@ -1,8 +1,8 @@
-# 043 — Document the privacy and security contract
+# 045 — Document the privacy and security contract
 
 [← Plan index](./README.md)
 
-**Depends on:** 042。 **Learning:** docs as executable product contract。
+**Depends on:** 044。 **Learning:** docs as executable product contract。
 
 **Working state:** 使用者可準確理解 local/cloud data flow、request preview、redaction限制、local session內容與 vulnerability
 reporting流程。

@@ -1,8 +1,8 @@
-# 044 — Document installation and first review
+# 046 — Document installation and first review
 
 [← Plan index](./README.md)
 
-**Depends on:** 043。 **Learning:** executable onboarding documentation。
+**Depends on:** 045。 **Learning:** executable onboarding documentation。
 
 **Working state:** 新使用者可從 README選 Homebrew/npm/local安裝、設定 OpenAI或Codex CLI、preview request、完成 first review與
 agent-mode example。

@@ -1,8 +1,8 @@
-# 032 — Stream review events as NDJSON
+# 033 — Stream review events as NDJSON
 
 [← Plan index](./README.md)
 
-**Depends on:** 031。 **Learning:** process protocol and lifecycle。
+**Depends on:** 032。 **Learning:** process protocol and lifecycle。
 
 **Working state:** `reviewstuff review --agent` 的 stdout只含 versioned NDJSON：context、status、finding、heartbeat、
 complete/error。

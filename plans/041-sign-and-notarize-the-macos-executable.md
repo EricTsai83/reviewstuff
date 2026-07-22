@@ -1,8 +1,8 @@
-# 039 — Sign and notarize the macOS executable
+# 041 — Sign and notarize the macOS executable
 
 [← Plan index](./README.md)
 
-**Depends on:** 038。 **Learning:** Apple distribution trust boundary。
+**Depends on:** 040。 **Learning:** Apple distribution trust boundary。
 
 **Working state:** opt-in script以 Developer ID、hardened runtime、secure timestamp簽署 executable，提交 notary service並驗證
 Gatekeeper；無 credentials 的 dev build仍可用。
