@@ -57,13 +57,77 @@ metadata<span class="o">.</span><span class="p">get</span><span class="o">(</spa
 metadata<span class="o">.</span><span class="p">has</span><span class="o">(</span>user<span class="o">)</span> <span class="c">// true</span></code></pre>
   <p>這裡的 <code>user</code> 是 key，而造訪狀態是 value。如果程式其他地方之後都不再持有 <code>user</code>，<code>WeakMap</code> 不會為了保留這筆狀態而強迫 <code>user</code> 繼續留在記憶體中。</p>
 
+  <h2><code>set(user, value)</code> 到底儲存了什麼？</h2>
+  <p><code>metadata.set(user, { visited: true })</code> 不會把 <code>{ visited: true }</code> 寫進 <code>user</code>，也不會拿它取代 <code>{ name: "Eric" }</code>。這行程式建立的是一條獨立的對應關係：以 <code>user</code> 所指向的物件作為 key，再把造訪狀態作為該 key 對應的 value。</p>
+  <pre><span class="label">關係示意</span><code>變數 user ───────────────→ { name: "Eric" }
+                                  │
+WeakMap metadata ──以此物件為 key─┘──→ { visited: true }</code></pre>
+  <p>因此，原物件和附屬資料可以分別讀取：</p>
+  <pre class="language-typescript"><span class="label">TypeScript</span><code>user<span class="o">.</span>name <span class="c">// "Eric"</span>
+metadata<span class="o">.</span><span class="p">get</span><span class="o">(</span>user<span class="o">)</span><span class="o">?.</span>visited <span class="c">// true</span></code></pre>
+  <p>可以把它想成寄物櫃：<code>user</code> 物件是用來辨識櫃位的鑰匙，<code>{ visited: true }</code> 是放在該櫃位裡的內容。把內容放進櫃位，不會改寫鑰匙本身。</p>
+
+  <h3>什麼情況才算覆蓋？</h3>
+  <p>如果用同一個 <code>user</code> 再呼叫一次 <code>set</code>，被替換的是這個 key 在 <code>WeakMap</code> 裡原本對應的 value；<code>user.name</code> 仍然不受影響。</p>
+  <pre class="language-typescript"><span class="label">TypeScript</span><code>metadata<span class="o">.</span><span class="p">set</span><span class="o">(</span>user<span class="o">,</span> <span class="o">{</span> visited<span class="o">:</span> <span class="n">false</span> <span class="o">}</span><span class="o">)</span>
+
+user<span class="o">.</span>name <span class="c">// "Eric"，沒有被覆蓋</span>
+metadata<span class="o">.</span><span class="p">get</span><span class="o">(</span>user<span class="o">)</span> <span class="c">// { visited: false }</span></code></pre>
+  <p>還要注意，<code>WeakMap</code> 是按照物件身分而不是物件內容尋找 key。另一個內容同樣是 <code>{ name: "Eric" }</code> 的物件，仍然是不同的 key。</p>
+  <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">const</span> anotherUser <span class="o">=</span> <span class="o">{</span> name<span class="o">:</span> <span class="s">"Eric"</span> <span class="o">}</span>
+
+metadata<span class="o">.</span><span class="p">has</span><span class="o">(</span>anotherUser<span class="o">)</span> <span class="c">// false</span>
+metadata<span class="o">.</span><span class="p">has</span><span class="o">(</span>user<span class="o">)</span> <span class="c">// true</span></code></pre>
+
   <div class="callout">
     <p><strong>心智模型：</strong><code>WeakMap</code> 是「不綁架 key 生命週期的 Map」。value 跟著 key 存在，但集合本身不保證 key 會一直活著。</p>
   </div>
 
   <h2>「Weak」弱在哪裡？</h2>
   <p>它的「弱」指的是對 key 的弱引用語意，而不是功能較差或型別較鬆。垃圾回收器判定某個物件已無法從程式的其他有效路徑存取時，可以回收該物件及其 <code>WeakMap</code> 關聯。</p>
+  <p>換句話說，當作 key 的 <code>user</code> 物件不再可達時，<code>WeakMap</code> 中由它連到 <code>{ visited: true }</code> 的對應關係也會失去意義。如果這個 value 沒有被程式其他地方引用，它便會和 key 一樣成為可回收的資料，不會因為曾經存進 <code>WeakMap</code> 就永遠留在記憶體中。</p>
+  <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">const</span> metadata <span class="o">=</span> <span class="k">new</span> <span class="t">WeakMap</span><span class="o">&lt;</span>object<span class="o">,</span> <span class="o">{</span> visited<span class="o">:</span> boolean <span class="o">}</span><span class="o">&gt;</span><span class="o">()</span>
+
+<span class="k">let</span> user<span class="o">:</span> <span class="o">{</span> name<span class="o">:</span> string <span class="o">}</span> <span class="o">|</span> <span class="n">null</span> <span class="o">=</span> <span class="o">{</span> name<span class="o">:</span> <span class="s">"Eric"</span> <span class="o">}</span>
+metadata<span class="o">.</span><span class="p">set</span><span class="o">(</span>user<span class="o">,</span> <span class="o">{</span> visited<span class="o">:</span> <span class="n">true</span> <span class="o">}</span><span class="o">)</span>
+
+user <span class="o">=</span> <span class="n">null</span>
+<span class="c">// 原本的 user key 不再可達後，WeakMap 關聯與沒有其他引用的 value 都可被回收</span></code></pre>
+  <p>不過，key 消失不一定代表 value 物件本身必定消失。如果另一個變數仍然引用同一個 value，垃圾回收器就不能回收該 value；消失的只有它和 <code>user</code> 之間的 <code>WeakMap</code> 關聯。</p>
+  <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">const</span> status <span class="o">=</span> <span class="o">{</span> visited<span class="o">:</span> <span class="n">true</span> <span class="o">}</span>
+<span class="k">let</span> user<span class="o">:</span> <span class="o">{</span> name<span class="o">:</span> string <span class="o">}</span> <span class="o">|</span> <span class="n">null</span> <span class="o">=</span> <span class="o">{</span> name<span class="o">:</span> <span class="s">"Eric"</span> <span class="o">}</span>
+
+metadata<span class="o">.</span><span class="p">set</span><span class="o">(</span>user<span class="o">,</span> status<span class="o">)</span>
+user <span class="o">=</span> <span class="n">null</span>
+
+status<span class="o">.</span>visited <span class="c">// true；status 仍被這個變數引用</span></code></pre>
   <p>回收時間由 JavaScript 執行環境決定，程式不能要求它立刻發生，也不應依賴某個確切時間點。</p>
+
+  <h2>如果沒有垃圾回收，會發生什麼事？</h2>
+  <p>垃圾回收器的工作，是找出程式已經無法再抵達的物件，並把它們占用的記憶體交還給執行環境。假設 JavaScript 完全沒有垃圾回收機制，那麼即使程式已經失去 <code>user</code> 的最後一條可用引用，原本的 user 物件和它對應的 metadata value 仍會占著實體記憶體，直到程式結束。</p>
+  <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">const</span> metadata <span class="o">=</span> <span class="k">new</span> <span class="t">WeakMap</span><span class="o">&lt;</span>object<span class="o">,</span> <span class="o">{</span> visited<span class="o">:</span> boolean <span class="o">}</span><span class="o">&gt;</span><span class="o">()</span>
+
+<span class="k">let</span> user<span class="o">:</span> <span class="o">{</span> name<span class="o">:</span> string <span class="o">}</span> <span class="o">|</span> <span class="n">null</span> <span class="o">=</span> <span class="o">{</span> name<span class="o">:</span> <span class="s">"Eric"</span> <span class="o">}</span>
+metadata<span class="o">.</span><span class="p">set</span><span class="o">(</span>user<span class="o">,</span> <span class="o">{</span> visited<span class="o">:</span> <span class="n">true</span> <span class="o">}</span><span class="o">)</span>
+
+user <span class="o">=</span> <span class="n">null</span> <span class="c">// 程式不再能透過 user 取得原物件</span></code></pre>
+  <p>最後一行不等於「立刻刪除物件」；它只是移除變數到物件的引用。在真實的 JavaScript 執行環境中，垃圾回收器之後可以發現該物件已不可達。因為 <code>WeakMap</code> 對 key 的關係是弱的，這條關係不會單獨把物件留住，key 與其對應的 value 都有資格被回收。</p>
+  <p>如果不存在垃圾回收器，「有資格被回收」也沒有人負責執行，於是 <code>WeakMap</code> 的主要記憶體優勢便無法實現。程式也拿不回那筆資料，因為已經失去 key；結果會是一份無法使用、卻繼續占用記憶體的資料。長時間持續建立物件時，記憶體用量只會不斷增加，最後可能耗盡可用記憶體。</p>
+  <p>這是假想比較：實際的 JavaScript 執行環境有垃圾回收機制，語言本身也沒有讓程式直接 <code>free(user)</code> 的一般 API。若一門語言不提供自動垃圾回收，通常就必須改由程式設計者或其他所有權機制明確釋放記憶體；單靠弱引用不會完成釋放。</p>
+
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>情境</th><th>失去外部的 <code>user</code> 引用後</th><th>結果</th></tr></thead>
+      <tbody>
+        <tr><td>有垃圾回收器 + <code>WeakMap</code></td><td><code>WeakMap</code> 不會單獨留住 key</td><td>key 與關聯 value 之後可被自動回收</td></tr>
+        <tr><td>有垃圾回收器 + <code>Map</code></td><td><code>Map</code> 仍強引用 key</td><td>只要 <code>Map</code> 還存在且未 <code>delete</code>，key 與 value 通常都不會被回收</td></tr>
+        <tr><td>完全沒有垃圾回收器</td><td>是否仍可從程式取得物件已不影響記憶體釋放</td><td><code>WeakMap</code> 與 <code>Map</code> 中不再使用的資料都會繼續占用記憶體</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="callout">
+    <p><strong>關鍵差異：</strong><code>WeakMap</code> 不會主動刪除物件。它只是避免自己成為垃圾回收的障礙；真正辨識並釋放不可達物件的，仍然是垃圾回收器。</p>
+  </div>
 
   <h2>WeakMap 與 Map 的差異</h2>
   <div class="table-wrap">
