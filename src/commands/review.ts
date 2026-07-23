@@ -2,14 +2,15 @@ import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import { Command, Flag } from "effect/unstable/cli";
-import type { ReviewConfigOverrides } from "../config/config-service";
-import type { ReviewProfile } from "../config/schema";
 import { stagedScope, workingTreeScope } from "../domain/scope";
 import {
   renderJsonReport,
   renderTerminalReport,
 } from "../output/report-renderer";
-import { runReview } from "../use-cases/run-review";
+import {
+  type ReviewConfigOverrides,
+  runReview,
+} from "../use-cases/run-review";
 import { renderReviewError } from "./review-error-renderer";
 
 const jsonFlag = Flag.boolean("json").pipe(
@@ -62,7 +63,7 @@ interface ReviewConfigFlags {
   readonly concurrency: Option.Option<number>;
   readonly engine: Option.Option<string>;
   readonly model: Option.Option<string>;
-  readonly profile: Option.Option<ReviewProfile>;
+  readonly profile: Option.Option<"quick" | "standard">;
   readonly provider: Option.Option<string>;
   readonly timeoutMs: Option.Option<number>;
 }
@@ -92,10 +93,10 @@ export const reviewCommand = Command.make("review", {
 }).pipe(
   Command.withDescription("Review local Git changes."),
   Command.withHandler((cliOptions) =>
-    runReview(
-      cliOptions.staged ? stagedScope : workingTreeScope,
-      collectCliConfigOverrides(cliOptions),
-    ).pipe(
+    runReview({
+      scope: cliOptions.staged ? stagedScope : workingTreeScope,
+      configOverrides: collectCliConfigOverrides(cliOptions),
+    }).pipe(
       Effect.flatMap((report) =>
         Console.log(
           cliOptions.json

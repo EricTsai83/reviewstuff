@@ -32,6 +32,8 @@ import {
 } from "../review/review-budget";
 import { buildReviewRequestV1 } from "../review/review-request";
 
+export type { ReviewConfigOverrides } from "../config/config-service";
+
 export class ReviewTimeoutError extends Data.TaggedError(
   "ReviewTimeoutError",
 )<{
@@ -43,6 +45,11 @@ export type RunReviewError =
   | ConfigError
   | ReviewEngineError
   | ReviewTimeoutError;
+
+export interface RunReviewInput {
+  readonly scope: ReviewScope;
+  readonly configOverrides?: ReviewConfigOverrides;
+}
 
 const ensureSupportedFakeSelection = (
   config: ResolvedReviewConfig,
@@ -167,10 +174,10 @@ const buildReviewReport = (
   });
 };
 
-export const runReview = (
-  scope: ReviewScope,
-  overrides: ReviewConfigOverrides = {},
-): Effect.Effect<
+export const runReview = ({
+  scope,
+  configOverrides = {},
+}: RunReviewInput): Effect.Effect<
   ReviewReportV4,
   RunReviewError,
   GitService | ConfigService | ReviewEngine
@@ -179,7 +186,7 @@ export const runReview = (
     const configService = yield* ConfigService;
     const git = yield* GitService;
     const engine = yield* ReviewEngine;
-    const config = yield* configService.load(overrides);
+    const config = yield* configService.load(configOverrides);
     yield* ensureSupportedFakeSelection(config);
     return yield* Effect.gen(function* () {
       const diff = yield* git.readDiff(scope);

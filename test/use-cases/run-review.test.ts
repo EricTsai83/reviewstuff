@@ -53,10 +53,13 @@ test("runReview rejects selections that cannot execute yet", async () => {
     readDiff: () => Effect.die("unsupported selections must fail before Git"),
   });
 
-  const error = await runReview("working-tree", {
-    engine: "openai",
-    provider: "openai",
-    model: "gpt-example",
+  const error = await runReview({
+    scope: "working-tree",
+    configOverrides: {
+      engine: "openai",
+      provider: "openai",
+      model: "gpt-example",
+    },
   }).pipe(
     Effect.provide(git),
     Effect.provide(services),
@@ -78,7 +81,10 @@ test("runReview applies the resolved timeout to Git diff work", async () => {
     readDiff: () => Effect.never,
   });
 
-  const error = await runReview("working-tree", { timeoutMs: 1 }).pipe(
+  const error = await runReview({
+    scope: "working-tree",
+    configOverrides: { timeoutMs: 1 },
+  }).pipe(
     Effect.provide(git),
     Effect.provide(services),
     Effect.flip,
@@ -105,7 +111,10 @@ test("runReview applies the same resolved timeout to engine work", async () => {
     review: () => Effect.never,
   });
 
-  const error = await runReview("working-tree", { timeoutMs: 1 }).pipe(
+  const error = await runReview({
+    scope: "working-tree",
+    configOverrides: { timeoutMs: 1 },
+  }).pipe(
     Effect.provide(git),
     Effect.provide(config),
     Effect.provide(engine),
@@ -139,10 +148,13 @@ test("runReview builds the normalized request before invoking the engine", async
       }),
   });
 
-  await runReview("working-tree", {
-    profile: "quick",
-    model: "fake-reviewer-v1",
-    concurrency: 1,
+  await runReview({
+    scope: "working-tree",
+    configOverrides: {
+      profile: "quick",
+      model: "fake-reviewer-v1",
+      concurrency: 1,
+    },
   }).pipe(
     Effect.provide(git),
     Effect.provide(config),
@@ -183,7 +195,7 @@ test("runReview produces deterministic findings from added marker lines", async 
         ],
       }),
   });
-  const report = await runReview("working-tree").pipe(
+  const report = await runReview({ scope: "working-tree" }).pipe(
     Effect.provide(git),
     Effect.provide(services),
     Effect.runPromise,
@@ -236,7 +248,7 @@ test("runReview produces deterministic findings from added marker lines", async 
 
 test("finding IDs do not change when the same patch is staged", async () => {
   const review = (source: "staged" | "working-tree") =>
-    runReview("working-tree").pipe(
+    runReview({ scope: "working-tree" }).pipe(
       Effect.provide(
         Layer.succeed(GitService, {
           readDiff: () =>
@@ -260,7 +272,7 @@ test("finding IDs do not change when the same patch is staged", async () => {
 });
 
 test("runReview reports deterministic incomplete coverage", async () => {
-  const report = await runReview("working-tree").pipe(
+  const report = await runReview({ scope: "working-tree" }).pipe(
     Effect.provide(
       Layer.succeed(GitService, {
         readDiff: () =>
@@ -351,11 +363,14 @@ test("runReview sends only budget-selected hunks and reports the same coverage",
       }),
   });
 
-  const report = await runReview("working-tree", {
-    requestBudget: {
-      maxTokens: 1_800,
-      fixedRequestOverheadTokens: 0,
-      outputReserveTokens: 100,
+  const report = await runReview({
+    scope: "working-tree",
+    configOverrides: {
+      requestBudget: {
+        maxTokens: 1_800,
+        fixedRequestOverheadTokens: 0,
+        outputReserveTokens: 100,
+      },
     },
   }).pipe(
     Effect.provide(git),
@@ -416,11 +431,14 @@ test("runReview sends only budget-selected hunks and reports the same coverage",
 test("runReview skips the engine when no hunk fits the request budget", async () => {
   const hugeHunk = `@@ -0,0 +1 @@\n+${"x".repeat(4_000)}\n`;
   let engineCalls = 0;
-  const report = await runReview("staged", {
-    requestBudget: {
-      maxTokens: 1_000,
-      fixedRequestOverheadTokens: 0,
-      outputReserveTokens: 100,
+  const report = await runReview({
+    scope: "staged",
+    configOverrides: {
+      requestBudget: {
+        maxTokens: 1_000,
+        fixedRequestOverheadTokens: 0,
+        outputReserveTokens: 100,
+      },
     },
   }).pipe(
     Effect.provide(
@@ -467,7 +485,7 @@ test("runReview sends metadata-only files to the engine", async () => {
   let received: ReviewRequestV1 | undefined;
   const metadataOnly = gitTextFile("empty.ts", "untracked", "");
 
-  const report = await runReview("working-tree").pipe(
+  const report = await runReview({ scope: "working-tree" }).pipe(
     Effect.provide(
       Layer.succeed(GitService, {
         readDiff: () => Effect.succeed({ files: [metadataOnly] }),
@@ -524,7 +542,7 @@ test("runReview propagates typed engine failures", async () => {
     review: () => Effect.fail(failure),
   });
 
-  const error = await runReview("working-tree").pipe(
+  const error = await runReview({ scope: "working-tree" }).pipe(
     Effect.provide(git),
     Effect.provide(config),
     Effect.provide(engine),

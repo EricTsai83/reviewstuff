@@ -23,7 +23,15 @@ export interface ResolvedReviewConfig {
   readonly requestBudget: ReviewRequestBudgetConfig;
 }
 
-export type ReviewConfigOverrides = Partial<ResolvedReviewConfig>;
+export interface ReviewConfigOverrides {
+  readonly profile?: ReviewProfile;
+  readonly engine?: string;
+  readonly provider?: string;
+  readonly model?: string;
+  readonly timeoutMs?: number;
+  readonly concurrency?: number;
+  readonly requestBudget?: ReviewRequestBudgetConfig;
+}
 
 export const profiles: Readonly<Record<ReviewProfile, ResolvedReviewConfig>> = {
   quick: {
