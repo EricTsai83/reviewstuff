@@ -58,7 +58,7 @@ const reportCommandFailure = (message: string) =>
     ),
   );
 
-interface ReviewOverrideOptions {
+interface ReviewConfigFlags {
   readonly concurrency: Option.Option<number>;
   readonly engine: Option.Option<string>;
   readonly model: Option.Option<string>;
@@ -67,16 +67,16 @@ interface ReviewOverrideOptions {
   readonly timeoutMs: Option.Option<number>;
 }
 
-const toReviewConfigOverrides = (
-  options: ReviewOverrideOptions,
+const collectCliConfigOverrides = (
+  flags: ReviewConfigFlags,
 ): ReviewConfigOverrides => ({
-  ...(Option.isSome(options.profile) && { profile: options.profile.value }),
-  ...(Option.isSome(options.engine) && { engine: options.engine.value }),
-  ...(Option.isSome(options.provider) && { provider: options.provider.value }),
-  ...(Option.isSome(options.model) && { model: options.model.value }),
-  ...(Option.isSome(options.timeoutMs) && { timeoutMs: options.timeoutMs.value }),
-  ...(Option.isSome(options.concurrency) && {
-    concurrency: options.concurrency.value,
+  ...(Option.isSome(flags.profile) && { profile: flags.profile.value }),
+  ...(Option.isSome(flags.engine) && { engine: flags.engine.value }),
+  ...(Option.isSome(flags.provider) && { provider: flags.provider.value }),
+  ...(Option.isSome(flags.model) && { model: flags.model.value }),
+  ...(Option.isSome(flags.timeoutMs) && { timeoutMs: flags.timeoutMs.value }),
+  ...(Option.isSome(flags.concurrency) && {
+    concurrency: flags.concurrency.value,
   }),
 });
 
@@ -94,7 +94,7 @@ export const reviewCommand = Command.make("review", {
   Command.withHandler((cliOptions) =>
     runReview(
       cliOptions.staged ? stagedScope : workingTreeScope,
-      toReviewConfigOverrides(cliOptions),
+      collectCliConfigOverrides(cliOptions),
     ).pipe(
       Effect.flatMap((report) =>
         Console.log(
