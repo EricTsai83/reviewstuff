@@ -2,6 +2,8 @@ import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import { Command, Flag } from "effect/unstable/cli";
+import type { ReviewConfigOverrides } from "../config/config-service";
+import type { ReviewProfile } from "../config/schema";
 import { stagedScope, workingTreeScope } from "../domain/scope";
 import {
   renderJsonReport,
@@ -56,6 +58,28 @@ const reportCommandFailure = (message: string) =>
     ),
   );
 
+interface ReviewOverrideOptions {
+  readonly concurrency: Option.Option<number>;
+  readonly engine: Option.Option<string>;
+  readonly model: Option.Option<string>;
+  readonly profile: Option.Option<ReviewProfile>;
+  readonly provider: Option.Option<string>;
+  readonly timeoutMs: Option.Option<number>;
+}
+
+const toReviewConfigOverrides = (
+  options: ReviewOverrideOptions,
+): ReviewConfigOverrides => ({
+  ...(Option.isSome(options.profile) && { profile: options.profile.value }),
+  ...(Option.isSome(options.engine) && { engine: options.engine.value }),
+  ...(Option.isSome(options.provider) && { provider: options.provider.value }),
+  ...(Option.isSome(options.model) && { model: options.model.value }),
+  ...(Option.isSome(options.timeoutMs) && { timeoutMs: options.timeoutMs.value }),
+  ...(Option.isSome(options.concurrency) && {
+    concurrency: options.concurrency.value,
+  }),
+});
+
 export const reviewCommand = Command.make("review", {
   concurrency: concurrencyFlag,
   engine: engineFlag,
@@ -68,26 +92,10 @@ export const reviewCommand = Command.make("review", {
 }).pipe(
   Command.withDescription("Review local Git changes."),
   Command.withHandler((cliOptions) =>
-    runReview(cliOptions.staged ? stagedScope : workingTreeScope, {
-      ...(Option.isSome(cliOptions.profile)
-        ? { profile: cliOptions.profile.value }
-        : {}),
-      ...(Option.isSome(cliOptions.engine)
-        ? { engine: cliOptions.engine.value }
-        : {}),
-      ...(Option.isSome(cliOptions.provider)
-        ? { provider: cliOptions.provider.value }
-        : {}),
-      ...(Option.isSome(cliOptions.model)
-        ? { model: cliOptions.model.value }
-        : {}),
-      ...(Option.isSome(cliOptions.timeoutMs)
-        ? { timeoutMs: cliOptions.timeoutMs.value }
-        : {}),
-      ...(Option.isSome(cliOptions.concurrency)
-        ? { concurrency: cliOptions.concurrency.value }
-        : {}),
-    }).pipe(
+    runReview(
+      cliOptions.staged ? stagedScope : workingTreeScope,
+      toReviewConfigOverrides(cliOptions),
+    ).pipe(
       Effect.flatMap((report) =>
         Console.log(
           cliOptions.json
