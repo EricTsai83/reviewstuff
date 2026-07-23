@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="用 contract-first 與 private locality 排列 TypeScript 原始碼。">
+  <title>TypeScript 宣告順序：公開契約與私有宣告的閱讀方向</title>
+  <link rel="stylesheet" href="../assets/learning-article.css">
+</head>
+<body>
+  <main>
+    <article>
+      <h1>TypeScript 宣告順序</h1>
+      <p class="deck">一個模組應先回答「外部可以依賴什麼」，再逐步揭露內部如何完成工作。好的順序讓讀者從 contract 走向 implementation，而不是先穿越一大片 helpers。</p>
+
+      <nav>
+        <strong>閱讀路徑</strong>
+        <ol>
+          <li><a href="#order">通用排序</a></li>
+          <li><a href="#private">私有宣告 locality</a></li>
+          <li><a href="#exceptions">何時可以偏離</a></li>
+        </ol>
+      </nav>
+
+      <h2 id="order">通用排序</h2>
+      <ol>
+        <li>Imports。</li>
+        <li>公開 constants、schemas、types 與 interfaces。</li>
+        <li>公開 service 或主要 API contract。</li>
+        <li>只服務於主要流程的 private types 與 helpers。</li>
+        <li>主要函式或 exported composition。</li>
+      </ol>
+
+      <pre><code>import ...
+
+export interface ReviewInput { ... }
+export interface ReviewResult { ... }
+
+interface NormalizedInput { ... }
+
+const normalizeInput = (...) =&gt; ...
+const evaluateRules = (...) =&gt; ...
+
+export const review = (...) =&gt; ...</code></pre>
+
+      <h2 id="private">私有宣告應靠近誰？</h2>
+      <p>不要因為兩個宣告都是 type，就強迫它們集中在檔案頂端。私有宣告的位置由 consumer 決定。</p>
+
+      <table>
+        <thead><tr><th>使用情況</th><th>位置</th></tr></thead>
+        <tbody>
+          <tr><td>只有一個函式使用</td><td>緊靠該函式之前，形成單一閱讀單元</td></tr>
+          <tr><td>同一區段的數個 helpers 使用</td><td>提升到該區段最前面</td></tr>
+          <tr><td>跨越多個公開 API 使用</td><td>放到模組 contract 之後的共同 private 區</td></tr>
+          <tr><td>其他模組也需要</td><td>重新判斷 owner，再決定是否 export；不要只為排序而 export</td></tr>
+        </tbody>
+      </table>
+
+      <div class="callout">
+        <strong>判斷問題</strong>
+        <p>讀者第一次看到 private type 時，是否已經知道它要幫助哪個流程？如果答案是否定的，它通常放得太早。</p>
+      </div>
+
+      <h2 id="exceptions">何時可以偏離</h2>
+      <ul>
+        <li>Framework 或 code generator 要求固定順序。</li>
+        <li>Declaration merging 或初始化順序具有語意。</li>
+        <li>循環依賴或 runtime temporal dead zone 需要特別安排。</li>
+        <li>模組已大到無法形成單一路徑；此時應先考慮拆模組，而不是發明更多排序層級。</li>
+      </ul>
+
+      <p><a href="./source-file-layout.html">返回排版指南入口</a></p>
+    </article>
+  </main>
+</body>
+</html>

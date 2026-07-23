@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="保留 TypeScript 泛型輸入輸出關係與 callback 精確推論。">
+  <title>TypeScript 泛型與 Callback 推論</title>
+  <link rel="stylesheet" href="../assets/learning-article.css">
+</head>
+<body>
+  <main>
+    <article>
+      <h1>泛型與 Callback 推論</h1>
+      <p class="deck">泛型函式的價值不只在接受很多型別，而是在型別層保留輸入與輸出的關係。過早寫成較寬的 return type，會讓這份關係消失。</p>
+
+      <h2>固定型別和泛型關係不同</h2>
+      <pre><code>const identity = &lt;T&gt;(value: T): T =&gt; value
+
+const widened = &lt;T&gt;(value: T): unknown =&gt; value
+
+const a = identity("hello")
+//    ^? "hello"
+
+const b = widened("hello")
+//    ^? unknown</code></pre>
+      <p><code>unknown</code> 沒有說謊，但它切斷了「輸出就是輸入型別」的契約。Return annotation 技術上正確，不代表它保存了有用資訊。</p>
+
+      <h2>Callback 通常已經有 contextual typing</h2>
+      <pre><code>const lengths = ["a", "abcd"].map((value) =&gt; value.length)</code></pre>
+      <p><code>map</code> 已提供 parameter context，callback body 又能精確推論成 <code>number</code>。重複寫 <code>(value: string): number</code> 通常沒有增加邊界，只增加維護點。</p>
+
+      <h2>何時仍值得標註 callback</h2>
+      <ul>
+        <li>Callback 本身被 export 或跨模組傳遞。</li>
+        <li>Library callback contract 很複雜，推論錯誤難以定位。</li>
+        <li>你要刻意限制輸出，不讓 implementation detail 洩漏。</li>
+        <li>需要防止未預期的 async return；這屬於另一個 <code>void</code> 問題。</li>
+      </ul>
+
+      <div class="callout">
+        <strong>閱讀泛型 annotation 的方法</strong>
+        <p>不要只問輸出「可以不可以指派」。再問一次：annotation 是否保留了輸入與輸出之間原本可證明的關係？</p>
+      </div>
+
+      <p><a href="./typescript-explicit-return-type-pitfalls.html">返回 Return Type 指南</a></p>
+    </article>
+  </main>
+</body>
+</html>
