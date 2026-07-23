@@ -1,20 +1,17 @@
 import * as Schema from "effect/Schema";
-import type { ReviewFileSource } from "../domain/review-file";
-import type { ReviewScope } from "../domain/scope";
-
-const NonEmptyStringSchema = Schema.String.check(
-  Schema.isMinLength(1, { message: "must not be empty" }),
-);
-const PositiveIntegerSchema = Schema.Int.check(
-  Schema.isGreaterThan(0, { message: "must be greater than 0" }),
-);
+import { ReviewFileSourceSchema } from "../domain/review-file";
+import { type ReviewScope, ReviewScopeSchema } from "../domain/scope";
+import { NonEmptyStringSchema } from "../shared/schema-primitives";
 
 const ReviewRequestFileV1Schema = Schema.Struct({
   path: NonEmptyStringSchema,
-  source: Schema.Literals(["staged", "working-tree", "untracked"]),
+  source: ReviewFileSourceSchema,
   patch: Schema.String,
 });
 
+// Execution knobs such as concurrency and timeout are deliberately not part
+// of this contract: the request carries only what a review engine needs to
+// produce findings, so the serialized payload equals what budgeting measured.
 export const ReviewRequestV1Schema = Schema.Struct({
   schemaVersion: Schema.Literal(1),
   systemInstructions: NonEmptyStringSchema,
@@ -22,33 +19,24 @@ export const ReviewRequestV1Schema = Schema.Struct({
   context: Schema.Struct({
     contentType: Schema.Literal("untrusted-repository-data"),
     repository: Schema.Struct({
-      scope: Schema.Literals(["working-tree", "staged"]),
+      scope: ReviewScopeSchema,
     }),
     files: Schema.Array(ReviewRequestFileV1Schema),
   }),
   options: Schema.Struct({
-    preset: Schema.Literals(["quick", "standard"]),
     model: NonEmptyStringSchema,
-    concurrency: PositiveIntegerSchema,
   }),
 });
 
 export type ReviewRequestV1 = typeof ReviewRequestV1Schema.Type;
-
-export interface ReviewRequestFileV1 {
-  readonly path: string;
-  readonly source: ReviewFileSource;
-  readonly patch: string;
-}
+export type ReviewRequestFileV1 = typeof ReviewRequestFileV1Schema.Type;
 
 export interface BuildReviewRequestV1Input {
   readonly repository: {
     readonly scope: ReviewScope;
   };
   readonly config: {
-    readonly preset: "quick" | "standard";
     readonly model: string;
-    readonly concurrency: number;
   };
   readonly files: ReadonlyArray<ReviewRequestFileV1>;
 }

@@ -170,9 +170,7 @@ test("runReview builds the normalized request before invoking the engine", async
       files: [requestFile],
     },
     options: {
-      preset: "quick",
       model: "fake-reviewer-v1",
-      concurrency: 1,
     },
   });
 });

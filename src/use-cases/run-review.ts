@@ -8,7 +8,10 @@ import {
   UnsupportedReviewSelectionError,
 } from "../config/config-service";
 import type { ReviewFindingV1 } from "../domain/finding";
-import type { ReviewFileCoverage } from "../domain/review-file";
+import {
+  compareReviewFileIdentity,
+  type ReviewFileCoverage,
+} from "../domain/review-file";
 import {
   decodeReviewReportV4,
   type ReviewReportV4,
@@ -69,20 +72,6 @@ const ensureSupportedFakeSelection = (
 const textFiles = (diff: GitDiff): ReadonlyArray<GitTextFile> =>
   diff.files.filter((file): file is GitTextFile => file.kind === "text");
 
-const compareCoverageFiles = (
-  left: ReviewFileCoverage,
-  right: ReviewFileCoverage,
-): number =>
-  left.path < right.path
-    ? -1
-    : left.path > right.path
-    ? 1
-    : left.source < right.source
-    ? -1
-    : left.source > right.source
-    ? 1
-    : 0;
-
 const buildCoverageFiles = (
   diff: GitDiff,
   selection: ReviewSelectionV1,
@@ -99,7 +88,7 @@ const buildCoverageFiles = (
   );
 
   return [...selection.coverage.files, ...binaryCoverage].sort(
-    compareCoverageFiles,
+    compareReviewFileIdentity,
   );
 };
 
@@ -109,11 +98,7 @@ const requestEnvelopeTokens = (
 ): number => {
   const emptyRequest = buildReviewRequestV1({
     repository: { scope },
-    config: {
-      preset: config.preset,
-      model: config.model,
-      concurrency: config.concurrency,
-    },
+    config: { model: config.model },
     files: [],
   });
   const emptyRequestTokens = fallbackReviewRequestEstimator.estimate(
@@ -202,15 +187,11 @@ export const runReview = ({
       });
       const request = buildReviewRequestV1({
         repository: { scope },
-        config: {
-          preset: config.preset,
-          model: config.model,
-          concurrency: config.concurrency,
-        },
+        config: { model: config.model },
         files: selection.files,
       });
       const findings = selection.files.length > 0
-        ? yield* engine.review(request)
+        ? yield* engine.review(request, { concurrency: config.concurrency })
         : [];
       return buildReviewReport(scope, diff, selection, findings);
     }).pipe(

@@ -20,6 +20,12 @@ export class ReviewEngineFailure extends Data.TaggedError(
 
 export type ReviewEngineError = ReviewEngineFailure;
 
+/** Local execution knobs resolved from config; deliberately kept out of the
+ * serialized request contract so budgeting measures only reviewable data. */
+export interface ReviewEngineExecution {
+  readonly concurrency: number;
+}
+
 export class ReviewEngine extends Context.Service<
   ReviewEngine,
   {
@@ -27,6 +33,7 @@ export class ReviewEngine extends Context.Service<
      * upstream policy decisions; engines must not silently truncate it. */
     readonly review: (
       request: ReviewRequestV1,
+      execution: ReviewEngineExecution,
     ) => Effect.Effect<ReadonlyArray<ReviewFindingV1>, ReviewEngineError>;
   }
 >()("reviewstuff/ReviewEngine") {}
@@ -90,6 +97,7 @@ const findingsForPatch = (
 
 const review = (
   request: ReviewRequestV1,
+  execution: ReviewEngineExecution,
 ): Effect.Effect<ReadonlyArray<ReviewFindingV1>, ReviewEngineError> =>
   Effect.forEach(
     request.context.files,
@@ -102,7 +110,7 @@ const review = (
             cause,
           }),
       }),
-    { concurrency: request.options.concurrency },
+    { concurrency: execution.concurrency },
   ).pipe(Effect.map((fileFindings) => fileFindings.flat()));
 
 export const make: ReviewEngine["Service"] = ReviewEngine.of({ review });

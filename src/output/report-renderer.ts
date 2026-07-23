@@ -1,5 +1,5 @@
 import type { ReviewFileCoverage } from "../domain/review-file";
-import { decodeReviewReportV4, type ReviewReportV4 } from "../domain/report";
+import type { ReviewReportV4 } from "../domain/report";
 
 const terminalControlCharacter = /[\u0000-\u001f\u007f-\u009f\u2028\u2029]/gu;
 
@@ -36,11 +36,9 @@ const renderBudget = (report: ReviewReportV4): string =>
   `Request budget: ${report.budget.totalReservedTokens} of ${report.budget.maxTokens} tokens reserved (${report.budget.selectedRequestTokens} selected request, ${report.budget.fixedRequestOverheadTokens} fixed overhead, ${report.budget.outputReserveTokens} output reserve).`;
 
 export const renderJsonReport = (report: ReviewReportV4): string =>
-  JSON.stringify(decodeReviewReportV4(report), undefined, 2);
+  JSON.stringify(report, undefined, 2);
 
-export const renderTerminalReport = (input: ReviewReportV4): string => {
-  const report = decodeReviewReportV4(input);
-
+export const renderTerminalReport = (report: ReviewReportV4): string => {
   if (report.summary.changedFiles === 0) {
     return "No changes to review.";
   }

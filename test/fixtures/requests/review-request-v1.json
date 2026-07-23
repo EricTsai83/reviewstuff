@@ -16,8 +16,6 @@
     ]
   },
   "options": {
-    "preset": "quick",
-    "model": "fake-reviewer-v1",
-    "concurrency": 1
+    "model": "fake-reviewer-v1"
   }
 }

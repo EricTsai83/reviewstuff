@@ -1,18 +1,13 @@
 import * as Schema from "effect/Schema";
+import {
+  NonEmptyStringSchema,
+  NonNegativeIntegerSchema,
+  PositiveIntegerSchema,
+} from "../shared/schema-primitives";
 
 export const reviewConfigFileName = "reviewstuff.config.json";
 
 export const ReviewPresetNameSchema = Schema.Literals(["quick", "standard"]);
-
-const NonEmptyStringSchema = Schema.String.check(
-  Schema.isMinLength(1, { message: "must not be empty" }),
-);
-const PositiveIntegerSchema = Schema.Int.check(
-  Schema.isGreaterThan(0, { message: "must be greater than 0" }),
-);
-const NonNegativeIntegerSchema = Schema.Int.check(
-  Schema.isGreaterThanOrEqualTo(0, { message: "must not be negative" }),
-);
 
 export const ReviewRequestBudgetConfigSchema = Schema.Struct({
   maxTokens: PositiveIntegerSchema,

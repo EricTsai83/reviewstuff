@@ -1,8 +1,8 @@
 import * as Schema from "effect/Schema";
-
-const NonEmptyStringSchema = Schema.String.check(
-  Schema.isMinLength(1, { message: "must not be empty" }),
-);
+import {
+  NonEmptyStringSchema,
+  PositiveIntegerSchema,
+} from "../shared/schema-primitives";
 
 export const FindingSeveritySchema = Schema.Literals([
   "critical",
@@ -30,9 +30,7 @@ export const ReviewFindingV1Schema = Schema.Struct({
   confidence: FindingConfidenceSchema,
   message: NonEmptyStringSchema,
   file: NonEmptyStringSchema,
-  line: Schema.Int.check(
-    Schema.isGreaterThan(0, { message: "must be greater than 0" }),
-  ),
+  line: PositiveIntegerSchema,
 });
 
 export type FindingSeverity = typeof FindingSeveritySchema.Type;

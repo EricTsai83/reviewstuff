@@ -10,8 +10,10 @@ request，並解析成 normalized findings；尚未接 CLI selection。
 **In:** Responses API `text.format` JSON Schema strict output、`store: false`、auth/config、refusal/incomplete/
 empty/schema/transport typed errors、timeout/output cap。 **Out:** live CLI wiring、retry、streaming、tool calls。
 
-**Steps:** 以官方 current API contract 定義 boundary；adapter 只收 normalized request；mock completed、
-refusal、incomplete 與 non-message output fixtures；邊界再以 Effect schema decode。
+**Steps:** 以官方 current API contract 定義 boundary；adapter 只收 normalized request 與 execution
+options（`ReviewEngine.review(request, execution)`；`concurrency` 等執行參數由 execution 傳入，
+不在 serialized request contract 內）；mock completed、refusal、incomplete 與 non-message output
+fixtures；邊界再以 Effect schema decode。
 
 **Accept:** contract 無 OpenAI types；API response shape 不被直接信任；tests 不需 credentials；request 不啟用
 server-side storage。參考 [Structured Outputs](https://developers.openai.com/api/docs/guides/structured-outputs)。

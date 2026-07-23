@@ -1,17 +1,16 @@
 import * as Schema from "effect/Schema";
-import type { ReviewFileSource } from "../domain/review-file";
-
-const NonEmptyStringSchema = Schema.String.check(
-  Schema.isMinLength(1, { message: "must not be empty" }),
-);
-const NonNegativeIntegerSchema = Schema.Int.check(
-  Schema.isGreaterThanOrEqualTo(0, { message: "must not be negative" }),
-);
-const ReviewFileSourceSchema = Schema.Literals([
-  "staged",
-  "working-tree",
-  "untracked",
-]);
+import {
+  compareReviewFileIdentity,
+  type ReviewFileSource,
+  ReviewFileSourceSchema,
+  RequestBudgetSkippedFileCoverageSchema,
+  ReviewedFileCoverageSchema,
+  TruncatedFileCoverageSchema,
+} from "../domain/review-file";
+import {
+  NonEmptyStringSchema,
+  NonNegativeIntegerSchema,
+} from "../shared/schema-primitives";
 
 const SelectedReviewFileV1Schema = Schema.Struct({
   path: NonEmptyStringSchema,
@@ -19,38 +18,14 @@ const SelectedReviewFileV1Schema = Schema.Struct({
   patch: Schema.String,
 });
 
-const ReviewedSelectionCoverageSchema = Schema.Struct({
-  path: NonEmptyStringSchema,
-  source: ReviewFileSourceSchema,
-  status: Schema.Literal("reviewed"),
-  selectedHunks: NonNegativeIntegerSchema,
-  totalHunks: NonNegativeIntegerSchema,
-});
-const TruncatedSelectionCoverageSchema = Schema.Struct({
-  path: NonEmptyStringSchema,
-  source: ReviewFileSourceSchema,
-  status: Schema.Literal("truncated"),
-  reason: Schema.Literal("request-budget"),
-  selectedHunks: NonNegativeIntegerSchema,
-  totalHunks: NonNegativeIntegerSchema,
-});
-const SkippedSelectionCoverageSchema = Schema.Struct({
-  path: NonEmptyStringSchema,
-  source: ReviewFileSourceSchema,
-  status: Schema.Literal("skipped"),
-  reason: Schema.Literal("request-budget"),
-  selectedHunks: Schema.Literal(0),
-  totalHunks: NonNegativeIntegerSchema,
-});
-
 const ReviewSelectionCoverageV1Schema = Schema.Struct({
   schemaVersion: Schema.Literal(1),
   complete: Schema.Boolean,
   files: Schema.Array(
     Schema.Union([
-      ReviewedSelectionCoverageSchema,
-      TruncatedSelectionCoverageSchema,
-      SkippedSelectionCoverageSchema,
+      ReviewedFileCoverageSchema,
+      TruncatedFileCoverageSchema,
+      RequestBudgetSkippedFileCoverageSchema,
     ]),
   ),
 });
@@ -94,7 +69,13 @@ export interface ReviewBudgetPolicy {
 
 export interface ReviewRequestEstimator {
   readonly unit: "tokens";
-  readonly estimate: (serializedRequest: string) => number;
+  /**
+   * Estimates one serialized JSON fragment. Selection estimates each file's
+   * serialization separately and sums the parts, so estimates must be
+   * additive under string concatenation; the fallback byte estimator is
+   * exactly additive, and tokenizer-based estimators are approximately so.
+   */
+  readonly estimate: (serializedFragment: string) => number;
 }
 
 export interface SelectReviewHunksInput {
@@ -109,20 +90,9 @@ const utf8Encoder = new TextEncoder();
 // first, and every token must represent at least one byte of serialized input.
 export const fallbackReviewRequestEstimator: ReviewRequestEstimator = {
   unit: "tokens",
-  estimate: (serializedRequest) =>
-    utf8Encoder.encode(serializedRequest).byteLength,
+  estimate: (serializedFragment) =>
+    utf8Encoder.encode(serializedFragment).byteLength,
 };
-
-const compareFiles = (left: ReviewBudgetFile, right: ReviewBudgetFile): number =>
-  left.path < right.path
-    ? -1
-    : left.path > right.path
-    ? 1
-    : left.source < right.source
-    ? -1
-    : left.source > right.source
-    ? 1
-    : 0;
 
 const assertNonNegativeSafeInteger = (name: string, value: number): void => {
   if (!Number.isSafeInteger(value) || value < 0) {
@@ -170,6 +140,21 @@ const validateInput = (
   }
 };
 
+const serializeSelectedFile = (
+  file: ReviewBudgetFile,
+  hunkIndexes: ReadonlySet<number>,
+): string => {
+  const selected = file.hunks.filter((_hunk, hunkIndex) =>
+    hunkIndexes.has(hunkIndex)
+  );
+
+  return JSON.stringify({
+    path: file.path,
+    source: file.source,
+    patch: `${file.fileHeader}${selected.map((hunk) => hunk.patch).join("")}`,
+  });
+};
+
 const selectedFiles = (
   files: ReadonlyArray<ReviewBudgetFile>,
   selectedHunks: ReadonlyArray<ReadonlySet<number>>,
@@ -191,19 +176,6 @@ const selectedFiles = (
       : [];
   });
 
-const estimateSelectedRequest = (
-  files: ReadonlyArray<typeof SelectedReviewFileV1Schema.Type>,
-  estimator: ReviewRequestEstimator,
-): number => {
-  if (files.length === 0) {
-    return 0;
-  }
-
-  const estimate = estimator.estimate(JSON.stringify(files));
-  assertNonNegativeSafeInteger("request estimate", estimate);
-  return estimate;
-};
-
 export const decodeReviewSelectionV1 = (input: unknown): ReviewSelectionV1 =>
   Schema.decodeUnknownSync(ReviewSelectionV1Schema)(input, {
     onExcessProperty: "error",
@@ -216,7 +188,7 @@ export const selectReviewHunks = ({
 }: SelectReviewHunksInput): ReviewSelectionV1 => {
   validateInput(unsortedFiles, policy);
 
-  const files = [...unsortedFiles].sort(compareFiles);
+  const files = [...unsortedFiles].sort(compareReviewFileIdentity);
   const selectedHunks = files.map(() => new Set<number>());
   const selectedMetadataFiles = new Set<number>();
   const rounds = files.reduce(
@@ -224,8 +196,26 @@ export const selectReviewHunks = ({
     0,
   );
 
-  let requestFiles: ReadonlyArray<typeof SelectedReviewFileV1Schema.Type> = [];
+  // The selection estimate decomposes the serialized files array into its
+  // enclosing brackets, separators, and per-file fragments, so each candidate
+  // re-estimates only the file it changes instead of the whole selection.
+  const arrayBracketTokens = estimator.estimate("[]");
+  const arraySeparatorTokens = estimator.estimate(",");
+  assertNonNegativeSafeInteger("array bracket estimate", arrayBracketTokens);
+  assertNonNegativeSafeInteger("array separator estimate", arraySeparatorTokens);
+  const perFileTokens: Array<number | undefined> = files.map(() => undefined);
+  let includedFiles = 0;
+  let includedFileTokens = 0;
   let selectedRequestTokens = 0;
+
+  const requestTokensFor = (fileCount: number, fileTokens: number): number =>
+    fileCount === 0
+      ? 0
+      : sumTokenCounts(
+          fileTokens,
+          arrayBracketTokens,
+          (fileCount - 1) * arraySeparatorTokens,
+        );
 
   for (let hunkIndex = 0; hunkIndex < rounds; hunkIndex += 1) {
     for (const [fileIndex, file] of files.entries()) {
@@ -240,14 +230,18 @@ export const selectReviewHunks = ({
         selectedHunks[fileIndex]?.add(hunkIndex);
       }
 
-      const candidateFiles = selectedFiles(
-        files,
-        selectedHunks,
-        selectedMetadataFiles,
+      const previousFileTokens = perFileTokens[fileIndex];
+      const candidateFileTokens = estimator.estimate(
+        serializeSelectedFile(file, selectedHunks[fileIndex] ?? new Set()),
       );
-      const candidateRequestTokens = estimateSelectedRequest(
-        candidateFiles,
-        estimator,
+      assertNonNegativeSafeInteger("file estimate", candidateFileTokens);
+      const candidateIncludedFiles = includedFiles +
+        (previousFileTokens === undefined ? 1 : 0);
+      const candidateIncludedFileTokens = includedFileTokens -
+        (previousFileTokens ?? 0) + candidateFileTokens;
+      const candidateRequestTokens = requestTokensFor(
+        candidateIncludedFiles,
+        candidateIncludedFileTokens,
       );
       const candidateTotal = sumTokenCounts(
         policy.fixedRequestOverheadTokens,
@@ -256,7 +250,9 @@ export const selectReviewHunks = ({
       );
 
       if (candidateTotal <= policy.maxTokens) {
-        requestFiles = candidateFiles;
+        perFileTokens[fileIndex] = candidateFileTokens;
+        includedFiles = candidateIncludedFiles;
+        includedFileTokens = candidateIncludedFileTokens;
         selectedRequestTokens = candidateRequestTokens;
         continue;
       }
@@ -314,7 +310,7 @@ export const selectReviewHunks = ({
 
   return decodeReviewSelectionV1({
     schemaVersion: 1,
-    files: requestFiles,
+    files: selectedFiles(files, selectedHunks, selectedMetadataFiles),
     coverage: {
       schemaVersion: 1,
       complete: coverageFiles.every((file) => file.status === "reviewed"),

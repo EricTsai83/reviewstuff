@@ -1,71 +1,25 @@
 import * as Schema from "effect/Schema";
 import { ReviewFindingV1Schema } from "./finding";
-
-const NonNegativeIntegerSchema = Schema.Int.check(
-  Schema.isGreaterThanOrEqualTo(0, { message: "must not be negative" }),
-);
-const NonEmptyStringSchema = Schema.String.check(
-  Schema.isMinLength(1, { message: "must not be empty" }),
-);
-
-const ReviewScopeSchema = Schema.Literals(["working-tree", "staged"]);
-const ReviewFileSourceSchema = Schema.Literals([
-  "staged",
-  "working-tree",
-  "untracked",
-]);
-
-const ReviewedFileCoverageSchema = Schema.Struct({
-  path: NonEmptyStringSchema,
-  source: ReviewFileSourceSchema,
-  status: Schema.Literal("reviewed"),
-});
-const BudgetedReviewedFileCoverageSchema = Schema.Struct({
-  path: NonEmptyStringSchema,
-  source: ReviewFileSourceSchema,
-  status: Schema.Literal("reviewed"),
-  selectedHunks: NonNegativeIntegerSchema,
-  totalHunks: NonNegativeIntegerSchema,
-});
-const TruncatedFileCoverageSchema = Schema.Struct({
-  path: NonEmptyStringSchema,
-  source: ReviewFileSourceSchema,
-  status: Schema.Literal("truncated"),
-  reason: Schema.Literal("request-budget"),
-  selectedHunks: NonNegativeIntegerSchema,
-  totalHunks: NonNegativeIntegerSchema,
-});
-const RequestBudgetSkippedFileCoverageSchema = Schema.Struct({
-  path: NonEmptyStringSchema,
-  source: ReviewFileSourceSchema,
-  status: Schema.Literal("skipped"),
-  reason: Schema.Literal("request-budget"),
-  selectedHunks: Schema.Literal(0),
-  totalHunks: NonNegativeIntegerSchema,
-});
-const BinarySkippedFileCoverageSchema = Schema.Struct({
-  path: NonEmptyStringSchema,
-  source: ReviewFileSourceSchema,
-  status: Schema.Literal("skipped"),
-  reason: Schema.Literal("binary"),
-});
-const LargeSkippedFileCoverageSchema = Schema.Struct({
-  path: NonEmptyStringSchema,
-  source: ReviewFileSourceSchema,
-  status: Schema.Literal("skipped"),
-  reason: Schema.Literal("file-too-large"),
-  sizeBytes: Schema.String.check(Schema.isPattern(/^\d+$/u)),
-  limitBytes: Schema.Int.check(
-    Schema.isGreaterThan(0, { message: "must be greater than 0" }),
-  ),
-});
+import {
+  BinarySkippedFileCoverageSchema,
+  LargeSkippedFileCoverageSchema,
+  LegacyReviewedFileCoverageSchema,
+  RequestBudgetSkippedFileCoverageSchema,
+  ReviewedFileCoverageSchema,
+  TruncatedFileCoverageSchema,
+} from "./review-file";
+import { ReviewScopeSchema } from "./scope";
+import {
+  NonEmptyStringSchema,
+  NonNegativeIntegerSchema,
+} from "../shared/schema-primitives";
 
 const ReviewCoverageV1Schema = Schema.Struct({
   schemaVersion: Schema.Literal(1),
   complete: Schema.Boolean,
   files: Schema.Array(
     Schema.Union([
-      ReviewedFileCoverageSchema,
+      LegacyReviewedFileCoverageSchema,
       BinarySkippedFileCoverageSchema,
       LargeSkippedFileCoverageSchema,
     ]),
@@ -77,7 +31,7 @@ const ReviewCoverageV2Schema = Schema.Struct({
   complete: Schema.Boolean,
   files: Schema.Array(
     Schema.Union([
-      BudgetedReviewedFileCoverageSchema,
+      ReviewedFileCoverageSchema,
       TruncatedFileCoverageSchema,
       RequestBudgetSkippedFileCoverageSchema,
       BinarySkippedFileCoverageSchema,

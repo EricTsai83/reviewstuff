@@ -1,70 +1,91 @@
-export type ReviewFileSource = "staged" | "working-tree" | "untracked";
+import * as Schema from "effect/Schema";
+import {
+  NonEmptyStringSchema,
+  NonNegativeIntegerSchema,
+  PositiveIntegerSchema,
+} from "../shared/schema-primitives";
 
-export interface LegacyReviewedFileCoverage {
-  readonly path: string;
-  readonly source: ReviewFileSource;
-  readonly status: "reviewed";
-}
+export const ReviewFileSourceSchema = Schema.Literals([
+  "staged",
+  "working-tree",
+  "untracked",
+]);
 
-export interface ReviewedFileCoverage {
-  readonly path: string;
-  readonly source: ReviewFileSource;
-  readonly status: "reviewed";
-  readonly selectedHunks: number;
-  readonly totalHunks: number;
-}
+export type ReviewFileSource = typeof ReviewFileSourceSchema.Type;
 
-export interface TruncatedFileCoverage {
-  readonly path: string;
-  readonly source: ReviewFileSource;
-  readonly status: "truncated";
-  readonly reason: "request-budget";
-  readonly selectedHunks: number;
-  readonly totalHunks: number;
-}
+export const LegacyReviewedFileCoverageSchema = Schema.Struct({
+  path: NonEmptyStringSchema,
+  source: ReviewFileSourceSchema,
+  status: Schema.Literal("reviewed"),
+});
 
-export interface BinarySkippedFile {
-  readonly path: string;
-  readonly source: ReviewFileSource;
-  readonly reason: "binary";
-}
+export const ReviewedFileCoverageSchema = Schema.Struct({
+  path: NonEmptyStringSchema,
+  source: ReviewFileSourceSchema,
+  status: Schema.Literal("reviewed"),
+  selectedHunks: NonNegativeIntegerSchema,
+  totalHunks: NonNegativeIntegerSchema,
+});
 
-export interface LargeSkippedFile {
-  readonly path: string;
-  readonly source: ReviewFileSource;
-  readonly reason: "file-too-large";
-  readonly sizeBytes: string;
-  readonly limitBytes: number;
-}
+export const TruncatedFileCoverageSchema = Schema.Struct({
+  path: NonEmptyStringSchema,
+  source: ReviewFileSourceSchema,
+  status: Schema.Literal("truncated"),
+  reason: Schema.Literal("request-budget"),
+  selectedHunks: NonNegativeIntegerSchema,
+  totalHunks: NonNegativeIntegerSchema,
+});
 
-export type ReviewSkippedFile = BinarySkippedFile | LargeSkippedFile;
+export const RequestBudgetSkippedFileCoverageSchema = Schema.Struct({
+  path: NonEmptyStringSchema,
+  source: ReviewFileSourceSchema,
+  status: Schema.Literal("skipped"),
+  reason: Schema.Literal("request-budget"),
+  selectedHunks: Schema.Literal(0),
+  totalHunks: NonNegativeIntegerSchema,
+});
 
-export interface RequestBudgetSkippedFile {
-  readonly path: string;
-  readonly source: ReviewFileSource;
-  readonly reason: "request-budget";
-  readonly selectedHunks: 0;
-  readonly totalHunks: number;
-}
+export const BinarySkippedFileCoverageSchema = Schema.Struct({
+  path: NonEmptyStringSchema,
+  source: ReviewFileSourceSchema,
+  status: Schema.Literal("skipped"),
+  reason: Schema.Literal("binary"),
+});
+
+export const LargeSkippedFileCoverageSchema = Schema.Struct({
+  path: NonEmptyStringSchema,
+  source: ReviewFileSourceSchema,
+  status: Schema.Literal("skipped"),
+  reason: Schema.Literal("file-too-large"),
+  sizeBytes: Schema.String.check(Schema.isPattern(/^\d+$/u)),
+  limitBytes: PositiveIntegerSchema,
+});
+
+export type ReviewedFileCoverage = typeof ReviewedFileCoverageSchema.Type;
+export type TruncatedFileCoverage = typeof TruncatedFileCoverageSchema.Type;
 
 export type ReviewFileCoverage =
   | ReviewedFileCoverage
   | TruncatedFileCoverage
-  | ((ReviewSkippedFile | RequestBudgetSkippedFile) & {
-      readonly status: "skipped";
-    });
+  | typeof RequestBudgetSkippedFileCoverageSchema.Type
+  | typeof BinarySkippedFileCoverageSchema.Type
+  | typeof LargeSkippedFileCoverageSchema.Type;
 
-export interface ReviewCoverageV1 {
-  readonly schemaVersion: 1;
-  readonly complete: boolean;
-  readonly files: ReadonlyArray<
-    | LegacyReviewedFileCoverage
-    | (ReviewSkippedFile & { readonly status: "skipped" })
-  >;
+export interface ReviewFileIdentity {
+  readonly path: string;
+  readonly source: ReviewFileSource;
 }
 
-export interface ReviewCoverageV2 {
-  readonly schemaVersion: 2;
-  readonly complete: boolean;
-  readonly files: ReadonlyArray<ReviewFileCoverage>;
-}
+export const compareReviewFileIdentity = (
+  left: ReviewFileIdentity,
+  right: ReviewFileIdentity,
+): number =>
+  left.path < right.path
+    ? -1
+    : left.path > right.path
+    ? 1
+    : left.source < right.source
+    ? -1
+    : left.source > right.source
+    ? 1
+    : 0;
