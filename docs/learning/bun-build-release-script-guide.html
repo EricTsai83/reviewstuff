@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Bun build wrapper、artifact 驗證與 release script 的責任。">
+  <title>Bun Build 與 Release Script</title>
+  <link rel="stylesheet" href="../assets/learning-article.css">
+</head>
+<body><main><article>
+  <h1>Bun Build 與 Release Script</h1>
+  <p class="deck">Build wrapper 的產品是 artifact，不是 application result。它應固定輸入、輸出與失敗條件，並讓本機與 CI 使用同一條可重現路徑。</p>
+  <p class="meta"><strong>版本基準：</strong><code>bun@1.3.14</code>。Effect 是否適合 build script，取決於 script 是否真的需要共享 service 與 typed lifecycle。</p>
+
+  <h2>可靠 wrapper 的責任</h2>
+  <ol>
+    <li>明確指定 entry point、target、output path 與 externalization policy。</li>
+    <li>在開始前驗證環境與必要檔案。</li>
+    <li>把 compiler diagnostics 保留為 build failure，不假裝成功。</li>
+    <li>完成後驗證 artifact 存在、可執行且版本資訊正確。</li>
+    <li>Release 階段另處理簽章、notarization、checksum 與發佈。</li>
+  </ol>
+
+  <h2>何時使用 Effect</h2>
+  <table><thead><tr><th>保留 Effect</th><th>使用直接 Bun script</th></tr></thead><tbody>
+    <tr><td>需要共享 FileSystem／process services、typed error mapping、scope 或可替換測試 Layer</td><td>單一短流程，只呼叫 compiler、檢查結果並退出</td></tr>
+  </tbody></table>
+  <p>不要只為風格一致把十行 script 包成完整 Layer graph；也不要在已有嚴格 process policy 時繞過它。選擇應由 failure、resource 與 testing requirements 決定。</p>
+
+  <h2>Build、install 與 release 不同</h2>
+  <ul>
+    <li><strong>Build：</strong>從 source 產生 artifact。</li>
+    <li><strong>Install：</strong>把已驗證 artifact 放到使用者可執行的位置。</li>
+    <li><strong>Release：</strong>簽署、產生 checksum、發佈並提供可追溯 metadata。</li>
+  </ul>
+
+  <div class="callout"><strong>Production gate</strong><p>不要把「compiler exit 0」當成完整成功。至少 smoke-test artifact、驗證 target architecture，並確保 release 上傳的是剛剛驗證過的同一份 bytes。</p></div>
+  <p><a href="./effect-bun-cli-command-guide.html">返回 CLI Command 與 ChildProcess</a></p>
+</article></main></body></html>

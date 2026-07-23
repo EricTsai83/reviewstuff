@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Effect.suspend 在遞迴、動態策略與型別統一中的進階用途。">
+  <title>Effect.suspend 進階模式</title>
+  <link rel="stylesheet" href="../assets/learning-article.css">
+</head>
+<body><main><article>
+  <h1><code>Effect.suspend</code> 進階模式</h1>
+  <p class="deck">核心用途是把「下一個 Effect 的建立」推遲到 runtime。遞迴是最重要的案例；動態策略與 TypeScript 分支統一則是次要工具。</p>
+  <p class="meta"><strong>版本基準：</strong><code>effect@4.0.0-beta.98</code>。｜<a href="./effect-learning-path.html">Effect 學習路徑</a></p>
+
+  <h2>安全建立遞迴 Effect</h2>
+  <pre><code>const repeat = (remaining: number): Effect.Effect&lt;void&gt; =&gt;
+  remaining &lt;= 0
+    ? Effect.void
+    : Effect.suspend(() =&gt;
+        task.pipe(Effect.andThen(repeat(remaining - 1)))
+      )</code></pre>
+  <p>沒有 <code>suspend</code> 時，<code>repeat(remaining - 1)</code> 可能在 description 建構階段一路遞迴。加上 suspend 後，每次 runtime 只建立下一層，讓 Effect runtime 管理執行與取消。</p>
+
+  <h2>執行時選擇策略</h2>
+  <pre><code>const program = Effect.suspend(() =&gt;
+  currentMode() === "local" ? localProgram : remoteProgram
+)</code></pre>
+  <p>只有當策略必須在每次執行時重新觀察，才需要 suspend。若 mode 已是 Effect value，通常用 <code>flatMap</code> 更直接。</p>
+
+  <h2>協助 TypeScript 統一分支</h2>
+  <p>複雜泛型分支有時會在 eager expression 上得到不理想的 union。把整個 Effect-producing expression 放入 <code>suspend</code>，可以提供明確的共同 return boundary；但應先嘗試改善函式 contract，不要把 suspend 當成任意 type cast。</p>
+
+  <h2>它不會處理什麼</h2>
+  <ul><li>不自動捕捉 thrown exception；依來源使用 <code>try</code>／<code>tryPromise</code> 等 API。</li><li>不 memoize。</li><li>不保證更快。</li><li>不取代 resource Scope。</li></ul>
+
+  <div class="callout"><strong>測試</strong><p>驗證建構時 thunk 尚未執行、每次 run 都重新執行、遞迴可被取消，並測試動態分支在兩次 run 之間改變時確實重新選擇。</p></div>
+  <p><a href="./effect-laziness-and-suspend-guide.html">返回延遲執行基礎</a></p>
+</article></main></body></html>
