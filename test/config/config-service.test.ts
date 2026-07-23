@@ -3,7 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import {
   decodeConfigContents,
-  profiles,
+  reviewPresets,
   resolveReviewConfig,
 } from "../../src/config/config-service";
 import { ReviewstuffConfigJsonSchema } from "../../src/config/schema";
@@ -20,7 +20,7 @@ describe("config schema", () => {
         JSON.stringify({
           schemaVersion: 1,
           review: {
-            profile: "standard",
+            preset: "standard",
             engine: "fake",
             provider: "fake",
             model: "fake-reviewer-v1",
@@ -37,7 +37,7 @@ describe("config schema", () => {
     ).toEqual({
       schemaVersion: 1,
       review: {
-        profile: "standard",
+        preset: "standard",
         engine: "fake",
         provider: "fake",
         model: "fake-reviewer-v1",
@@ -55,8 +55,8 @@ describe("config schema", () => {
   test.each([
     [{ schemaVersion: 2 }, "unsupported schema version"],
     [
-      { schemaVersion: 1, review: { profile: "thorough" } },
-      "unsupported profile",
+      { schemaVersion: 1, review: { preset: "thorough" } },
+      "unsupported preset",
     ],
     [
       { schemaVersion: 1, review: { timeoutMs: 0 } },
@@ -97,24 +97,29 @@ describe("config schema", () => {
 });
 
 describe("review config resolution", () => {
-  test("uses the standard profile when no config exists", () => {
-    expect(resolveReviewConfig(undefined)).toEqual(profiles.standard);
+  test("uses the standard preset when no config exists", () => {
+    expect(resolveReviewConfig(undefined)).toEqual({
+      ...reviewPresets.standard,
+      preset: "standard",
+    });
   });
 
-  test("quick and standard profiles have distinct execution budgets", () => {
-    expect(profiles.quick.timeoutMs).toBeLessThan(profiles.standard.timeoutMs);
-    expect(profiles.quick.concurrency).toBeLessThan(
-      profiles.standard.concurrency,
+  test("quick and standard presets have distinct execution budgets", () => {
+    expect(reviewPresets.quick.timeoutMs).toBeLessThan(
+      reviewPresets.standard.timeoutMs,
+    );
+    expect(reviewPresets.quick.concurrency).toBeLessThan(
+      reviewPresets.standard.concurrency,
     );
   });
 
-  test("resolves profile defaults, config values, then CLI overrides", () => {
+  test("resolves preset defaults, config values, then CLI overrides", () => {
     expect(
       resolveReviewConfig(
         {
           schemaVersion: 1,
           review: {
-            profile: "quick",
+            preset: "quick",
             engine: "config-engine",
             provider: "config-provider",
             model: "config-model",
@@ -123,19 +128,19 @@ describe("review config resolution", () => {
           },
         },
         {
-          profile: "standard",
+          preset: "standard",
           engine: "cli-engine",
           model: "cli-model",
         },
       ),
     ).toEqual({
-      profile: "standard",
+      preset: "standard",
       engine: "cli-engine",
       provider: "config-provider",
       model: "cli-model",
       timeoutMs: 45_000,
       concurrency: 3,
-      requestBudget: profiles.standard.requestBudget,
+      requestBudget: reviewPresets.standard.requestBudget,
     });
   });
 });

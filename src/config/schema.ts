@@ -2,7 +2,7 @@ import * as Schema from "effect/Schema";
 
 export const reviewConfigFileName = "reviewstuff.config.json";
 
-export const ReviewProfileSchema = Schema.Literals(["quick", "standard"]);
+export const ReviewPresetNameSchema = Schema.Literals(["quick", "standard"]);
 
 const NonEmptyStringSchema = Schema.String.check(
   Schema.isMinLength(1, { message: "must not be empty" }),
@@ -21,7 +21,7 @@ export const ReviewRequestBudgetConfigSchema = Schema.Struct({
 });
 
 export const ReviewConfigSchema = Schema.Struct({
-  profile: Schema.optionalKey(ReviewProfileSchema),
+  preset: Schema.optionalKey(ReviewPresetNameSchema),
   engine: Schema.optionalKey(NonEmptyStringSchema),
   provider: Schema.optionalKey(NonEmptyStringSchema),
   model: Schema.optionalKey(NonEmptyStringSchema),
@@ -39,7 +39,7 @@ export const ReviewstuffConfigJsonSchema = Schema.fromJsonString(
   ReviewstuffConfigV1Schema,
 );
 
-export type ReviewProfile = typeof ReviewProfileSchema.Type;
+export type ReviewPresetName = typeof ReviewPresetNameSchema.Type;
 export type ReviewRequestBudgetConfig =
   typeof ReviewRequestBudgetConfigSchema.Type;
 export type ReviewConfig = typeof ReviewConfigSchema.Type;

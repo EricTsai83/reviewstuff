@@ -19,7 +19,7 @@ const buildRequest = (
   buildReviewRequestV1({
     repository: { scope: "working-tree" },
     config: {
-      profile: "standard",
+      preset: "standard",
       model: "fake-reviewer-v1",
       concurrency,
     },

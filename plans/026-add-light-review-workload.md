@@ -11,8 +11,8 @@ explicit workload contract without branching the review architecture。
 的 context budget；不改變 finding criteria，也不偷偷切換 engine、provider、model、timeout
 或 concurrency。
 
-這個 plan 是 config v1 `profile: "quick" | "standard"` 的正式後繼者。Plan 006
-仍保留為歷史紀錄，不回頭改寫已完成的 contract。
+這個 plan 是 config v1 `preset: "quick" | "standard"` 的正式後繼者。Plan 006
+仍保留為歷史紀錄，不回頭改寫當時使用 `profile` 的已完成 contract。
 
 ## Working State
 
@@ -74,13 +74,13 @@ config/CLI resolution 控制。
 
 loader 同時嚴格接受 v1 與 v2，並在 boundary 將 v1 migration 成 current config：
 
-- `profile: "standard"` → `workload: "standard"`
-- `profile: "quick"` → `workload: "light"`
+- `preset: "standard"` → `workload: "standard"`
+- `preset: "quick"` → `workload: "light"`
 - migration 必須保留 v1 最終解析出的 engine/provider/model/timeout/concurrency，不能因為
   新 workload 不再擁有 execution settings 而靜默改變舊 config 行為。
 - 新寫出的文件與錯誤訊息只使用 v2 `workload` 術語。
 
-Resolution precedence：explicit CLI workload > config v2 workload / migrated v1 profile >
+Resolution precedence：explicit CLI workload > config v2 workload / migrated v1 preset >
 `standard` default。其他設定仍各自維持 CLI > config > default。
 
 ## Request And Report Boundaries
@@ -127,7 +127,7 @@ coverage 必須照常揭露 reviewed、truncated 與 skipped hunks/files。
 - cheaper model auto-selection。
 - provider pricing或 rate-limit semantics。
 - tool/analyzer depth。
-- finding tone、severity threshold 或「少講一點」profile。
+- finding tone、severity threshold 或「少講一點」mode。
 - timeout/concurrency tuning。
 - adaptive budget、automatic workload inference 或多級 deep review。
 

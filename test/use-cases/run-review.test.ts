@@ -151,7 +151,7 @@ test("runReview builds the normalized request before invoking the engine", async
   await runReview({
     scope: "working-tree",
     configOverrides: {
-      profile: "quick",
+      preset: "quick",
       model: "fake-reviewer-v1",
       concurrency: 1,
     },
@@ -170,7 +170,7 @@ test("runReview builds the normalized request before invoking the engine", async
       files: [requestFile],
     },
     options: {
-      profile: "quick",
+      preset: "quick",
       model: "fake-reviewer-v1",
       concurrency: 1,
     },

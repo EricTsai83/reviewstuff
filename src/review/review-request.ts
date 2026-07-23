@@ -27,7 +27,7 @@ export const ReviewRequestV1Schema = Schema.Struct({
     files: Schema.Array(ReviewRequestFileV1Schema),
   }),
   options: Schema.Struct({
-    profile: Schema.Literals(["quick", "standard"]),
+    preset: Schema.Literals(["quick", "standard"]),
     model: NonEmptyStringSchema,
     concurrency: PositiveIntegerSchema,
   }),
@@ -46,7 +46,7 @@ export interface BuildReviewRequestV1Input {
     readonly scope: ReviewScope;
   };
   readonly config: {
-    readonly profile: "quick" | "standard";
+    readonly preset: "quick" | "standard";
     readonly model: string;
     readonly concurrency: number;
   };

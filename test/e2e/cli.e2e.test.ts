@@ -227,14 +227,14 @@ describe("reviewstuff binary", () => {
     });
   });
 
-  test("review accepts config profiles and CLI selection overrides", async () => {
+  test("review accepts config presets and CLI selection overrides", async () => {
     const cwd = await makeRepository();
     await Bun.write(
       `${cwd}/reviewstuff.config.json`,
       JSON.stringify({
         schemaVersion: 1,
         review: {
-          profile: "quick",
+          preset: "quick",
           engine: "configured-engine",
           provider: "configured-provider",
           model: "configured-model",
@@ -248,7 +248,7 @@ describe("reviewstuff binary", () => {
       await runCli(
         [
           "review",
-          "--profile",
+          "--preset",
           "standard",
           "--engine",
           "fake",
@@ -275,7 +275,7 @@ describe("reviewstuff binary", () => {
       `${cwd}/reviewstuff.config.json`,
       JSON.stringify({
         schemaVersion: 1,
-        review: { profile: "thorough" },
+        review: { preset: "thorough" },
       }),
     );
 

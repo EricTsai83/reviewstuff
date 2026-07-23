@@ -5,7 +5,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 import {
-  type ReviewProfile,
+  type ReviewPresetName,
   type ReviewRequestBudgetConfig,
   type ReviewstuffConfigV1,
   ReviewstuffConfigJsonSchema,
@@ -13,7 +13,7 @@ import {
 } from "./schema";
 
 export interface ResolvedReviewConfig {
-  readonly profile: ReviewProfile;
+  readonly preset: ReviewPresetName;
   readonly engine: string;
   readonly provider: string;
   readonly model: string;
@@ -23,7 +23,7 @@ export interface ResolvedReviewConfig {
 }
 
 export interface ReviewConfigOverrides {
-  readonly profile?: ReviewProfile;
+  readonly preset?: ReviewPresetName;
   readonly engine?: string;
   readonly provider?: string;
   readonly model?: string;
@@ -32,9 +32,12 @@ export interface ReviewConfigOverrides {
   readonly requestBudget?: ReviewRequestBudgetConfig;
 }
 
-export const profiles: Readonly<Record<ReviewProfile, ResolvedReviewConfig>> = {
+export type ReviewPresetConfig = Omit<ResolvedReviewConfig, "preset">;
+
+export const reviewPresets: Readonly<
+  Record<ReviewPresetName, ReviewPresetConfig>
+> = {
   quick: {
-    profile: "quick",
     engine: "fake",
     provider: "fake",
     model: "fake-reviewer-v1",
@@ -47,7 +50,6 @@ export const profiles: Readonly<Record<ReviewProfile, ResolvedReviewConfig>> = {
     },
   },
   standard: {
-    profile: "standard",
     engine: "fake",
     provider: "fake",
     model: "fake-reviewer-v1",
@@ -112,13 +114,13 @@ export const resolveReviewConfig = (
   overrides: ReviewConfigOverrides = {},
 ): ResolvedReviewConfig => {
   const configured = config?.review;
-  const profile = overrides.profile ?? configured?.profile ?? "standard";
+  const preset = overrides.preset ?? configured?.preset ?? "standard";
 
   return {
-    ...profiles[profile],
+    ...reviewPresets[preset],
     ...configured,
     ...overrides,
-    profile,
+    preset,
   };
 };
 

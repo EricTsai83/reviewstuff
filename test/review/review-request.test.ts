@@ -21,7 +21,7 @@ const specialFile = {
 const input = {
   repository: { scope: "staged" as const },
   config: {
-    profile: "quick" as const,
+    preset: "quick" as const,
     model: "fake-reviewer-v1",
     concurrency: 1,
   },

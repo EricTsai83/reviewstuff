@@ -110,7 +110,7 @@ const requestEnvelopeTokens = (
   const emptyRequest = buildReviewRequestV1({
     repository: { scope },
     config: {
-      profile: config.profile,
+      preset: config.preset,
       model: config.model,
       concurrency: config.concurrency,
     },
@@ -203,7 +203,7 @@ export const runReview = ({
       const request = buildReviewRequestV1({
         repository: { scope },
         config: {
-          profile: config.profile,
+          preset: config.preset,
           model: config.model,
           concurrency: config.concurrency,
         },

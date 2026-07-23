@@ -19,9 +19,9 @@ const jsonFlag = Flag.boolean("json").pipe(
 const stagedFlag = Flag.boolean("staged").pipe(
   Flag.withDescription("Review only changes staged in the index."),
 );
-const profileFlag = Flag.choice("profile", ["quick", "standard"]).pipe(
+const presetFlag = Flag.choice("preset", ["quick", "standard"]).pipe(
   Flag.optional,
-  Flag.withDescription("Select the quick or standard review profile."),
+  Flag.withDescription("Select the quick or standard review preset."),
 );
 const optionalNonEmptyFlag = (name: string, description: string) =>
   Flag.string(name).pipe(
@@ -63,7 +63,7 @@ interface ReviewConfigFlags {
   readonly concurrency: Option.Option<number>;
   readonly engine: Option.Option<string>;
   readonly model: Option.Option<string>;
-  readonly profile: Option.Option<"quick" | "standard">;
+  readonly preset: Option.Option<"quick" | "standard">;
   readonly provider: Option.Option<string>;
   readonly timeoutMs: Option.Option<number>;
 }
@@ -71,7 +71,7 @@ interface ReviewConfigFlags {
 const collectCliConfigOverrides = (
   flags: ReviewConfigFlags,
 ): ReviewConfigOverrides => ({
-  ...(Option.isSome(flags.profile) && { profile: flags.profile.value }),
+  ...(Option.isSome(flags.preset) && { preset: flags.preset.value }),
   ...(Option.isSome(flags.engine) && { engine: flags.engine.value }),
   ...(Option.isSome(flags.provider) && { provider: flags.provider.value }),
   ...(Option.isSome(flags.model) && { model: flags.model.value }),
@@ -86,7 +86,7 @@ export const reviewCommand = Command.make("review", {
   engine: engineFlag,
   json: jsonFlag,
   model: modelFlag,
-  profile: profileFlag,
+  preset: presetFlag,
   provider: providerFlag,
   staged: stagedFlag,
   timeoutMs: timeoutFlag,

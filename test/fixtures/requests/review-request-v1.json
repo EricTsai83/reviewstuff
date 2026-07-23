@@ -16,7 +16,7 @@
     ]
   },
   "options": {
-    "profile": "quick",
+    "preset": "quick",
     "model": "fake-reviewer-v1",
     "concurrency": 1
   }
