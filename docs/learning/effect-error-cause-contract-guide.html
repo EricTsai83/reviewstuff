@@ -240,6 +240,7 @@ pre code .o { color: #ff946e; }
 <article>
 
 <h1>錯誤的 cause 該用精確型別還是 unknown?</h1>
+<p><strong>版本基準：</strong><code>effect@4.0.0-beta.98</code>；外部案例與 API 形狀應按文章標示的版本脈絡解讀。</p>
 
 <p class="deck">設計應用層錯誤型別時,包裝底層錯誤的 <code>cause</code> 欄位該標成當下可推導的精確型別,還是刻意拓寬為 <code>unknown</code>,以縮小公開 API 的承諾?本文以 Effect 的 <code>PlatformError</code> 為例,說明「目前實際是什麼型別」與「公開 API 承諾什麼型別」是兩件不同的事,並提供一套以維護成本為軸的決策方法。</p>
 

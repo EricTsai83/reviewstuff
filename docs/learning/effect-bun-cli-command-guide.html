@@ -392,6 +392,7 @@
   <main>
     <article>
       <h1>Effect、Bun 與 CLI Build Script 的責任分層</h1>
+      <p><strong>版本基準：</strong><code>effect@4.0.0-beta.98</code>、<code>@effect/platform-bun@4.0.0-beta.98</code>。</p>
       <p class="deck">設計 Bun CLI 時，<code>effect/unstable/cli</code>、Effect Platform 的 process／filesystem service、Bun compiler 與 release script 各自負責不同邊界。這篇文章從零建立心智模型，並整理可上線的建置、驗證與發佈原則。</p>
 
       <h2>一個可靠的 build wrapper 應做什麼</h2>

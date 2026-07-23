@@ -839,8 +839,8 @@
         </section>
 
         <section class="error-section">
-          <h3><code>GitExecutionError</code>：程序或檔案檢查基礎設施失敗</h3>
-          <p>這個 wrapper 保留 command start、termination 或 filesystem inspection 的底層 <code>cause</code>。它不代表 Git 以非零 exit code 拒絕操作，而是取得結果的過程本身失敗。</p>
+          <h3><code>GitExecutionError</code>：程序基礎設施失敗</h3>
+          <p>這個 wrapper 目前保留 command start 或 termination 的底層 <code>cause</code>。它不代表 Git 以非零 exit code 拒絕操作，而是取得結果的過程本身失敗。型別仍接受舊的 <code>file-inspection</code> discriminator，但目前 Git pipeline 沒有 filesystem inspector，也沒有任何 producer 建立這個變體。</p>
           <div class="table-wrap">
             <table>
               <thead>
@@ -863,8 +863,8 @@
                 </tr>
                 <tr>
                   <td><code>file-inspection</code></td>
-                  <td>讀取 working-tree 或 untracked 檔案大小</td>
-                  <td>filesystem inspector 本身失敗，例如權限、I/O 或無法存取工作目錄。</td>
+                  <td>保留的相容性欄位</td>
+                  <td>目前沒有 producer；若不再需要向後相容，應另行移除。</td>
                 </tr>
               </tbody>
             </table>
@@ -888,10 +888,10 @@
 
         <section class="error-section">
           <h3><code>GitCommandTimeoutError</code>：Git 超過該操作的 deadline</h3>
-          <p>每個 Git command 都應設定依操作類型調校的 timeout，並接受上游 cancellation。超時要保留成專屬 error，而不是壓成一般 <code>GitExecutionError</code>，如此 caller 才能知道哪個 operation 逾時多久。</p>
+          <p>目前每個 Git command 都使用 10 秒 timeout，並接受上游 cancellation。超時保留成專屬 error，而不是壓成一般 <code>GitExecutionError</code>，如此 caller 才能知道哪個 operation 逾時多久。</p>
           <dl class="field-list">
             <dt>operation</dt><dd>逾時的高階 Git 操作。</dd>
-            <dt>timeoutMilliseconds</dt><dd>本次 command 實際採用的時間上限；它是診斷資料，不應假設全系統固定同一值。</dd>
+            <dt>timeoutMilliseconds</dt><dd>本次 command 實際採用的時間上限；目前是 10,000 ms，欄位仍保留實際值以支援未來依操作調校。</dd>
             <dt>cause</dt><dd>command runner 的 <code>CommandTimeoutError</code>。</dd>
           </dl>
           <p>可能原因包括 repository 很大、儲存裝置或 network filesystem 太慢、Git hook／外部環境阻塞，或 child process 卡住。timeout 發生後 runner 仍會進入 process termination 清理。</p>
@@ -911,29 +911,29 @@
             <table>
               <thead><tr><th>操作類型</th><th>上限</th><th>例子</th></tr></thead>
               <tbody>
-                <tr><td>一般列表與 metadata</td><td>示例：4 MiB</td><td>列 staged／unstaged／untracked files、repository root</td></tr>
-                <tr><td>單一 patch</td><td>示例：512 KiB</td><td>讀 staged、working-tree 或 untracked diff</td></tr>
-                <tr><td>Git object metadata</td><td>示例：1 KiB</td><td>解析 object ID、讀 object size、解析 empty tree</td></tr>
+                <tr><td>一般列表與 metadata</td><td>4 MiB</td><td>列 staged／unstaged／untracked files、repository root</td></tr>
+                <tr><td>單一 patch</td><td>4 MiB</td><td>讀 staged、working-tree 或 untracked diff</td></tr>
+                <tr><td>Git object metadata</td><td>1 KiB</td><td>解析 object ID 與 object size</td></tr>
               </tbody>
             </table>
           </div>
 
-          <p>這個 error 是整次 review 的 fatal failure。它與「檔案超過產品政策所以略過」不同：檔案大小預檢若已知超限，可以產生可解釋的 skipped record；但若 command output 已超限，程式無法證明 patch 完整，因此不能假裝 coverage 只是一般 skip。實際 byte budget 應由壓力測試、下游 context 限制與可接受 latency 決定。</p>
+          <p>這個 error 是整次 review 的 fatal failure。目前 Git adapter 沒有獨立檔案大小預檢；command output 一旦超限，程式無法證明 patch 完整，因此不能把它降級成一般 coverage skip。實際 byte budget 應由壓力測試、下游 context 限制與可接受 latency 決定。</p>
         </section>
 
         <section class="error-section">
           <h3><code>GitChangedFileUnavailableError</code>：列舉與讀取之間，檔案狀態改變了</h3>
-          <p><code>GitService</code> 先列出 changed paths，再逐一檢查大小與讀 patch。這兩步不是 atomic transaction；若使用者、編輯器或另一個 process 在中間刪除／移動檔案，就可能發生典型的 TOCTOU（time-of-check to time-of-use）race。</p>
-          <p>常見觸發點有兩個：</p>
+          <p><code>GitService</code> 先列出 changed paths，再逐一讀取 patch。這兩步不是 atomic transaction；若使用者、編輯器或另一個 process 在中間刪除／移動檔案，就可能發生典型的 TOCTOU（time-of-check to time-of-use）race。</p>
+          <p>目前常見觸發點有兩個：</p>
           <ul>
-            <li>列出的 untracked file 在 filesystem size inspection 時已不存在，因此 size 是 <code>undefined</code>。</li>
-            <li>Git diff command 的 exit code 在允許範圍內，但 stdout 為空，代表先前列出的變更已無法產生 patch。</li>
+            <li>Git diff command 的 exit code 在允許範圍內，但 tracked patch 的 stdout 為空，代表先前列出的變更已無法產生 patch。</li>
+            <li>Untracked patch 為空時，後續 <code>hash-object --no-filters</code> 驗證失敗，表示檔案已消失或內容不再是合法空檔案。</li>
           </ul>
           <dl class="field-list">
             <dt>path</dt><dd>已變得不可讀或無 patch 的檔案路徑。</dd>
             <dt>source</dt><dd><code>staged</code>、<code>working-tree</code> 或 <code>untracked</code>，指出它原本來自哪種 review coverage。</dd>
           </dl>
-          <p>這不是 binary 或 large file 的 skip。程式會讓整次讀取失敗，因為如果靜默略過，最終 review report 可能宣稱 coverage 完整，但實際遺漏一個原本列出的變更。</p>
+          <p>這不是 binary skip。程式會讓整次讀取失敗，因為如果靜默略過，最終 review report 可能宣稱 coverage 完整，但實際遺漏一個原本列出的變更。</p>
         </section>
 
         <section class="error-section">
@@ -944,6 +944,7 @@
             <li><code>resolve empty tree</code>：輸出必須是 40 或 64 位十六進位 object ID，以支援 SHA-1 與 SHA-256 repository。</li>
             <li><code>resolve git object</code>：<code>rev-parse</code> 成功後也必須得到同樣格式的 object ID。</li>
             <li><code>inspect git object</code>：<code>git cat-file -s</code> 的輸出必須全部是十進位數字，才能轉成 <code>BigInt</code>。</li>
+            <li><code>read staged／working-tree／untracked diff</code>：file header、binary marker 與每一個 hunk 都必須符合 unified diff 契約。</li>
           </ul>
           <dl class="field-list">
             <dt>operation</dt><dd>哪一個解析步驟收到不合法輸出。</dd>
@@ -1029,8 +1030,8 @@
                 <td>在特定 object／HEAD 探測中是預期的「不存在」，可能回傳 <code>undefined</code> 或改用 empty tree；其他非預期 exit code 才成為 <code>GitCommandError</code>。</td>
               </tr>
               <tr>
-                <td>檔案超過產品設定的上限</td>
-                <td>大小預檢已知時是 <code>file-too-large</code> skip；command output 實際衝破獨立 budget 時是 fatal <code>GitCommandOutputLimitError</code>。</td>
+                <td>單一 patch 超過 4 MiB command budget</td>
+                <td>目前沒有 file-size skip；combined output 超限直接是 fatal <code>GitCommandOutputLimitError</code>。</td>
               </tr>
               <tr>
                 <td>Git exit 0 但輸出是垃圾值</td>

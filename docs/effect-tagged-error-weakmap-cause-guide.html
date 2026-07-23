@@ -427,6 +427,7 @@
   <main>
     <article>
       <h1>讀懂 Effect TaggedError 裡的 WeakMap 與 cause</h1>
+      <p><strong>版本基準：</strong><code>effect@4.0.0-beta.98</code>。涉及 <code>Data.TaggedError</code> 序列化行為的內容應以此版本解讀。</p>
       <p class="deck">這篇文章從最普通的錯誤類別開始，逐步解釋為什麼某些錯誤需要自己寫 <code>constructor</code>、把資料放進 <code>WeakMap</code>，再用 getter 提供 <code>cause</code>。讀完後，你應該能逐行說出這段程式在做什麼，以及它保護了什麼、沒有保護什麼。</p>
 
       <nav aria-label="文章目錄">
