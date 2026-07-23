@@ -5,7 +5,6 @@ import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 import {
-  type ReviewConfig,
   type ReviewProfile,
   type ReviewRequestBudgetConfig,
   type ReviewstuffConfigV1,
