@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Effect Service、factory 與 Layer 的 contract-first 檔案版型。">
+  <title>Effect Service 檔案版型</title>
+  <link rel="stylesheet" href="../../assets/learning-article.css">
+</head>
+<body>
+  <main>
+    <article>
+      <h1>Effect Service 檔案版型</h1>
+      <p class="deck">Effect service module 同時包含公開能力、建立實作的 Effect、依賴需求與 Layer。排列時要讓 contract 先被看見，composition 最後出現。</p>
+      <p class="meta"><strong>版本基準：</strong><code>effect@4.0.0-beta.98</code>。</p>
+
+      <h2>標準順序</h2>
+      <ol>
+        <li>公開 input、result 與 error types。</li>
+        <li><code>Context.Service</code> contract。</li>
+        <li>只供實作使用的 constants、types 與 helpers。</li>
+        <li><code>make</code> factory。</li>
+        <li>最後放 <code>layer</code>。</li>
+      </ol>
+
+      <pre><code>export class GitService extends Context.Service&lt;
+  GitService,
+  {
+    readonly readDiff: (
+      scope: ReviewScope,
+    ) =&gt; Effect.Effect&lt;GitDiff, GitError&gt;
+  }
+&gt;()("app/GitService") {}
+
+const readDiff = (...) =&gt; ...
+
+export const make = Effect.gen(function* () {
+  const runner = yield* CommandRunner
+  return GitService.of({ readDiff: (scope) =&gt; readDiff(runner, scope) })
+})
+
+export const layer = Layer.effect(GitService, make)</code></pre>
+
+      <h2><code>Service.of(...)</code> 的位置</h2>
+      <p><code>Service.of</code> 是把實作物件檢查成 service shape 的邊界。它應位於 factory 中，而不是散落在每個 consumer。Consumer 只索取 service，不知道它如何建立。</p>
+
+      <h2>Layer constructor 必須反映 lifecycle</h2>
+      <table>
+        <thead><tr><th>建立方式</th><th>適合的 Layer</th></tr></thead>
+        <tbody>
+          <tr><td>純同步值，不需要依賴</td><td><code>Layer.succeed</code></td></tr>
+          <tr><td>建立過程是 Effect</td><td><code>Layer.effect</code></td></tr>
+          <tr><td>取得資源並登記 finalizer</td><td><code>Layer.scoped</code></td></tr>
+        </tbody>
+      </table>
+
+      <div class="callout">
+        <strong>常見錯誤</strong>
+        <p>不要為了讓型別看起來簡單，用 <code>Layer.effect</code> 包裝實際上需要 scoped cleanup 的資源。檔案排版不能掩蓋錯誤的生命週期。</p>
+      </div>
+
+      <h2>多個 production implementations</h2>
+      <p>只有一個正式實作時，contract、factory 與 layer 可以共置。若有多個真正的 production adapters，保留小型 contract module，再讓每個 adapter 擁有自己的 factory 與 layer。測試 fake 本身不足以建立一套 production hierarchy。</p>
+
+      <p><a href="../architecture/source-file-layout.html">返回排版指南入口</a>｜<a href="./effect-learning-path.html">Effect 4 學習路徑</a></p>
+    </article>
+  </main>
+</body>
+</html>

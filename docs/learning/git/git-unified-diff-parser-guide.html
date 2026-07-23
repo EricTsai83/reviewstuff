@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="嚴格解析 Git unified diff、hunk 與 binary marker 的設計指南。">
+  <title>Strict Unified Diff Parser：不要把 Git Patch 當成不透明字串</title>
+  <link rel="stylesheet" href="../../assets/learning-article.css">
+</head>
+<body>
+  <main>
+    <article>
+      <h1>Strict Unified Diff Parser</h1>
+      <p class="deck">Git command exit code 成功，只代表程序完成；它不證明 stdout 是完整、符合下游假設的 patch。Strict parser 把文字轉成可驗證的 file header 與 hunks，並在資料不可信時整體失敗。</p>
+
+      <h2>為什麼要解析</h2>
+      <p>Review budget 需要以 hunk 為單位選擇內容，coverage 也需要知道總 hunks 與 selected hunks。若只保留一條 patch string，下游只能再次用不一致的規則切割，或者在截斷輸出上產生誤導結果。</p>
+
+      <h2>資料模型</h2>
+      <pre><code>interface GitDiffHunk {
+  readonly oldStart: number
+  readonly oldCount: number
+  readonly newStart: number
+  readonly newCount: number
+  readonly patch: string
+}
+
+type ParsedUnifiedDiff =
+  | { readonly binary: true }
+  | {
+      readonly binary: false
+      readonly fileHeader: string
+      readonly hunks: ReadonlyArray&lt;GitDiffHunk&gt;
+    }</code></pre>
+
+      <h2>解析順序</h2>
+      <ol>
+        <li>辨識 Git file header，保留進入第一個 hunk 前的文字。</li>
+        <li>如果 header 表示 binary diff，建立 binary variant，不嘗試偽造文字 hunks。</li>
+        <li>解析每個 <code>@@ -oldStart,oldCount +newStart,newCount @@</code> header。</li>
+        <li>逐行計算 context、addition 與 deletion，驗證實際行數符合 header。</li>
+        <li>遇到截斷、未知行 prefix、overflow 或額外不可解釋內容時，整體失敗。</li>
+      </ol>
+
+      <h2>空 patch 的特殊情況</h2>
+      <p>Tracked change 已被 discovery 列出，但 patch stdout 為空，通常表示列舉和讀取之間狀態改變，應回傳 unavailable error。Untracked 空檔案則真的可能沒有 diff body；它必須再用 <code>git hash-object --no-filters</code> 驗證檔案仍存在且 object ID 等於 empty blob，才能建立零 hunks 的文字 file。</p>
+
+      <h2>Binary 屬於哪一層？</h2>
+      <p>Parser 只宣告「這份 Git diff 是 binary」。Git service 保留它的 path、source、status 與 rename metadata。是否略過 binary review 是 use case 的產品政策；目前 use case 會把它轉成 <code>reason: "binary"</code> 的 coverage。</p>
+
+      <div class="callout">
+        <strong>All-or-nothing</strong>
+        <p>Parser 不應回傳「目前成功解析的前幾個 hunks」。Command output 可能剛好在 budget、timeout 或 stream failure 附近被截斷；部分成功會讓下游誤以為 coverage 完整。</p>
+      </div>
+
+      <h2>資源限制仍然在 parser 之前</h2>
+      <p>CommandRunner 先以 combined stdout/stderr budget 限制記憶體與輸出量。目前單一 patch 上限是 4 MiB。超限直接成為 fatal output-limit error；parser 不負責截斷，也不把超限降級成 file-size skip。</p>
+
+      <p><a href="./git-service-overview.html">返回 Git service 總覽</a></p>
+    </article>
+  </main>
+</body>
+</html>

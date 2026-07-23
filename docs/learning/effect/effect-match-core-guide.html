@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Effect Match 的建立、分支、型別縮窄與 exhaustive completion。">
+  <title>Effect Match 核心：型別縮窄與完整分支</title>
+  <link rel="stylesheet" href="../../assets/learning-article.css">
+</head>
+<body><main><article>
+  <h1>Effect Match 核心：型別縮窄與完整分支</h1>
+  <p class="deck"><code>Match</code> 把「建立 matcher、加入分支、決定未命中語意」寫成可組合 pipeline。它的主要價值是 handler narrowing 與 discriminated union 的完整性檢查。</p>
+  <p class="meta"><strong>版本基準：</strong><code>effect@4.0.0-beta.98</code>。｜<a href="./effect-learning-path.html">Effect 學習路徑</a></p>
+
+  <h2>三階段心智模型</h2>
+  <pre><code>const render = Match.type&lt;PaymentState&gt;().pipe(
+  Match.tag("Pending", () =&gt; "Waiting"),
+  Match.tag("Paid", ({ receipt }) =&gt; receipt),
+  Match.tag("Failed", ({ message }) =&gt; message),
+  Match.exhaustive,
+)</code></pre>
+  <ol><li><code>type</code> 或 <code>value</code> 決定輸入。</li><li><code>when</code>／<code>tag</code> 增加分支並收窄 handler input。</li><li><code>exhaustive</code>、<code>orElse</code> 或 option-like completion 決定未命中語意。</li></ol>
+
+  <h2>為什麼不只用 switch</h2>
+  <p><code>switch</code> 對簡單 union 已經很好。Match 更適合需要可組合 patterns、nested structural matching 或以 pipeline 建立 reusable matcher 的地方。不要為了使用 library 把清楚的兩分支 switch 改得更抽象。</p>
+
+  <h2>分支順序仍然重要</h2>
+  <p>廣泛 pattern 放在前面可能吞掉精確分支。Match 提供型別協助，不會替你證明任意 predicate 互斥，也不會把 runtime object pattern 解讀成完整物件相等。</p>
+
+  <div class="callout"><strong>錯誤邊界</strong><p>Tagged error union 特別適合 Match：每個 handler 取得精確 error type，<code>exhaustive</code> 又能在新增 error variant 時迫使 boundary 更新。</p></div>
+  <p>Pattern API 的選擇請讀<a href="./effect-match-pattern-reference.html">Effect Match Pattern Reference</a>。</p>
+</article></main></body></html>

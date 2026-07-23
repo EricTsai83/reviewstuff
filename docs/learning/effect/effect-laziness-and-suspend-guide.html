@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="區分 Effect 的建構時間與執行時間，理解 succeed、sync 與 suspend。">
+  <title>Effect 的延遲執行：succeed、sync 與 suspend</title>
+  <link rel="stylesheet" href="../../assets/learning-article.css">
+</head>
+<body><main><article>
+  <h1>Effect 的延遲執行</h1>
+  <p class="deck">Effect 本身延遲執行，不代表用來建立 Effect 的 JavaScript 也會延遲。判斷 <code>succeed</code>、<code>sync</code> 與 <code>suspend</code> 時，要先問「哪一段工作應該到執行時才發生」。</p>
+  <p class="meta"><strong>版本基準：</strong><code>effect@4.0.0-beta.98</code>。｜<a href="./effect-learning-path.html">Effect 學習路徑</a></p>
+
+  <h2>三個時間點</h2>
+  <ol><li>JavaScript 建立 Effect description。</li><li>Runtime 開始執行 description。</li><li>Effect 內部產生成功、失敗或下一個 Effect。</li></ol>
+
+  <table><thead><tr><th>API</th><th>現在做什麼</th><th>執行時做什麼</th></tr></thead><tbody>
+    <tr><td><code>Effect.succeed(value)</code></td><td>先計算並捕捉 value</td><td>回傳既有 value</td></tr>
+    <tr><td><code>Effect.sync(() =&gt; value)</code></td><td>保存 thunk</td><td>呼叫 thunk 產生 value</td></tr>
+    <tr><td><code>Effect.suspend(() =&gt; effect)</code></td><td>保存 thunk</td><td>呼叫 thunk 取得下一個 Effect</td></tr>
+  </tbody></table>
+
+  <pre><code>const captured = Effect.succeed(Date.now())
+const refreshed = Effect.sync(() =&gt; Date.now())
+const deferredProgram = Effect.suspend(() =&gt;
+  enabled ? runFeature : Effect.void
+)</code></pre>
+
+  <h2>每次執行都會重新呼叫</h2>
+  <p><code>sync</code> 與 <code>suspend</code> 不是一次性的 lazy cache。同一個 description 執行兩次，thunk 也會執行兩次。需要 memoization 時，必須使用明確的共享／快取機制。</p>
+
+  <h2>Callback 可能已經提供延遲</h2>
+  <p><code>flatMap</code>、<code>catch</code> 或 <code>andThen</code> 接受的 callback 本來就在適當事件發生後才呼叫。不要因為看到副作用就機械式再包一層 <code>suspend</code>。</p>
+
+  <div class="callout"><strong>判斷規則</strong><p>延遲普通值計算用 <code>sync</code>；延遲「選擇或建立下一個 Effect」用 <code>suspend</code>；已經存在的純值用 <code>succeed</code>。</p></div>
+  <p>遞迴、分支型別與其他用途請讀<a href="./effect-suspend-advanced-patterns.html">Effect.suspend 進階模式</a>。</p>
+</article></main></body></html>

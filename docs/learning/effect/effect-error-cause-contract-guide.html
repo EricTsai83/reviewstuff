@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="判斷錯誤 cause 應公開精確型別或 unknown 的 API 設計方法。">
+  <title>錯誤 cause：精確型別還是 unknown</title>
+  <link rel="stylesheet" href="../../assets/learning-article.css">
+</head>
+<body><main><article>
+  <h1>錯誤的 <code>cause</code> 該用精確型別還是 <code>unknown</code>？</h1>
+  <p class="deck">實作目前拿到的型別，和公開 API 願意長期承諾的型別，是兩個問題。<code>unknown</code> 可以是刻意的封裝邊界，不等於資料已遺失。</p>
+  <p class="meta"><strong>版本基準：</strong><code>effect@4.0.0-beta.98</code>。｜<a href="./effect-learning-path.html">Effect 學習路徑</a></p>
+
+  <h2>兩種契約</h2>
+  <pre><code>class ReadError extends Data.TaggedError("ReadError")&lt;{
+  readonly cause: PlatformError
+}&gt; {}
+
+class ReadError extends Data.TaggedError("ReadError")&lt;{
+  readonly cause: unknown
+}&gt; {}</code></pre>
+  <p>第一種允許 caller 直接依賴 platform error 結構；第二種要求 caller 先 narrowing，或只把 cause 當診斷資訊。</p>
+
+  <h2>何時公開精確型別</h2>
+  <ul><li>Caller 合法且穩定地需要依該結構分支。</li><li>底層型別本來就是你願意承諾的 domain vocabulary。</li><li>跨版本、跨程序或 package boundary 已把它列入相容性政策。</li></ul>
+
+  <h2>何時使用 unknown</h2>
+  <ul><li>Cause 只供 log、debug 或人類診斷。</li><li>底層 library 型別容易改變。</li><li>應用層應用自己的 discriminator 表達可操作語意。</li></ul>
+
+  <pre><code>class ProcessFailure extends Data.TaggedError("ProcessFailure")&lt;{
+  readonly kind: "not-found" | "permission" | "unknown"
+  readonly cause: unknown
+}&gt; {}</code></pre>
+  <p><code>kind</code> 是穩定應用契約；<code>cause</code> 保存不透明診斷。這通常比要求所有 caller 理解 platform error tree 更容易演進。</p>
+
+  <div class="callout"><strong>決策軸</strong><p>問 caller 現在是否需要那層結構、它何時會成為 wire/public contract，以及未來改變時修正成本是否會上升。不要只用「精確比較好」或「解耦比較好」做美學判斷。</p></div>
+  <p>跨 JSON/RPC boundary 的處理請讀<a href="./effect-error-cause-serialization-guide.html">Cause 序列化與 Schema.Defect</a>。</p>
+</article></main></body></html>

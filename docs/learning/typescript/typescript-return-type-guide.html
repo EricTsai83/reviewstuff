@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="TypeScript return type 契約、泛型推論與 async void callback 的閱讀入口。">
+  <title>TypeScript Return Type：契約、推論與 Async Callback</title>
+  <link rel="stylesheet" href="../../assets/learning-article.css">
+</head>
+<body>
+  <main>
+    <article>
+      <h1>TypeScript Return Type：契約、推論與 Async Callback</h1>
+      <p class="deck">Return annotation 的問題不是「該不該全部寫」，而是目前位置需要穩定契約，還是需要保留實作的精確資訊。原文涵蓋三種不同機制，現在拆成三篇。</p>
+
+      <div class="grid">
+        <section class="card">
+          <h2><a href="./typescript-return-contracts-guide.html">公開 API 與 Return Contract</a></h2>
+          <p>處理 literal widening、過寬 union、過時 contract，以及錯誤應該出現在 implementation 還是 caller。</p>
+        </section>
+        <section class="card">
+          <h2><a href="./typescript-generic-callback-inference-guide.html">泛型與 Callback 推論</a></h2>
+          <p>說明較寬 annotation 如何切斷輸入與輸出的關係，以及小型 callback 為何通常適合推論。</p>
+        </section>
+        <section class="card">
+          <h2><a href="./typescript-void-async-callback-guide.html"><code>void</code> Callback 與 Async 結果</a></h2>
+          <p>獨立處理 <code>() =&gt; void</code> 的特殊 assignability，以及 Promise 被忽略的風險。</p>
+        </section>
+      </div>
+
+      <h2>一分鐘判斷</h2>
+      <table>
+        <thead><tr><th>位置</th><th>預設選擇</th></tr></thead>
+        <tbody>
+          <tr><td>Exported use case、library API、版本化輸出</td><td>明確 return contract</td></tr>
+          <tr><td>短小 private helper、局部 callback</td><td>讓 TypeScript 推論</td></tr>
+          <tr><td>只想檢查輸出形狀，但保留精確型別</td><td>在 expression 使用 <code>satisfies</code></td></tr>
+          <tr><td>Event callback 可能回傳 Promise</td><td>使用明確 async-aware contract 或顯式處理 Promise</td></tr>
+        </tbody>
+      </table>
+
+      <p>若問題是「刪掉 return type 後，literal 為什麼變寬」，另讀<a href="./typescript-return-type-contract-tradeoffs.html">完整 literal widening 推導</a>。</p>
+    </article>
+  </main>
+</body>
+</html>

@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="區分 Effect CLI Command 與作業系統 ChildProcess。">
+  <title>Effect CLI Command 與 ChildProcess</title>
+  <link rel="stylesheet" href="../../assets/learning-article.css">
+</head>
+<body><main><article>
+  <h1>Effect CLI Command 與 ChildProcess</h1>
+  <p class="deck">兩者都叫 command，但位於相反方向：CLI Command 接受使用者輸入；ChildProcess 代表程式向外啟動另一個 executable。混在一起會讓 parsing、業務流程與 process policy 失去 owner。</p>
+  <p class="meta"><strong>版本基準：</strong><code>effect@4.0.0-beta.98</code>、<code>@effect/platform-bun@4.0.0-beta.98</code>。｜<a href="./effect-learning-path.html">Effect 學習路徑</a></p>
+
+  <h2>兩種 Command</h2>
+  <table><thead><tr><th>概念</th><th>責任</th></tr></thead><tbody>
+    <tr><td><code>effect/unstable/cli/Command</code></td><td>名稱、Argument、Flag、help、usage error 與 handler dispatch</td></tr>
+    <tr><td><code>effect/unstable/process/ChildProcess</code></td><td>program、args、cwd、environment、stdin/stdout/stderr 與 exit code</td></tr>
+  </tbody></table>
+
+  <h2>正確的資料流</h2>
+  <pre><code>argv
+  → CLI Command 解析
+  → use case
+  → semantic service
+  → controlled process service
+  → ChildProcess</code></pre>
+  <p>Command handler 不應自己組 shell string；use case 也不應依賴低階 process API。需要 Git 的流程依賴 <code>GitService</code>，由 adapter 再透過受控 runner 啟動 <code>git</code>。</p>
+
+  <h2>BunServices 的位置</h2>
+  <p>Effect 定義跨 runtime 的 filesystem、path 與 process contracts；<code>@effect/platform-bun</code> 提供 Bun implementation Layers。Composition root 提供 <code>BunServices.layer</code>，feature module 不需要 import Bun globals。</p>
+
+  <div class="callout"><strong>Process policy</strong><p>Production wrapper 應統一 timeout、combined output limit、concurrent stream draining、cancellation 與 scoped cleanup。這些不是每個 command handler 各自決定的細節。</p></div>
+
+  <h2>Build script 屬於另一個問題</h2>
+  <p>打包、驗證 artifact 與 release workflow 不是使用者 CLI parsing，也不是應用程式內的 semantic process adapter。請讀<a href="../cli/bun-build-release-script-guide.html">Bun Build 與 Release Script</a>。</p>
+</article></main></body></html>

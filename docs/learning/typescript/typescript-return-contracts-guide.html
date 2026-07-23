@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="何時用 TypeScript return annotation 建立公開 API 契約。">
+  <title>TypeScript 公開 API 與 Return Contract</title>
+  <link rel="stylesheet" href="../../assets/learning-article.css">
+</head>
+<body>
+  <main>
+    <article>
+      <h1>公開 API 與 Return Contract</h1>
+      <p class="deck">Return annotation 的主要價值是把錯誤留在契約的實作者，並穩定呼叫端能依賴的形狀。代價是 annotation 可能比實作更寬，也需要跟著 API 演進。</p>
+
+      <h2>Annotation 改變錯誤位置</h2>
+      <pre><code>interface Report {
+  readonly schemaVersion: 1
+}
+
+const makeReport = (): Report =&gt; ({
+  schemaVersion: 2,
+  //             ^ 錯誤留在 implementation
+})</code></pre>
+      <p>沒有 return contract 時，函式本體可能安全地推論成 <code>{ schemaVersion: number }</code>，直到結果被交給只接受 <code>Report</code> 的 caller 才報錯。這不是推論錯誤，而是沒有提早宣告業務契約。</p>
+
+      <h2>過寬 contract 的代價</h2>
+      <pre><code>const load = (): User | LoadError =&gt; {
+  return cachedUser
+}</code></pre>
+      <p>即使實作目前保證成功，caller 仍必須處理 <code>LoadError</code>。這可能是刻意維持穩定 API，也可能只是過時 annotation。判斷重點是「呼叫端是否應長期依賴這個可能性」，而不是越寬越安全。</p>
+
+      <h2>過時 contract 會隱藏新資訊</h2>
+      <pre><code>interface PublicUser {
+  readonly id: string
+}
+
+const loadUser = (): PublicUser =&gt; ({
+  id: "u1",
+  displayName: "Ada",
+})
+
+loadUser().displayName
+//         ^ contract 沒有暴露實作已提供的欄位</code></pre>
+      <p>若 <code>displayName</code> 應成為 public API，就更新 contract；若它只是 implementation detail，annotation 正在做正確的封裝。</p>
+
+      <h2>三種選擇</h2>
+      <table>
+        <thead><tr><th>方式</th><th>保護什麼</th></tr></thead>
+        <tbody>
+          <tr><td>完全推論</td><td>保留實作最精確資訊</td></tr>
+          <tr><td><code>satisfies Contract</code></td><td>檢查 expression 符合 contract，但保留 expression 型別</td></tr>
+          <tr><td>明確 return type</td><td>固定 caller 看見的公開邊界</td></tr>
+        </tbody>
+      </table>
+
+      <div class="callout">
+        <strong>建議</strong>
+        <p>Exported use case、版本化 schema 與 library boundary 優先使用明確 contract；private helper 優先推論。不要把團隊規則簡化成「所有函式都寫」或「所有函式都不寫」。</p>
+      </div>
+
+      <p><a href="./typescript-return-type-guide.html">返回 Return Type 指南</a></p>
+    </article>
+  </main>
+</body>
+</html>

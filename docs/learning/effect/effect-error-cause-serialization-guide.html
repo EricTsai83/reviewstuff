@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="在 JSON 或 RPC boundary 序列化不透明錯誤 cause。">
+  <title>Effect Error Cause 序列化與 Schema.Defect</title>
+  <link rel="stylesheet" href="../../assets/learning-article.css">
+</head>
+<body><main><article>
+  <h1>Cause 序列化與 <code>Schema.Defect</code></h1>
+  <p class="deck">Type-level 的 <code>unknown</code> 不能直接解決 wire format。跨 JSON 或 RPC boundary 時，需要明確定義如何保存診斷、處理循環引用，以及哪些資訊不可外洩。</p>
+  <p class="meta"><strong>版本基準：</strong><code>effect@4.0.0-beta.98</code>。｜<a href="./effect-learning-path.html">Effect 學習路徑</a></p>
+
+  <h2>兩層問題</h2>
+  <table><thead><tr><th>層次</th><th>問題</th></tr></thead><tbody>
+    <tr><td>TypeScript API</td><td>Caller 能否依賴 cause 的具體結構？</td></tr>
+    <tr><td>Wire schema</td><td>Cause 如何安全地編碼成 JSON，再解碼成可診斷資料？</td></tr>
+  </tbody></table>
+
+  <h2><code>Schema.Defect</code> 的角色</h2>
+  <pre><code>class VcsSpawnError extends Schema.TaggedErrorClass&lt;VcsSpawnError&gt;()(
+  "VcsSpawnError",
+  {
+    operation: Schema.String,
+    cause: Schema.Defect(),
+  },
+) {}</code></pre>
+  <p>概念上，它把任意 defect 正規化成可傳輸表示。這是刻意有損的診斷格式，不保證任意 JavaScript value round-trip 後維持原始 identity 或 prototype。</p>
+
+  <h2>安全政策</h2>
+  <ul><li>Error name、message 與有限 cause chain 可以保留。</li><li>Stack 應由明確選項控制，不預設跨信任邊界公開。</li><li>循環引用必須截斷。</li><li>Token、設定值、完整 command output 與使用者路徑需要 redaction policy。</li><li>可操作分支使用穩定 domain field，不解析 message。</li></ul>
+
+  <h2>消費端翻譯</h2>
+  <p>若 boundary 後真的需要辨識 platform fact，先做顯式 narrowing，再把它翻成應用語意，例如 <code>kind: "cli-not-installed"</code>。不要把 platform tree 原封不動提升成所有 caller 的公開 contract。</p>
+
+  <div class="callout"><strong>不是祕密抹除</strong><p>可序列化 schema 只決定預設 wire representation。若 logger 主動讀取 getter、stack 或原始 cause，敏感資料仍可能外洩；logging policy 必須獨立設計。</p></div>
+  <p><a href="./effect-error-cause-contract-guide.html">返回 cause 型別契約</a></p>
+</article></main></body></html>

@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="CLI command、use case、renderer 與 composition root 的模組版型。">
+  <title>CLI 模組與 Composition Root 排版</title>
+  <link rel="stylesheet" href="../../assets/learning-article.css">
+</head>
+<body>
+  <main>
+    <article>
+      <h1>CLI 模組與 Composition Root</h1>
+      <p class="deck">Command、use case、renderer 與 runtime entry point 面向不同變動來源。把它們排在同一套「handler 在最後」規則下，仍不能取代清楚的責任邊界。</p>
+
+      <h2>Command module</h2>
+      <ol>
+        <li>Flags、arguments 與 usage-level validation。</li>
+        <li>Command 專用 input mapping helpers。</li>
+        <li>Error/result rendering adapter。</li>
+        <li>最後建立並 export command。</li>
+      </ol>
+
+      <pre><code>const scope = Flag.choice("scope", choices)
+
+const toInput = (...) =&gt; ...
+const renderFailure = (...) =&gt; ...
+
+export const reviewCommand = Command.make(
+  "review",
+  { scope },
+  ({ scope }) =&gt; runReview(toInput(scope)).pipe(...),
+)</code></pre>
+
+      <h2>Use case module</h2>
+      <p>先放輸入／輸出 contract，再放 application-flow helpers，最後 export use case。Use case 可以協調 semantic services，但不應知道 CLI flag、terminal color 或 provider wire format。</p>
+
+      <h2>Renderer module</h2>
+      <p>Renderer 先定義接受的 domain/output model，再放細粒度 formatting helpers，最後 export 完整 renderer。不要讓 renderer 重新計算 use case 規則；它只表達既有結果。</p>
+
+      <h2>唯一的 composition root</h2>
+      <p><code>cli.ts</code> 或等價 entry point 應由上而下排列：</p>
+      <ol>
+        <li>建立 production Layers。</li>
+        <li>組合 commands。</li>
+        <li>提供 runtime dependencies。</li>
+        <li>最後且只在這裡啟動 runtime。</li>
+      </ol>
+
+      <div class="callout">
+        <strong>檢查方式</strong>
+        <p>如果 entry point 裡出現 command-specific application flow，或 use case 裡出現 stdout writes，問題不是宣告順序，而是責任已跨越模組邊界。</p>
+      </div>
+
+      <h2>何時拆檔</h2>
+      <p>當 flags、rendering 或 wiring 任一部分已需要獨立測試與大量 helpers，就讓它擁有自己的 module。不要用巨型 region comments 模擬實際不存在的邊界。</p>
+
+      <p><a href="./source-file-layout.html">返回排版指南入口</a></p>
+    </article>
+  </main>
+</body>
+</html>

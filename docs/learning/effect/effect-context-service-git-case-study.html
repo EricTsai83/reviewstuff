@@ -1,0 +1,791 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="從零設計 production-ready GitService，使用 Effect 4 Context.Service 與 Layer 分離契約、use case、程序執行、錯誤、可觀測性與測試。">
+  <title>Effect Context.Service 案例：設計 Git 服務</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --clay: #D97757;
+      --slate: #141413;
+      --ivory: #FAF9F5;
+      --oat: #E3DACC;
+      --white: #FFFFFF;
+      --gray-100: #F0EEE6;
+      --gray-300: #D1CFC5;
+      --gray-500: #87867F;
+      --gray-700: #3D3D3A;
+      --space-sm: 8px;
+      --space-md: 12px;
+      --space-lg: 16px;
+      --space-xl: 24px;
+      --space-2xl: 32px;
+      --space-3xl: 48px;
+      --radius-sm: 4px;
+      --radius-md: 8px;
+      --content-width: 68ch;
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+
+    body {
+      margin: 0;
+      background: var(--ivory);
+      color: var(--slate);
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 16px;
+      font-weight: 430;
+      line-height: 1.55;
+      letter-spacing: 0;
+    }
+
+    main {
+      max-width: var(--content-width);
+      margin: 0 auto;
+      padding: var(--space-3xl) var(--space-xl);
+    }
+
+    article {
+      background: transparent;
+      border: 0;
+      border-radius: 0;
+      box-shadow: none;
+      padding: 0;
+    }
+
+    section { scroll-margin-top: var(--space-xl); }
+
+    h1,
+    h2,
+    h3 {
+      color: var(--slate);
+      letter-spacing: -0.015em;
+    }
+
+    h1 {
+      max-width: none;
+      margin: 0 0 var(--space-lg);
+      font-size: 1.8rem;
+      line-height: 1.18;
+      text-wrap: balance;
+      overflow-wrap: normal;
+    }
+
+    h2 {
+      margin: var(--space-3xl) 0 var(--space-lg);
+      font-size: 1.22rem;
+      line-height: 1.25;
+    }
+
+    h3 {
+      margin: var(--space-2xl) 0 var(--space-sm);
+      font-size: 1rem;
+      line-height: 1.35;
+    }
+
+    p,
+    ul,
+    ol,
+    .deck,
+    .summary,
+    .callout,
+    table,
+    pre {
+      max-width: var(--content-width);
+    }
+
+    p { margin: 0 0 var(--space-lg); }
+
+    a {
+      color: var(--clay);
+      text-decoration-thickness: 1px;
+      text-underline-offset: 3px;
+    }
+
+    code {
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+      font-size: 0.9em;
+    }
+
+    p code,
+    li code,
+    td code {
+      padding: 0.08em 0.28em;
+      border: 1px solid var(--oat);
+      border-radius: var(--radius-sm);
+      background: var(--gray-100);
+      overflow-wrap: anywhere;
+    }
+
+    .deck {
+      margin: 0 0 var(--space-xl);
+      color: var(--gray-700);
+      font-size: 1.04rem;
+    }
+
+    .summary,
+    .callout {
+      margin: var(--space-xl) 0;
+      padding: var(--space-lg);
+      border: 1px solid var(--oat);
+      border-left: 3px solid var(--clay);
+      border-radius: var(--radius-md);
+      background: var(--gray-100);
+    }
+
+    .summary strong,
+    .callout strong { color: var(--slate); }
+
+    nav {
+      margin: var(--space-2xl) 0;
+      padding: var(--space-lg);
+      border-top: 1px solid var(--oat);
+      border-bottom: 1px solid var(--oat);
+    }
+
+    nav strong {
+      display: block;
+      margin-bottom: var(--space-sm);
+      font-size: 0.9rem;
+    }
+
+    nav ol {
+      margin: 0;
+      padding-left: 1.25rem;
+      columns: 2;
+      column-gap: var(--space-2xl);
+    }
+
+    nav li {
+      break-inside: avoid;
+      margin: 4px 0;
+      font-size: 0.9rem;
+    }
+
+    pre {
+      position: relative;
+      width: 100%;
+      margin: var(--space-lg) 0 var(--space-xl);
+      border: 1px solid #26241f;
+      border-radius: var(--radius-md);
+      background: #11110f;
+      color: #d8d4ca;
+      overflow: hidden;
+    }
+
+    pre code {
+      display: block;
+      border: 0;
+      background: transparent;
+      padding: 18px 64px 18px 22px;
+      color: inherit;
+      overflow-x: auto;
+      white-space: pre;
+      font-size: 0.875rem;
+      font-weight: 400;
+      line-height: 1.62;
+      scrollbar-width: none;
+    }
+
+    pre code::-webkit-scrollbar { width: 0; height: 0; }
+    pre .label { display: none; }
+
+    .copy-code {
+      position: absolute;
+      top: 9px;
+      right: 9px;
+      z-index: 1;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 30px;
+      height: 30px;
+      padding: 0;
+      border: 1px solid rgba(250, 249, 245, 0.14);
+      border-radius: var(--radius-sm);
+      background: rgba(250, 249, 245, 0.06);
+      color: rgba(250, 249, 245, 0.72);
+      cursor: pointer;
+    }
+
+    .copy-code:hover,
+    .copy-code:focus-visible {
+      border-color: rgba(250, 249, 245, 0.28);
+      background: rgba(250, 249, 245, 0.12);
+      color: var(--ivory);
+      outline: none;
+    }
+
+    .copy-code.copied {
+      border-color: rgba(143, 184, 106, 0.42);
+      background: rgba(143, 184, 106, 0.14);
+      color: #b8d99a;
+    }
+
+    .copy-code svg {
+      width: 13px;
+      height: 13px;
+      stroke: currentColor;
+      stroke-width: 1.8;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      fill: none;
+      pointer-events: none;
+    }
+
+    .code-scrollbar {
+      position: absolute;
+      right: 0;
+      bottom: 0;
+      left: 0;
+      height: 3px;
+      border-radius: 999px;
+      background: rgba(250, 249, 245, 0.1);
+      cursor: pointer;
+    }
+
+    .code-scrollbar.hidden { display: none; }
+
+    .code-scrollbar-thumb {
+      height: 100%;
+      border-radius: inherit;
+      background: rgba(255, 148, 110, 0.82);
+      transform: translateX(0);
+      cursor: grab;
+    }
+
+    .code-scrollbar-thumb:active { cursor: grabbing; }
+
+    pre code .k { color: #ff946e; font-weight: 400; }
+    pre code .s { color: #8fb86a; }
+    pre code .n,
+    pre code .p { color: #d8d4ca; }
+    pre code .c { color: #858177; font-style: italic; }
+    pre code .f { color: #cfc6a2; }
+    pre code .t { color: #cfc6a2; font-weight: 400; }
+    pre code .o { color: #ff946e; }
+
+    table {
+      width: 100%;
+      margin: var(--space-lg) 0 var(--space-xl);
+      border-collapse: collapse;
+      background: var(--white);
+    }
+
+    th,
+    td {
+      padding: 10px 12px;
+      border: 1px solid var(--oat);
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th {
+      background: var(--gray-100);
+      font-size: 0.88rem;
+    }
+
+    td { font-size: 0.9rem; }
+
+    .formula {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: var(--space-md);
+      margin: var(--space-lg) 0 var(--space-xl);
+    }
+
+    .formula div {
+      padding: var(--space-lg);
+      border: 1px solid var(--oat);
+      border-radius: var(--radius-md);
+      background: var(--white);
+    }
+
+    .formula b {
+      display: block;
+      color: var(--clay);
+      font-size: 1.25rem;
+    }
+
+    .formula span {
+      color: var(--gray-700);
+      font-size: 0.85rem;
+    }
+
+    .flow-slot { margin: var(--space-xl) 0; }
+
+    .flow-figure {
+      margin: 0;
+      padding: var(--space-lg);
+      border: 1px solid var(--oat);
+      border-radius: var(--radius-md);
+      background: var(--white);
+    }
+
+    .flow-figure svg {
+      display: block;
+      width: min(100%, 480px);
+      height: auto;
+      margin: 0 auto;
+    }
+
+    .flow-figure figcaption {
+      margin-top: var(--space-md);
+      color: var(--gray-700);
+      font-size: 0.85rem;
+      text-align: center;
+    }
+
+    .checklist { padding-left: 1.2rem; }
+    .checklist li { margin: var(--space-md) 0; }
+
+    footer {
+      margin-top: var(--space-3xl);
+      padding-top: var(--space-xl);
+      border-top: 1px solid var(--oat);
+      color: var(--gray-700);
+      font-size: 0.9rem;
+    }
+
+    @media (max-width: 640px) {
+      body { font-size: 15px; }
+      h1 { font-size: 1.65rem; }
+      main { padding: var(--space-xl); }
+      nav ol { columns: 1; }
+      pre code { font-size: 0.8125rem; line-height: 1.5; }
+      p code,
+      li code,
+      td code { font-size: 0.9em; }
+      table,
+      .deck { font-size: 0.875rem; }
+      .formula { grid-template-columns: 1fr; }
+
+      table,
+      thead,
+      tbody,
+      tr,
+      th,
+      td { display: block; }
+
+      thead {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip: rect(0 0 0 0);
+      }
+
+      tr { margin-bottom: var(--space-md); }
+      td { border-top: 0; }
+
+      td::before {
+        content: attr(data-label);
+        display: block;
+        margin-bottom: 2px;
+        color: var(--gray-500);
+        font-size: 0.72rem;
+        font-weight: 700;
+        text-transform: uppercase;
+      }
+
+      tr:first-child td:first-child { border-top: 1px solid var(--oat); }
+      .flow-figure { padding: var(--space-md); }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <article>
+      <h1>Effect <code>Context.Service</code> 案例：設計 Git 服務</h1>
+      <p><strong>版本基準：</strong><code>effect@4.0.0-beta.98</code>。GitService 是教學案例，不是本文所屬 repository 的即時實作規格。</p>
+      <p class="deck">從零設計一個 production-ready 的 Git diff 服務：先定義穩定的領域契約，再隔離 subprocess、檔案系統與 Git 輸出格式，最後補上錯誤、資源限制、可觀測性與分層測試。</p>
+
+      <div class="summary">
+        <strong>先記住一句話：</strong><code>GitService</code> class 是服務的「識別標籤」，不是服務實作本身；大括號裡的 <code>readDiff</code> contract 才描述實作必須提供的能力。
+      </div>
+
+      <nav aria-label="文章目錄">
+        <strong>閱讀路線</strong>
+        <ol>
+          <li><a href="#problem">先看它解決什麼問題</a></li>
+          <li><a href="#effect-type">讀懂 Effect&lt;A, E, R&gt;</a></li>
+          <li><a href="#tag">逐段拆解 Context.Service</a></li>
+          <li><a href="#runtime">理解執行時流程</a></li>
+          <li><a href="#layer">用 Layer 提供正式實作</a></li>
+          <li><a href="#testing">在測試中替換服務</a></li>
+          <li><a href="#errors">錯誤與模組邊界</a></li>
+          <li><a href="#rules">實務判斷規則</a></li>
+        </ol>
+      </nav>
+
+      <section id="problem">
+        <h2>1. 先看它解決什麼問題</h2>
+        <p>假設分析工具需要「取得指定範圍的 Git 變更」，但不應該知道底層怎麼呼叫 <code>git diff</code>、如何解析 rename、怎麼限制輸出大小，或 subprocess 失敗時要如何翻譯錯誤。這些都屬於 Git adapter 的基礎設施細節。</p>
+        <p>因此上層 use case 只依賴一個語意能力：</p>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">const</span> git <span class="o">=</span> <span class="k">yield</span><span class="o">*</span> <span class="t">GitService</span><span class="o">;</span>
+<span class="k">const</span> diff <span class="o">=</span> <span class="k">yield</span><span class="o">*</span> git<span class="o">.</span><span class="p">readDiff</span><span class="o">(</span>scope<span class="o">)</span><span class="o">;</span></code></pre>
+
+        <p>這裡沒有 subprocess，也沒有 Git flags。use case 說的是「我要讀 diff」，而不是「我要怎麼執行 Git」。這就是服務邊界的價值。</p>
+
+        <div class="callout">
+          <strong>設計重點：</strong>抽象的目標不是把程式碼藏起來，而是讓上層用領域語言表達意圖，並把容易變動的技術細節留在邊界後方。
+        </div>
+      </section>
+
+      <section id="effect-type">
+        <h2>2. 先讀懂 Effect&lt;A, E, R&gt;</h2>
+        <p>理解 <code>Context.Service</code> 前，先掌握 Effect 型別的三個維度：</p>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="t">Effect</span><span class="o">.</span><span class="p">Effect</span><span class="o">&lt;</span><span class="t">A</span><span class="o">,</span> <span class="t">E</span><span class="o">,</span> <span class="t">R</span><span class="o">&gt;</span></code></pre>
+
+        <div class="formula" aria-label="Effect 三個泛型的含義">
+          <div><b>A</b><span>成功時產生的值</span></div>
+          <div><b>E</b><span>預期會失敗的 typed error</span></div>
+          <div><b>R</b><span>執行前仍需要的服務</span></div>
+        </div>
+
+        <p>例如：</p>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="t">Effect</span><span class="o">.</span><span class="p">Effect</span><span class="o">&lt;</span><span class="t">ChangeReport</span><span class="o">,</span> <span class="t">GitError</span><span class="o">,</span> <span class="t">GitService</span><span class="o">&gt;</span></code></pre>
+
+        <table>
+          <thead>
+            <tr><th>位置</th><th>這個例子的含義</th></tr>
+          </thead>
+          <tbody>
+            <tr><td data-label="位置"><code>A = ChangeReport</code></td><td data-label="含義">成功會得到 review report。</td></tr>
+            <tr><td data-label="位置"><code>E = GitError</code></td><td data-label="含義">預期失敗會落在 Git error channel。</td></tr>
+            <tr><td data-label="位置"><code>R = GitService</code></td><td data-label="含義">目前還不能直接執行；必須先提供 GitService。</td></tr>
+          </tbody>
+        </table>
+
+        <p>如果省略第三個泛型，Effect 預設不需要額外環境。所以下面的 method contract 可以理解成 <code>Effect.Effect&lt;GitDiff, GitError, never&gt;</code>：</p>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code>readDiff<span class="o">:</span> <span class="o">(</span>scope<span class="o">:</span> <span class="t">DiffScope</span><span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span>
+  <span class="t">Effect</span><span class="o">.</span><span class="p">Effect</span><span class="o">&lt;</span><span class="t">GitDiff</span><span class="o">,</span> <span class="t">GitError</span><span class="o">&gt;</span></code></pre>
+      </section>
+
+      <section id="tag">
+        <h2>3. 逐段拆解 Context.Service</h2>
+        <p>完整宣告如下：</p>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">export</span> <span class="k">class</span> <span class="t">GitService</span> <span class="k">extends</span> <span class="t">Context</span><span class="o">.</span><span class="p">Service</span><span class="o">&lt;</span>
+  <span class="t">GitService</span><span class="o">,</span> <span class="o">{</span>
+    readonly readDiff<span class="o">:</span> <span class="o">(</span>
+      scope<span class="o">:</span> <span class="t">DiffScope</span><span class="o">,</span>
+    <span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span> <span class="t">Effect</span><span class="o">.</span><span class="p">Effect</span><span class="o">&lt;</span><span class="t">GitDiff</span><span class="o">,</span> <span class="t">GitError</span><span class="o">&gt;</span><span class="o">;</span>
+  <span class="o">}</span>
+<span class="o">&gt;</span><span class="o">(</span><span class="o">)</span><span class="o">(</span><span class="s">"@acme/source-control/GitService"</span><span class="o">)</span> <span class="o">{</span><span class="o">}</span></code></pre>
+
+        <h3><code>export class GitService</code></h3>
+        <p>這個 class 主要不是拿來 <code>new GitService()</code>。它同時提供一個 runtime token 和一個 TypeScript 型別，讓 Effect 可以描述、尋找並提供同一項服務。</p>
+
+        <h3><code>Context.Service&lt;Self, Shape&gt;()(&quot;identity&quot;)</code></h3>
+        <p>字串是 runtime identifier，類似依賴注入容器裡的 token。它不是 repository 路徑，也不會執行 Git。identifier 應該穩定且在應用程式內保持唯一。</p>
+
+        <h3>第一個泛型：<code>GitService</code></h3>
+        <p>第一個泛型代表這個 service key 自己的識別型別。它看起來像遞迴，實際上是在告訴 Effect：「這個服務需求由 <code>GitService</code> 辨識。」因此 <code>GitService</code> 才能出現在 Effect 的環境需求 <code>R</code> 裡。</p>
+
+        <h3>第二個泛型：服務 contract</h3>
+        <p>第二個泛型描述真正的服務實作必須具有哪些欄位與 method：</p>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="o">{</span>
+  readonly readDiff<span class="o">:</span> <span class="o">(</span>
+    scope<span class="o">:</span> <span class="t">DiffScope</span><span class="o">,</span>
+  <span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span> <span class="t">Effect</span><span class="o">.</span><span class="p">Effect</span><span class="o">&lt;</span><span class="t">GitDiff</span><span class="o">,</span> <span class="t">GitError</span><span class="o">&gt;</span><span class="o">;</span>
+<span class="o">}</span></code></pre>
+
+        <p>任何正式或測試用實作只要符合這個 shape，就能提供給同一個 service key。<code>readonly</code> 限制的是 <code>readDiff</code> property 不可被重新指定；它不代表 function 沒有 side effect。</p>
+
+        <h3>為什麼有兩組括號？</h3>
+        <p>Effect 4 的 class-style API 是兩階段 factory：<code>Context.Service&lt;Self, Shape&gt;()</code> 先固定 self 與服務 shape，第二次呼叫再接收 runtime identity 並產生可被繼承的 base class。最後的空 <code>{}</code> 才是 <code>GitService</code> 自己的 class body。較早版本常見的 <code>Context.Tag</code> 語法不能直接搬到 Effect 4。</p>
+
+        <p>把特殊語法翻譯成概念性虛擬碼，大約是：</p>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code>interface <span class="t">GitServiceImplementation</span> <span class="o">{</span>
+  readonly readDiff<span class="o">:</span> <span class="o">(</span>
+    scope<span class="o">:</span> <span class="t">DiffScope</span><span class="o">,</span>
+  <span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span> <span class="t">Effect</span><span class="o">.</span><span class="p">Effect</span><span class="o">&lt;</span><span class="t">GitDiff</span><span class="o">,</span> <span class="t">GitError</span><span class="o">&gt;</span><span class="o">;</span>
+<span class="o">}</span>
+
+<span class="k">const</span> <span class="t">GitService</span> <span class="o">=</span> createServiceToken<span class="o">&lt;</span><span class="t">GitServiceImplementation</span><span class="o">&gt;</span><span class="o">(</span>
+  <span class="s">"@acme/source-control/GitService"</span><span class="o">,</span>
+<span class="o">)</span><span class="o">;</span></code></pre>
+
+        <div class="callout">
+          <strong>最常見的誤解：</strong><code>GitService</code> key 並不是包含 <code>readDiff</code> 實作的 singleton。它更像一張識別證；實際服務物件要由 Layer 提供。
+        </div>
+      </section>
+
+      <section id="runtime">
+        <h2>4. 從需求宣告到真正執行</h2>
+        <p>Effect 的依賴注入可以分成三件事：程式宣告需要服務、Layer 建立服務、執行邊界把 Layer 提供給程式。這三件事分開，才讓相同的業務流程能搭配正式或測試實作。</p>
+
+        <div class="flow-slot">
+          <figure class="flow-figure">
+            <svg id="mermaid-mrm8y0nc-my-svg" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" class="flowchart" viewBox="0 0 446.5625 546" aria-roledescription="flowchart-v2" role="img" aria-labelledby="mermaid-mrm8y0nc-title mermaid-mrm8y0nc-desc"><title id="mermaid-mrm8y0nc-title">GitService 的依賴注入流程</title><desc id="mermaid-mrm8y0nc-desc">analyzeChanges 宣告需要 GitService，Layer 建造並提供實作，執行時取得服務後呼叫 readDiff，底層細節留在服務邊界內。</desc><style>#mermaid-mrm8y0nc-my-svg{font-family:ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;font-size:16px;fill:#141413;}@keyframes edge-animation-frame{from{stroke-dashoffset:0;}}@keyframes dash{to{stroke-dashoffset:0;}}#mermaid-mrm8y0nc-my-svg .edge-animation-slow{stroke-dasharray:9,5!important;stroke-dashoffset:900;animation:dash 50s linear infinite;stroke-linecap:round;}#mermaid-mrm8y0nc-my-svg .edge-animation-fast{stroke-dasharray:9,5!important;stroke-dashoffset:900;animation:dash 20s linear infinite;stroke-linecap:round;}#mermaid-mrm8y0nc-my-svg .error-icon{fill:#FAF9F5;}#mermaid-mrm8y0nc-my-svg .error-text{fill:#05060a;stroke:#05060a;}#mermaid-mrm8y0nc-my-svg .edge-thickness-normal{stroke-width:1px;}#mermaid-mrm8y0nc-my-svg .edge-thickness-thick{stroke-width:3.5px;}#mermaid-mrm8y0nc-my-svg .edge-pattern-solid{stroke-dasharray:0;}#mermaid-mrm8y0nc-my-svg .edge-thickness-invisible{stroke-width:0;fill:none;}#mermaid-mrm8y0nc-my-svg .edge-pattern-dashed{stroke-dasharray:3;}#mermaid-mrm8y0nc-my-svg .edge-pattern-dotted{stroke-dasharray:2;}#mermaid-mrm8y0nc-my-svg .marker{fill:#D97757;stroke:#D97757;}#mermaid-mrm8y0nc-my-svg .marker.cross{stroke:#D97757;}#mermaid-mrm8y0nc-my-svg svg{font-family:ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;font-size:16px;}#mermaid-mrm8y0nc-my-svg p{margin:0;}#mermaid-mrm8y0nc-my-svg .label{font-family:ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;color:#141413;}#mermaid-mrm8y0nc-my-svg .cluster-label text{fill:#05060a;}#mermaid-mrm8y0nc-my-svg .cluster-label span{color:#05060a;}#mermaid-mrm8y0nc-my-svg .cluster-label span p{background-color:transparent;}#mermaid-mrm8y0nc-my-svg .label text,#mermaid-mrm8y0nc-my-svg span{fill:#141413;color:#141413;}#mermaid-mrm8y0nc-my-svg .node rect,#mermaid-mrm8y0nc-my-svg .node circle,#mermaid-mrm8y0nc-my-svg .node ellipse,#mermaid-mrm8y0nc-my-svg .node polygon,#mermaid-mrm8y0nc-my-svg .node path{fill:#FFFFFF;stroke:#E3DACC;stroke-width:1px;}#mermaid-mrm8y0nc-my-svg .rough-node .label text,#mermaid-mrm8y0nc-my-svg .node .label text,#mermaid-mrm8y0nc-my-svg .image-shape .label,#mermaid-mrm8y0nc-my-svg .icon-shape .label{text-anchor:middle;}#mermaid-mrm8y0nc-my-svg .node .katex path{fill:#000;stroke:#000;stroke-width:1px;}#mermaid-mrm8y0nc-my-svg .rough-node .label,#mermaid-mrm8y0nc-my-svg .node .label,#mermaid-mrm8y0nc-my-svg .image-shape .label,#mermaid-mrm8y0nc-my-svg .icon-shape .label{text-align:center;}#mermaid-mrm8y0nc-my-svg .node.clickable{cursor:pointer;}#mermaid-mrm8y0nc-my-svg .root .anchor path{fill:#D97757!important;stroke-width:0;stroke:#D97757;}#mermaid-mrm8y0nc-my-svg .arrowheadPath{fill:rgba(255, 255, 255, 0);}#mermaid-mrm8y0nc-my-svg .edgePath .path{stroke:#D97757;stroke-width:1px;}#mermaid-mrm8y0nc-my-svg .flowchart-link{stroke:#D97757;fill:none;}#mermaid-mrm8y0nc-my-svg .edgeLabel{background-color:#F0EEE6;text-align:center;}#mermaid-mrm8y0nc-my-svg .edgeLabel p{background-color:#F0EEE6;}#mermaid-mrm8y0nc-my-svg .edgeLabel rect{opacity:0.5;background-color:#F0EEE6;fill:#F0EEE6;}#mermaid-mrm8y0nc-my-svg .labelBkg{background-color:rgba(240, 238, 230, 0.5);}#mermaid-mrm8y0nc-my-svg .cluster rect{fill:#FAF9F5;stroke:hsl(48, 0%, 87.0588235294%);stroke-width:1px;}#mermaid-mrm8y0nc-my-svg .cluster text{fill:#05060a;}#mermaid-mrm8y0nc-my-svg .cluster span{color:#05060a;}#mermaid-mrm8y0nc-my-svg div.mermaidTooltip{position:absolute;text-align:center;max-width:200px;padding:2px;font-family:ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;font-size:12px;background:#FAF9F5;border:1px solid hsl(48, 0%, 87.0588235294%);border-radius:2px;pointer-events:none;z-index:100;}#mermaid-mrm8y0nc-my-svg .flowchartTitleText{text-anchor:middle;font-size:18px;fill:#141413;}#mermaid-mrm8y0nc-my-svg rect.text{fill:none;stroke-width:0;}#mermaid-mrm8y0nc-my-svg .icon-shape,#mermaid-mrm8y0nc-my-svg .image-shape{background-color:#F0EEE6;text-align:center;}#mermaid-mrm8y0nc-my-svg .icon-shape p,#mermaid-mrm8y0nc-my-svg .image-shape p{background-color:#F0EEE6;padding:2px;}#mermaid-mrm8y0nc-my-svg .icon-shape .label rect,#mermaid-mrm8y0nc-my-svg .image-shape .label rect{opacity:0.5;background-color:#F0EEE6;fill:#F0EEE6;}#mermaid-mrm8y0nc-my-svg .label-icon{display:inline-block;height:1em;overflow:visible;vertical-align:-0.125em;}#mermaid-mrm8y0nc-my-svg .node .label-icon path{fill:currentColor;stroke:revert;stroke-width:revert;}#mermaid-mrm8y0nc-my-svg .node .neo-node{stroke:#E3DACC;}#mermaid-mrm8y0nc-my-svg [data-look="neo"].node rect,#mermaid-mrm8y0nc-my-svg [data-look="neo"].cluster rect,#mermaid-mrm8y0nc-my-svg [data-look="neo"].node polygon{stroke:url(#mermaid-mrm8y0nc-my-svg-gradient);filter:drop-shadow( 1px 2px 2px rgba(185,185,185,1));}#mermaid-mrm8y0nc-my-svg [data-look="neo"].swimlane.cluster rect{filter:none;}#mermaid-mrm8y0nc-my-svg [data-look="neo"].node path{stroke:url(#mermaid-mrm8y0nc-my-svg-gradient);stroke-width:1px;}#mermaid-mrm8y0nc-my-svg [data-look="neo"].node .outer-path{filter:drop-shadow( 1px 2px 2px rgba(185,185,185,1));}#mermaid-mrm8y0nc-my-svg [data-look="neo"].node .neo-line path{stroke:#E3DACC;filter:none;}#mermaid-mrm8y0nc-my-svg [data-look="neo"].node circle{stroke:url(#mermaid-mrm8y0nc-my-svg-gradient);filter:drop-shadow( 1px 2px 2px rgba(185,185,185,1));}#mermaid-mrm8y0nc-my-svg [data-look="neo"].node circle .state-start{fill:#000000;}#mermaid-mrm8y0nc-my-svg [data-look="neo"].icon-shape .icon{fill:url(#mermaid-mrm8y0nc-my-svg-gradient);filter:drop-shadow( 1px 2px 2px rgba(185,185,185,1));}#mermaid-mrm8y0nc-my-svg [data-look="neo"].icon-shape .icon-neo path{stroke:url(#mermaid-mrm8y0nc-my-svg-gradient);filter:drop-shadow( 1px 2px 2px rgba(185,185,185,1));}#mermaid-mrm8y0nc-my-svg :root{--mermaid-font-family:"trebuchet ms",verdana,arial,sans-serif;}</style><g><marker id="mermaid-mrm8y0nc-my-svg_flowchart-v2-pointEnd" class="marker flowchart-v2" viewBox="0 0 10 10" refX="5" refY="5" markerUnits="userSpaceOnUse" markerWidth="8" markerHeight="8" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" class="arrowMarkerPath" style="stroke-width: 1; stroke-dasharray: 1, 0;"/></marker><marker id="mermaid-mrm8y0nc-my-svg_flowchart-v2-pointStart" class="marker flowchart-v2" viewBox="0 0 10 10" refX="4.5" refY="5" markerUnits="userSpaceOnUse" markerWidth="8" markerHeight="8" orient="auto"><path d="M 0 5 L 10 10 L 10 0 z" class="arrowMarkerPath" style="stroke-width: 1; stroke-dasharray: 1, 0;"/></marker><marker id="mermaid-mrm8y0nc-my-svg_flowchart-v2-pointEnd-margin" class="marker flowchart-v2" viewBox="0 0 11.5 14" refX="11.5" refY="7" markerUnits="userSpaceOnUse" markerWidth="10.5" markerHeight="14" orient="auto"><path d="M 0 0 L 11.5 7 L 0 14 z" class="arrowMarkerPath" style="stroke-width: 0; stroke-dasharray: 1, 0;"/></marker><marker id="mermaid-mrm8y0nc-my-svg_flowchart-v2-pointStart-margin" class="marker flowchart-v2" viewBox="0 0 11.5 14" refX="1" refY="7" markerUnits="userSpaceOnUse" markerWidth="11.5" markerHeight="14" orient="auto"><polygon points="0,7 11.5,14 11.5,0" class="arrowMarkerPath" style="stroke-width: 0; stroke-dasharray: 1, 0;"/></marker><marker id="mermaid-mrm8y0nc-my-svg_flowchart-v2-circleEnd" class="marker flowchart-v2" viewBox="0 0 10 10" refX="11" refY="5" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" orient="auto"><circle cx="5" cy="5" r="5" class="arrowMarkerPath" style="stroke-width: 1; stroke-dasharray: 1, 0;"/></marker><marker id="mermaid-mrm8y0nc-my-svg_flowchart-v2-circleStart" class="marker flowchart-v2" viewBox="0 0 10 10" refX="-1" refY="5" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" orient="auto"><circle cx="5" cy="5" r="5" class="arrowMarkerPath" style="stroke-width: 1; stroke-dasharray: 1, 0;"/></marker><marker id="mermaid-mrm8y0nc-my-svg_flowchart-v2-circleEnd-margin" class="marker flowchart-v2" viewBox="0 0 10 10" refY="5" refX="12.25" markerUnits="userSpaceOnUse" markerWidth="14" markerHeight="14" orient="auto"><circle cx="5" cy="5" r="5" class="arrowMarkerPath" style="stroke-width: 0; stroke-dasharray: 1, 0;"/></marker><marker id="mermaid-mrm8y0nc-my-svg_flowchart-v2-circleStart-margin" class="marker flowchart-v2" viewBox="0 0 10 10" refX="-2" refY="5" markerUnits="userSpaceOnUse" markerWidth="14" markerHeight="14" orient="auto"><circle cx="5" cy="5" r="5" class="arrowMarkerPath" style="stroke-width: 0; stroke-dasharray: 1, 0;"/></marker><marker id="mermaid-mrm8y0nc-my-svg_flowchart-v2-crossEnd" class="marker cross flowchart-v2" viewBox="0 0 11 11" refX="12" refY="5.2" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" orient="auto"><path d="M 1,1 l 9,9 M 10,1 l -9,9" class="arrowMarkerPath" style="stroke-width: 2; stroke-dasharray: 1, 0;"/></marker><marker id="mermaid-mrm8y0nc-my-svg_flowchart-v2-crossStart" class="marker cross flowchart-v2" viewBox="0 0 11 11" refX="-1" refY="5.2" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" orient="auto"><path d="M 1,1 l 9,9 M 10,1 l -9,9" class="arrowMarkerPath" style="stroke-width: 2; stroke-dasharray: 1, 0;"/></marker><marker id="mermaid-mrm8y0nc-my-svg_flowchart-v2-crossEnd-margin" class="marker cross flowchart-v2" viewBox="0 0 15 15" refX="17.7" refY="7.5" markerUnits="userSpaceOnUse" markerWidth="12" markerHeight="12" orient="auto"><path d="M 1,1 L 14,14 M 1,14 L 14,1" class="arrowMarkerPath" style="stroke-width: 2.5;"/></marker><marker id="mermaid-mrm8y0nc-my-svg_flowchart-v2-crossStart-margin" class="marker cross flowchart-v2" viewBox="0 0 15 15" refX="-3.5" refY="7.5" markerUnits="userSpaceOnUse" markerWidth="12" markerHeight="12" orient="auto"><path d="M 1,1 L 14,14 M 1,14 L 14,1" class="arrowMarkerPath" style="stroke-width: 2.5; stroke-dasharray: 1, 0;"/></marker><g class="root"><g class="clusters"/><g class="edgePaths"><path d="M111.352,86L111.352,92C111.352,98,111.352,110,120.397,121.647C129.443,133.294,147.534,144.588,156.58,150.235L165.626,155.882" id="mermaid-mrm8y0nc-my-svg-L_UseCase_Tag_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" data-edge="true" data-et="edge" data-id="mermaid-mrm8y0nc-L_UseCase_Tag_0" data-points="W3sieCI6MTExLjM1MTU2MjUsInkiOjg2fSx7IngiOjExMS4zNTE1NjI1LCJ5IjoxMjJ9LHsieCI6MTY5LjAxOTA2MjUsInkiOjE1OH1d" data-look="classic" marker-end="url(#mermaid-mrm8y0nc-my-svg_flowchart-v2-pointEnd)"/><path d="M351.633,86L351.633,92C351.633,98,351.633,110,342.587,121.647C333.541,133.294,315.45,144.588,306.404,150.235L297.358,155.882" id="mermaid-mrm8y0nc-my-svg-L_Layer_Tag_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" data-edge="true" data-et="edge" data-id="mermaid-mrm8y0nc-L_Layer_Tag_0" data-points="W3sieCI6MzUxLjYzMjgxMjUsInkiOjg2fSx7IngiOjM1MS42MzI4MTI1LCJ5IjoxMjJ9LHsieCI6MjkzLjk2NTMxMjUsInkiOjE1OH1d" data-look="classic" marker-end="url(#mermaid-mrm8y0nc-my-svg_flowchart-v2-pointEnd)"/><path d="M231.492,236L231.492,242C231.492,248,231.492,260,231.492,271.333C231.492,282.667,231.492,293.333,231.492,298.667L231.492,304" id="mermaid-mrm8y0nc-my-svg-L_Tag_Method_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" data-edge="true" data-et="edge" data-id="mermaid-mrm8y0nc-L_Tag_Method_0" data-points="W3sieCI6MjMxLjQ5MjE4NzUsInkiOjIzNn0seyJ4IjoyMzEuNDkyMTg3NSwieSI6MjcyfSx7IngiOjIzMS40OTIxODc1LCJ5IjozMDh9XQ==" data-look="classic" marker-end="url(#mermaid-mrm8y0nc-my-svg_flowchart-v2-pointEnd)"/><path d="M231.492,386L231.492,390.167C231.492,394.333,231.492,402.667,231.492,410.333C231.492,418,231.492,425,231.492,428.5L231.492,432" id="mermaid-mrm8y0nc-my-svg-L_Method_Boundary_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" data-edge="true" data-et="edge" data-id="mermaid-mrm8y0nc-L_Method_Boundary_0" data-points="W3sieCI6MjMxLjQ5MjE4NzUsInkiOjM4Nn0seyJ4IjoyMzEuNDkyMTg3NSwieSI6NDExfSx7IngiOjIzMS40OTIxODc1LCJ5Ijo0MzZ9XQ==" data-look="classic" marker-end="url(#mermaid-mrm8y0nc-my-svg_flowchart-v2-pointEnd)"/></g><g class="edgeLabels"><g class="edgeLabel" transform="translate(111.3515625, 122)"><g class="label" data-id="mermaid-mrm8y0nc-L_UseCase_Tag_0" transform="translate(0, -10)"><g><rect class="background" x="-64.546875" y="-1" width="129.09375" height="22"/><text y="-10.1" text-anchor="middle"><tspan class="text-outer-tspan row" x="0" y="-0.1em" dy="1.1em" text-anchor="middle"><tspan font-style="normal" class="text-inner-tspan" font-weight="normal">R</tspan><tspan font-style="normal" class="text-inner-tspan" font-weight="normal"> 包含</tspan><tspan font-style="normal" class="text-inner-tspan" font-weight="normal"> GitService</tspan></tspan></text></g></g></g><g class="edgeLabel" transform="translate(351.6328125, 122)"><g class="label" data-id="mermaid-mrm8y0nc-L_Layer_Tag_0" transform="translate(0, -10)"><g><rect class="background" x="-29.0859375" y="-1" width="58.171875" height="22"/><text y="-10.1" text-anchor="middle"><tspan class="text-outer-tspan row" x="0" y="-0.1em" dy="1.1em" text-anchor="middle"><tspan font-style="normal" class="text-inner-tspan" font-weight="normal">provide</tspan></tspan></text></g></g></g><g class="edgeLabel" transform="translate(231.4921875, 272)"><g class="label" data-id="mermaid-mrm8y0nc-L_Tag_Method_0" transform="translate(0, -10)"><g><rect class="background" x="-56.515625" y="-1" width="113.03125" height="22"/><text y="-10.1" text-anchor="middle"><tspan class="text-outer-tspan row" x="0" y="-0.1em" dy="1.1em" text-anchor="middle"><tspan font-style="normal" class="text-inner-tspan" font-weight="normal">yield*</tspan><tspan font-style="normal" class="text-inner-tspan" font-weight="normal"> 取得服務</tspan></tspan></text></g></g></g><g class="edgeLabel"><g class="label" data-id="mermaid-mrm8y0nc-L_Method_Boundary_0" transform="translate(0, 0)"><text y="-10.1" text-anchor="middle"><tspan class="text-outer-tspan row" x="0" y="-0.1em" dy="1.1em" text-anchor="middle"/></text></g></g><g><rect class="background" style="stroke: none"/></g></g><g class="nodes"><g class="node default" id="mermaid-mrm8y0nc-my-svg-flowchart-UseCase-0" data-look="classic" transform="translate(111.3515625, 47)"><rect class="basic label-container" x="-103.3515625" y="-39" width="206.703125" height="78"/><g class="label" transform="translate(-73.3515625, -24)"><rect/><foreignObject width="146.703125" height="48"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="nodeLabel"><p>analyzeChanges<br />宣告 GitService 需求</p></span></div></foreignObject></g></g><g class="node default" id="mermaid-mrm8y0nc-my-svg-flowchart-Tag-1" data-look="classic" transform="translate(231.4921875, 197)"><rect class="basic label-container" x="-94.296875" y="-39" width="188.59375" height="78"/><g class="label" transform="translate(-64.296875, -24)"><rect/><foreignObject width="128.59375" height="48"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="nodeLabel"><p>GitService key<br />識別服務 contract</p></span></div></foreignObject></g></g><g class="node default" id="mermaid-mrm8y0nc-my-svg-flowchart-Layer-2" data-look="classic" transform="translate(351.6328125, 47)"><rect class="basic label-container" x="-86.9296875" y="-39" width="173.859375" height="78"/><g class="label" transform="translate(-56.9296875, -24)"><rect/><foreignObject width="113.859375" height="48"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="nodeLabel"><p>GitServiceLive<br />建造正式實作</p></span></div></foreignObject></g></g><g class="node default" id="mermaid-mrm8y0nc-my-svg-flowchart-Method-5" data-look="classic" transform="translate(231.4921875, 347)"><rect class="basic label-container" x="-111.640625" y="-39" width="223.28125" height="78"/><g class="label" transform="translate(-81.640625, -24)"><rect/><foreignObject width="163.28125" height="48"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="nodeLabel"><p>readDiff(scope)<br />回傳 GitDiff 或 GitError</p></span></div></foreignObject></g></g><g class="node default" id="mermaid-mrm8y0nc-my-svg-flowchart-Boundary-7" data-look="classic" transform="translate(231.4921875, 487)"><rect class="basic label-container" x="-130" y="-51" width="260" height="102"/><g class="label" transform="translate(-100, -36)"><rect/><foreignObject width="200" height="72"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table; white-space: break-spaces; line-height: 1.5; max-width: 200px; text-align: center; width: 200px;"><span class="nodeLabel"><p>CommandRunner + FileInspector<br />留在服務邊界內</p></span></div></foreignObject></g></g></g></g></g><defs><filter id="mermaid-mrm8y0nc-my-svg-drop-shadow" height="130%" width="130%"><feDropShadow dx="4" dy="4" stdDeviation="0" flood-opacity="0.06" flood-color="#000000"/></filter></defs><defs><filter id="mermaid-mrm8y0nc-my-svg-drop-shadow-small" height="150%" width="150%"><feDropShadow dx="2" dy="2" stdDeviation="0" flood-opacity="0.06" flood-color="#000000"/></filter></defs><linearGradient id="mermaid-mrm8y0nc-my-svg-gradient" gradientUnits="objectBoundingBox" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" stop-color="#E3DACC" stop-opacity="1"/><stop offset="100%" stop-color="hsl(48, 0%, 82.1568627451%)" stop-opacity="1"/></linearGradient></svg>
+            <figcaption>Service key 表達需求，Layer 提供實作；只有完成 provide 的 Effect 才進入可執行狀態。</figcaption>
+          </figure>
+        </div>
+
+        <p>在 generator syntax 裡：</p>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">const</span> program <span class="o">=</span> <span class="t">Effect</span><span class="o">.</span><span class="p">gen</span><span class="o">(</span><span class="k">function</span><span class="o">*</span> <span class="o">(</span><span class="o">)</span> <span class="o">{</span>
+  <span class="k">const</span> git <span class="o">=</span> <span class="k">yield</span><span class="o">*</span> <span class="t">GitService</span><span class="o">;</span>
+  <span class="k">return</span> <span class="k">yield</span><span class="o">*</span> git<span class="o">.</span><span class="p">readDiff</span><span class="o">(</span><span class="s">"staged"</span><span class="o">)</span><span class="o">;</span>
+<span class="o">}</span><span class="o">)</span><span class="o">;</span></code></pre>
+
+        <p><code>yield* GitService</code> 不會自行建立實作。它從當前 Effect context 取得與 service key 對應的服務物件。如果執行前沒有提供，TypeScript 的 <code>R</code> 通常就會保留 <code>GitService</code> 需求，提醒你這個 Effect 還不完整。</p>
+      </section>
+
+      <section id="layer">
+        <h2>5. Layer 如何提供正式實作</h2>
+        <p>Layer 可以視為一份「服務建造配方」。GitService 的正式 Layer 本身還需要較低階的 <code>CommandRunner</code> 與 <code>FileInspector</code>：</p>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">export</span> <span class="k">const</span> <span class="t">GitServiceLive</span><span class="o">:</span> <span class="t">Layer</span><span class="o">.</span><span class="p">Layer</span><span class="o">&lt;</span>
+  <span class="t">GitService</span><span class="o">,</span>
+  never<span class="o">,</span>
+  <span class="t">CommandRunner</span><span class="o">.</span><span class="p">CommandRunner</span> <span class="o">|</span> <span class="t">FileInspector</span><span class="o">.</span><span class="p">FileInspector</span>
+<span class="o">&gt;</span> <span class="o">=</span> <span class="t">Layer</span><span class="o">.</span><span class="p">effect</span><span class="o">(</span>
+  <span class="t">GitService</span><span class="o">,</span>
+  <span class="t">Effect</span><span class="o">.</span><span class="p">gen</span><span class="o">(</span><span class="k">function</span><span class="o">*</span> <span class="o">(</span><span class="o">)</span> <span class="o">{</span>
+    <span class="k">const</span> runner <span class="o">=</span> <span class="k">yield</span><span class="o">*</span> <span class="t">CommandRunner</span><span class="o">.</span><span class="p">CommandRunner</span><span class="o">;</span>
+    <span class="k">const</span> inspector <span class="o">=</span> <span class="k">yield</span><span class="o">*</span> <span class="t">FileInspector</span><span class="o">.</span><span class="p">FileInspector</span><span class="o">;</span>
+
+    <span class="k">return</span> <span class="o">{</span>
+      readDiff<span class="o">:</span> <span class="o">(</span>scope<span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span> <span class="f">readDiff</span><span class="o">(</span>runner<span class="o">,</span> inspector<span class="o">,</span> scope<span class="o">)</span><span class="o">,</span>
+    <span class="o">}</span><span class="o">;</span>
+  <span class="o">}</span><span class="o">)</span><span class="o">,</span>
+<span class="o">)</span><span class="o">;</span></code></pre>
+
+        <p><code>Layer.Layer&lt;Out, E, In&gt;</code> 的閱讀方式與 Effect 類似：</p>
+
+        <table>
+          <thead>
+            <tr><th>參數</th><th>此處代表</th></tr>
+          </thead>
+          <tbody>
+            <tr><td data-label="參數"><code>Out = GitService</code></td><td data-label="代表">Layer 建好後會提供 GitService。</td></tr>
+            <tr><td data-label="參數"><code>E = never</code></td><td data-label="代表">建立服務物件本身沒有 typed initialization error。</td></tr>
+            <tr><td data-label="參數"><code>In = CommandRunner | FileInspector</code></td><td data-label="代表">建造 GitService 前，仍需先提供兩個底層服務。</td></tr>
+          </tbody>
+        </table>
+
+        <p>底層服務會在建造時被取出並封裝進 closure，因此公開的 <code>readDiff</code> method 不必再把它們列在自己的 <code>R</code>。應用程式的 composition root 再把所有 Layer 接起來：</p>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">const</span> <span class="t">AppLive</span> <span class="o">=</span> <span class="t">GitServiceLive</span><span class="o">.</span><span class="p">pipe</span><span class="o">(</span>
+  <span class="t">Layer</span><span class="o">.</span><span class="p">provide</span><span class="o">(</span>
+    <span class="t">Layer</span><span class="o">.</span><span class="p">merge</span><span class="o">(</span><span class="t">CommandRunner</span><span class="o">.</span><span class="p">layer</span><span class="o">,</span> <span class="t">FileInspector</span><span class="o">.</span><span class="p">layer</span><span class="o">)</span><span class="o">,</span>
+  <span class="o">)</span><span class="o">,</span>
+  <span class="t">Layer</span><span class="o">.</span><span class="p">provideMerge</span><span class="o">(</span><span class="t">BunServices</span><span class="o">.</span><span class="p">layer</span><span class="o">)</span><span class="o">,</span>
+<span class="o">)</span><span class="o">;</span></code></pre>
+
+        <p>這個位置負責選擇正式環境的實作；use case 不需要知道選了 Bun subprocess 或其他 provider。</p>
+      </section>
+
+      <section id="testing">
+        <h2>6. 測試時不需要真的操作 Git</h2>
+        <p>因為 use case 依賴 contract 而不是 subprocess，測試可以用 <code>Layer.succeed</code> 直接提供一個符合 shape 的靜態服務：</p>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">const</span> fakeGit <span class="o">=</span> <span class="t">Layer</span><span class="o">.</span><span class="p">succeed</span><span class="o">(</span><span class="t">GitService</span><span class="o">,</span> <span class="o">{</span>
+  readDiff<span class="o">:</span> <span class="o">(</span><span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span>
+    <span class="t">Effect</span><span class="o">.</span><span class="p">succeed</span><span class="o">(</span><span class="o">{</span>
+      files<span class="o">:</span> <span class="o">[</span>
+        <span class="o">{</span>
+          path<span class="o">:</span> <span class="s">"src/example.ts"</span><span class="o">,</span>
+          source<span class="o">:</span> <span class="s">"working-tree"</span> <span class="k">as</span> <span class="k">const</span><span class="o">,</span>
+          patch<span class="o">:</span> <span class="s">"@@ -0,0 +1 @@\n+const value = 1;"</span><span class="o">,</span>
+        <span class="o">}</span><span class="o">,</span>
+      <span class="o">]</span><span class="o">,</span>
+    <span class="o">}</span><span class="o">)</span><span class="o">,</span>
+<span class="o">}</span><span class="o">)</span><span class="o">;</span>
+
+<span class="k">const</span> report <span class="o">=</span> <span class="k">await</span> <span class="f">analyzeChanges</span><span class="o">(</span><span class="s">"working-tree"</span><span class="o">)</span><span class="o">.</span><span class="p">pipe</span><span class="o">(</span>
+  <span class="t">Effect</span><span class="o">.</span><span class="p">provide</span><span class="o">(</span>fakeGit<span class="o">)</span><span class="o">,</span>
+  <span class="t">Effect</span><span class="o">.</span><span class="p">runPromise</span><span class="o">,</span>
+<span class="o">)</span><span class="o">;</span></code></pre>
+
+        <p>這種測試有三個重要特性：輸入完全可控、結果可重現、失敗時不受本機 Git 狀態干擾。也能刻意提供 <code>Effect.fail(...)</code> 來測試 error path。</p>
+
+        <div class="callout">
+          <strong>測試邊界：</strong>fake service 適合測 use case；正式 GitService 自己仍應搭配 fake CommandRunner 測試命令結果解析與錯誤映射。兩層測試處理的是不同責任。
+        </div>
+      </section>
+
+      <section id="errors">
+        <h2>7. Typed error 也是服務 contract 的一部分</h2>
+        <p><code>readDiff</code> 不只承諾成功值，也公開它可能以 <code>GitError</code> 失敗。這讓呼叫端知道要處理的是 Git 語意錯誤，而不是 subprocess provider 的所有內部錯誤。</p>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">type</span> <span class="t">GitError</span> <span class="o">=</span>
+  <span class="o">|</span> <span class="t">GitNotRepositoryError</span>
+  <span class="o">|</span> <span class="t">GitWorkingTreeUnavailableError</span>
+  <span class="o">|</span> <span class="t">GitCommandError</span>
+  <span class="o">|</span> <span class="t">GitExecutionError</span>
+  <span class="o">|</span> <span class="t">GitCommandProcessError</span>
+  <span class="o">|</span> <span class="t">GitCommandTimeoutError</span>
+  <span class="o">|</span> <span class="t">GitCommandOutputLimitError</span>
+  <span class="o">|</span> <span class="t">GitChangedFileUnavailableError</span>
+  <span class="o">|</span> <span class="t">GitInvalidOutputError</span><span class="o">;</span></code></pre>
+
+        <table>
+          <thead>
+            <tr><th>錯誤</th><th>語意</th><th>邊界作用</th></tr>
+          </thead>
+          <tbody>
+            <tr><td data-label="錯誤"><code>GitNotRepositoryError</code></td><td data-label="語意">Git 明確回報目前不在 repository。</td><td data-label="邊界作用">只有已辨識的 not-repository 診斷才使用此 tag。</td></tr>
+            <tr><td data-label="錯誤"><code>GitWorkingTreeUnavailableError</code></td><td data-label="語意">repository 沒有可用 working tree。</td><td data-label="邊界作用">避免把 bare repository 誤稱為不是 repository。</td></tr>
+            <tr><td data-label="錯誤"><code>GitCommandError</code></td><td data-label="語意">Git command 已執行，但結果不符合預期。</td><td data-label="邊界作用">保留 operation、exit code 等可診斷資訊。</td></tr>
+            <tr><td data-label="錯誤"><code>GitExecutionError</code></td><td data-label="語意">命令啟動、終止或檔案檢查失敗。</td><td data-label="邊界作用">包裝共用基礎設施 failure 與底層 cause。</td></tr>
+            <tr><td data-label="錯誤"><code>GitCommandProcessError</code></td><td data-label="語意">讀取 stdout、stderr 或 exit code 失敗。</td><td data-label="邊界作用">讓 process phase 成為必填欄位。</td></tr>
+            <tr><td data-label="錯誤"><code>GitCommandTimeoutError</code></td><td data-label="語意">Git command 超過時間上限。</td><td data-label="邊界作用">保留 timeout 設定以產生精確提示。</td></tr>
+            <tr><td data-label="錯誤"><code>GitCommandOutputLimitError</code></td><td data-label="語意">command combined output 超出限制。</td><td data-label="邊界作用">避免把不完整 patch 當成完整 coverage。</td></tr>
+            <tr><td data-label="錯誤"><code>GitChangedFileUnavailableError</code></td><td data-label="語意">列舉後的變更檔案已不可用。</td><td data-label="邊界作用">把 TOCTOU race 表達成 coverage failure。</td></tr>
+            <tr><td data-label="錯誤"><code>GitInvalidOutputError</code></td><td data-label="語意">Git 成功回覆但輸出格式不可信。</td><td data-label="邊界作用">以 operation 與 UTF-8 bytes 提供安全診斷。</td></tr>
+          </tbody>
+        </table>
+
+        <p>這種 translation layer 讓模組邊界維持穩定：底層 runner 的錯誤型別可以改變，但 use case 仍只面對 <code>GitError</code>。</p>
+      </section>
+
+      <section id="tradeoffs">
+        <h2>8. 這種設計的收益與成本</h2>
+        <table>
+          <thead>
+            <tr><th>面向</th><th>收益</th><th>成本或注意事項</th></tr>
+          </thead>
+          <tbody>
+            <tr><td data-label="面向">模組邊界</td><td data-label="收益">use case 只依賴語意能力，不依賴 subprocess 細節。</td><td data-label="成本">需要設計清楚的 contract 與錯誤型別。</td></tr>
+            <tr><td data-label="面向">型別追蹤</td><td data-label="收益"><code>R</code> 直接顯示還缺哪些服務。</td><td data-label="成本">初學時需適應三泛型與 Layer composition。</td></tr>
+            <tr><td data-label="面向">測試</td><td data-label="收益">可用 Layer 快速替換 deterministic fake。</td><td data-label="成本">fake 太簡化時，仍可能漏掉正式 adapter 的行為。</td></tr>
+            <tr><td data-label="面向">實作替換</td><td data-label="收益">未來可把 subprocess 換成其他 Git backend。</td><td data-label="成本">只有真的存在邊界或替換需求時，抽象才值得。</td></tr>
+          </tbody>
+        </table>
+
+        <p>不是每個純 function 都需要做成 Effect service。服務特別適合封裝外部系統、時間、檔案、網路、資料庫、process 或其他需要替換與管理依賴的能力。單純且 deterministic 的 domain calculation 通常保留成普通 function 更簡單。</p>
+      </section>
+
+      <section id="rules">
+        <h2>9. 實務上怎麼判斷與檢查</h2>
+        <ul class="checklist">
+          <li><strong>先問語意：</strong>上層真正需要的是「讀 diff」，還是某個特定 Git command？contract 應以前者命名。</li>
+          <li><strong>Service key 是身份，shape 是能力：</strong>不要把 <code>GitService</code> class 誤認為實作物件。</li>
+          <li><strong>看 Effect 的 R：</strong>如果仍有 <code>GitService</code>，代表執行前尚未提供它。</li>
+          <li><strong>在 composition root 組裝：</strong>正式 provider 的選擇集中在 CLI 或 application entry point。</li>
+          <li><strong>錯誤停在正確邊界：</strong>GitService 應輸出 Git 語意錯誤，不應讓 CommandRunner error 成為 use case 的公開依賴。</li>
+          <li><strong>分層測試：</strong>use case 用 fake GitService；Git adapter 用 fake runner；必要時再做少量整合測試。</li>
+          <li><strong>避免過度抽象：</strong>沒有 side effect、替換需求或資源生命週期的純邏輯，優先使用普通 function。</li>
+        </ul>
+
+        <h3>下一個練習</h3>
+        <p>替 GitService 新增一個 <code>currentBranch</code> 能力：先只寫 contract，再觀察 use case 的 <code>R</code>；接著以 <code>Layer.succeed</code> 寫測試，最後才把正式 Git command 接到 live Layer。這個順序能幫你清楚區分需求、測試資料與基礎設施實作。</p>
+      </section>
+
+      <footer>
+        <p>核心心智模型：Effect 描述「會得到什麼、會怎麼失敗、還需要什麼」；<code>Context.Service</code> 命名服務需求；Layer 負責把需求變成可執行的實作。正式環境還要限制執行時間與輸出大小、使用 argv 而不是拼 shell 字串、遮蔽敏感路徑，並對 Git 版本差異與大型 repository 做整合測試。</p>
+      </footer>
+      <p><a href="./effect-learning-path.html">返回 Effect 4 學習路徑</a></p>
+    </article>
+  </main>
+  <script>
+    (() => {
+      const copyIcon = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="11" height="11" rx="2"></rect><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"></path></svg>';
+      const checkIcon = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"></path></svg>';
+
+      const fallbackCopy = (text) => {
+        const textarea = document.createElement("textarea");
+        textarea.value = text;
+        textarea.setAttribute("readonly", "");
+        textarea.style.position = "fixed";
+        textarea.style.opacity = "0";
+        document.body.append(textarea);
+        textarea.select();
+        document.execCommand("copy");
+        textarea.remove();
+      };
+
+      document.querySelectorAll("pre").forEach((pre) => {
+        const code = pre.querySelector("code");
+        if (!code) return;
+
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "copy-code";
+        button.setAttribute("aria-label", "複製程式碼");
+        button.innerHTML = copyIcon;
+        button.addEventListener("click", async () => {
+          try {
+            if (navigator.clipboard && window.isSecureContext) {
+              await navigator.clipboard.writeText(code.textContent || "");
+            } else {
+              fallbackCopy(code.textContent || "");
+            }
+            button.classList.add("copied");
+            button.setAttribute("aria-label", "已複製");
+            button.innerHTML = checkIcon;
+            window.setTimeout(() => {
+              button.classList.remove("copied");
+              button.setAttribute("aria-label", "複製程式碼");
+              button.innerHTML = copyIcon;
+            }, 1400);
+          } catch {
+            fallbackCopy(code.textContent || "");
+          }
+        });
+        pre.append(button);
+
+        const scrollbar = document.createElement("div");
+        scrollbar.className = "code-scrollbar";
+        scrollbar.setAttribute("aria-hidden", "true");
+        const thumb = document.createElement("div");
+        thumb.className = "code-scrollbar-thumb";
+        scrollbar.append(thumb);
+        pre.append(scrollbar);
+
+        const updateScrollbar = () => {
+          const maxScroll = code.scrollWidth - code.clientWidth;
+          scrollbar.classList.toggle("hidden", maxScroll <= 1);
+          const ratio = Math.min(1, code.clientWidth / code.scrollWidth);
+          thumb.style.width = `${ratio * 100}%`;
+          const travel = scrollbar.clientWidth - thumb.offsetWidth;
+          const offset = maxScroll > 0 ? (code.scrollLeft / maxScroll) * travel : 0;
+          thumb.style.transform = `translateX(${offset}px)`;
+        };
+
+        let dragStartX = 0;
+        let dragStartScroll = 0;
+        thumb.addEventListener("pointerdown", (event) => {
+          dragStartX = event.clientX;
+          dragStartScroll = code.scrollLeft;
+          thumb.setPointerCapture(event.pointerId);
+        });
+        thumb.addEventListener("pointermove", (event) => {
+          if (!thumb.hasPointerCapture(event.pointerId)) return;
+          const maxScroll = code.scrollWidth - code.clientWidth;
+          const travel = scrollbar.clientWidth - thumb.offsetWidth;
+          if (travel > 0) {
+            code.scrollLeft = dragStartScroll + ((event.clientX - dragStartX) / travel) * maxScroll;
+          }
+        });
+        scrollbar.addEventListener("pointerdown", (event) => {
+          if (event.target !== scrollbar) return;
+          const rect = scrollbar.getBoundingClientRect();
+          const ratio = (event.clientX - rect.left) / rect.width;
+          code.scrollLeft = ratio * (code.scrollWidth - code.clientWidth);
+        });
+
+        code.addEventListener("scroll", updateScrollbar, { passive: true });
+        window.addEventListener("resize", updateScrollbar, { passive: true });
+        updateScrollbar();
+      });
+    })();
+  </script>
+</body>
+</html>

@@ -1,0 +1,706 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="從零設計 Git staged 與 working-tree 差異收集、conflict gate、逐檔 patch、coverage、錯誤邊界與 production readiness。">
+  <title>Git Review Scope 與 Coverage：Production-ready 系統設計</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --clay: #d97757;
+      --slate: #141413;
+      --ivory: #faf9f5;
+      --oat: #e3dacc;
+      --white: #ffffff;
+      --gray-100: #f0eee6;
+      --gray-300: #d1cfc5;
+      --gray-500: #87867f;
+      --gray-700: #3d3d3a;
+      --warning: #c78e3f;
+      --green: #4f765d;
+      --green-soft: #e6efe8;
+      --clay-soft: #f7e8e1;
+      --warning-soft: #f7eedc;
+      --space-sm: 8px;
+      --space-md: 12px;
+      --space-lg: 16px;
+      --space-xl: 24px;
+      --space-2xl: 32px;
+      --space-3xl: 48px;
+      --radius-sm: 4px;
+      --radius-md: 8px;
+      --content-width: 68ch;
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+
+    body {
+      margin: 0;
+      background: var(--ivory);
+      color: var(--slate);
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 16px;
+      font-weight: 430;
+      line-height: 1.55;
+    }
+
+    main {
+      width: 100%;
+      max-width: var(--content-width);
+      margin: 0 auto;
+      padding: var(--space-3xl) var(--space-xl);
+    }
+
+    h1, h2, h3 {
+      color: var(--slate);
+      letter-spacing: -0.012em;
+      text-wrap: balance;
+    }
+
+    h1 {
+      max-width: none;
+      margin: 0 0 var(--space-lg);
+      font-size: 1.8rem;
+      line-height: 1.18;
+      font-weight: 720;
+    }
+
+    h2 {
+      margin: var(--space-3xl) 0 var(--space-lg);
+      padding-top: var(--space-md);
+      font-size: 1.22rem;
+      line-height: 1.25;
+    }
+
+    h3 {
+      margin: var(--space-2xl) 0 var(--space-sm);
+      font-size: 1rem;
+      line-height: 1.35;
+    }
+
+    p { margin: 0 0 var(--space-lg); }
+    strong { font-weight: 720; }
+    a { color: var(--clay); text-underline-offset: 3px; }
+
+    code {
+      border: 1px solid var(--oat);
+      border-radius: var(--radius-sm);
+      background: var(--gray-100);
+      padding: 0.1em 0.34em;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 0.9em;
+      overflow-wrap: anywhere;
+    }
+
+    .deck {
+      max-width: 64ch;
+      margin-bottom: var(--space-xl);
+      color: var(--gray-700);
+      font-size: 1.04rem;
+    }
+
+    .toc {
+      margin: var(--space-2xl) 0 var(--space-3xl);
+      padding: var(--space-lg) var(--space-xl);
+      border: 1px solid var(--oat);
+      border-radius: var(--radius-md);
+      background: var(--white);
+    }
+
+    .toc strong { display: block; margin-bottom: var(--space-sm); }
+    .toc ol { margin: 0; padding-left: 1.3rem; columns: 2; column-gap: 40px; }
+    .toc li { break-inside: avoid; margin: 4px 0; }
+
+    .callout {
+      margin: var(--space-xl) 0;
+      padding: var(--space-lg) var(--space-xl);
+      border: 1px solid var(--oat);
+      border-left: 4px solid var(--warning);
+      border-radius: var(--radius-md);
+      background: var(--warning-soft);
+    }
+
+    .callout.success {
+      border-left-color: var(--green);
+      background: var(--green-soft);
+    }
+
+    .callout p:last-child { margin-bottom: 0; }
+
+    .table-wrap {
+      max-width: 100%;
+      margin: var(--space-xl) 0;
+      overflow-x: auto;
+      border: 1px solid var(--oat);
+      border-radius: var(--radius-md);
+      background: var(--white);
+    }
+
+    table {
+      width: 100%;
+      min-width: 650px;
+      border-collapse: collapse;
+      font-size: 0.93rem;
+    }
+
+    th, td {
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--oat);
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th { background: var(--gray-100); font-weight: 700; }
+    tr:last-child td { border-bottom: 0; }
+
+    pre {
+      position: relative;
+      width: 100%;
+      margin: var(--space-lg) 0 var(--space-xl);
+      overflow: hidden;
+      border: 1px solid #25241f;
+      border-radius: var(--radius-md);
+      background: #11110f;
+      color: #d8d4ca;
+    }
+
+    pre code {
+      display: block;
+      padding: 20px 56px 20px 22px;
+      overflow-x: auto;
+      border: 0;
+      border-radius: 0;
+      background: transparent;
+      color: inherit;
+      font-size: 0.86rem;
+      line-height: 1.62;
+      white-space: pre;
+      overflow-wrap: normal;
+      scrollbar-color: #6f625a #24231f;
+      scrollbar-width: thin;
+    }
+
+    pre .label { display: none; }
+    pre code .k, pre code .o, pre code .sh-command { color: #ff9673; }
+    pre code .s, pre code .sh-string { color: #9abe7b; }
+    pre code .c, pre code .sh-comment { color: #88847a; font-style: italic; }
+    pre code .f, pre code .t, pre code .sh-flag, pre code .sh-var { color: #d6c99f; }
+    pre code .n, pre code .p { color: #d8d4ca; }
+
+    .copy-code {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      z-index: 2;
+      width: 31px;
+      height: 31px;
+      padding: 0;
+      border: 1px solid rgba(255,255,255,0.16);
+      border-radius: 5px;
+      background: rgba(255,255,255,0.06);
+      color: #c8c4b9;
+      cursor: pointer;
+    }
+
+    .copy-code:hover, .copy-code:focus-visible {
+      background: rgba(255,255,255,0.12);
+      color: #fff;
+      outline: 2px solid rgba(255,255,255,0.28);
+      outline-offset: 2px;
+    }
+
+    .copy-code.copied { color: #add58e; }
+    .copy-code svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.8; }
+
+    .steps {
+      counter-reset: item;
+      display: grid;
+      gap: var(--space-md);
+      margin: var(--space-xl) 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .steps li {
+      position: relative;
+      min-height: 64px;
+      padding: 15px 18px 15px 62px;
+      border: 1px solid var(--oat);
+      border-radius: var(--radius-md);
+      background: var(--white);
+    }
+
+    .steps li::before {
+      counter-increment: item;
+      content: counter(item);
+      position: absolute;
+      top: 15px;
+      left: 18px;
+      display: grid;
+      width: 28px;
+      height: 28px;
+      place-items: center;
+      border-radius: 50%;
+      background: var(--ink);
+      color: var(--white);
+      font-size: 0.82rem;
+      font-weight: 700;
+    }
+
+    .checklist { margin: var(--space-lg) 0 var(--space-xl); padding-left: 1.35rem; }
+    .checklist li { margin: 8px 0; }
+
+    .flow-figure {
+      margin: var(--space-2xl) 0;
+      padding: var(--space-lg);
+      border: 1px solid var(--oat);
+      border-radius: var(--radius-md);
+      background: var(--white);
+    }
+
+    .flow-figure svg { display: block; width: 100%; height: auto; }
+    .flow-figure .flow-mobile { display: none; }
+    .flow-node rect { fill: var(--white); stroke: var(--oat); stroke-width: 1.5; }
+    .flow-node.guard rect { fill: var(--clay-soft); stroke: var(--clay); }
+    .flow-node.success rect { fill: var(--green-soft); stroke: var(--green); }
+    .flow-node text {
+      fill: var(--slate);
+      font-family: ui-sans-serif, system-ui, sans-serif;
+      font-size: 13px;
+      font-weight: 700;
+    }
+    .flow-node .flow-note { fill: var(--gray-700); font-size: 10.8px; font-weight: 500; }
+    .flow-arrow { fill: none; stroke: var(--clay); stroke-width: 2; }
+    .branch-label { fill: var(--gray-700); font-family: ui-sans-serif, system-ui, sans-serif; font-size: 11px; font-weight: 650; }
+
+    figcaption {
+      margin-top: var(--space-md);
+      color: var(--gray-700);
+      font-size: 0.88rem;
+      text-align: center;
+    }
+
+    .file-map code { white-space: nowrap; }
+
+    footer {
+      margin-top: var(--space-3xl);
+      padding-top: var(--space-xl);
+      border-top: 1px solid var(--oat);
+      color: var(--gray-700);
+      font-size: 0.9rem;
+    }
+
+    @media (max-width: 640px) {
+      body { font-size: 15px; }
+      main { padding: var(--space-xl); }
+      h1 { font-size: 1.65rem; }
+      h2 { margin-top: 40px; }
+      .toc ol { columns: 1; }
+      .flow-figure .flow-desktop { display: none; }
+      .flow-figure .flow-mobile { display: block; }
+      pre code { padding-left: 16px; font-size: 0.8125rem; line-height: 1.5; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Git Review Scope 與 Coverage：Production-ready 系統設計</h1>
+    <p class="deck">從零設計 Git review 輸入服務：精確定義 staged 與 working-tree scope，安全解析任意路徑，先處理 merge conflict，再以可稽核的 <code>reviewed</code>、<code>skipped</code> 與 fatal error 表達 coverage。</p>
+
+    <nav class="toc" aria-label="文件目錄">
+      <strong>閱讀路徑</strong>
+      <ol>
+        <li><a href="#goal">設計要保證什麼</a></li>
+        <li><a href="#flow">完整資料流</a></li>
+        <li><a href="#discovery">Discovery 與 parser</a></li>
+        <li><a href="#conflict">Unmerged fail-fast</a></li>
+        <li><a href="#scope">兩種 review scope</a></li>
+        <li><a href="#patch">逐檔 patch collection</a></li>
+        <li><a href="#coverage">Coverage 語意</a></li>
+        <li><a href="#errors">錯誤與資源邊界</a></li>
+        <li><a href="#tests">測試保證</a></li>
+        <li><a href="#boundaries">產品選項與取捨</a></li>
+      </ol>
+    </nav>
+
+    <section id="goal">
+      <h2>1. 設計要保證什麼</h2>
+      <p>這個模組的任務不是單純執行 <code>git diff</code>，而是產生一份可以用來計算 review coverage 的資料。只要某個 path 被標成 <code>reviewed</code>，系統就必須真的取得該 change 的文字 patch；如果沒有取得，必須明確跳過或整體失敗。</p>
+      <p>推薦契約有三個層次：Git output 必須完整解析；change status 先決定 record 能否進入 patch collection；<code>reviewed</code>、<code>skipped</code> 與 fatal error 各自代表不同結果，不得互相替代。</p>
+    </section>
+
+    <section id="flow">
+      <h2>2. 完整資料流</h2>
+      <p>服務入口可抽象成 <code>readDiff(scope)</code>。它先確認執行位置、取得 repository root，再列出並解析 changed records。Conflict gate 位在 patch collection 之前，因此 unmerged path 不會流入 patch reader，也不會被錯誤計為已 review。</p>
+
+      <figure class="flow-figure">
+        <svg class="flow-desktop" role="img" aria-labelledby="flow-desktop-title flow-desktop-desc" viewBox="0 0 900 238">
+          <title id="flow-desktop-title">建議的 Git review 資料流</title>
+          <desc id="flow-desktop-desc">Git change discovery 經過嚴格 parser 與 unmerged conflict gate。沒有衝突才進入 patch collection，最後建立 coverage；有衝突則回傳錯誤。</desc>
+          <defs>
+            <marker id="arrow-desktop" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M0 0 10 5 0 10Z" fill="#c96343"></path>
+            </marker>
+          </defs>
+          <g class="flow-node">
+            <rect x="18" y="42" width="150" height="76" rx="9"></rect>
+            <text x="93" y="73" text-anchor="middle">Git discovery</text>
+            <text class="flow-note" x="93" y="96" text-anchor="middle">name-status -z</text>
+          </g>
+          <path class="flow-arrow" d="M176 80H218" marker-end="url(#arrow-desktop)"></path>
+          <g class="flow-node">
+            <rect x="226" y="42" width="150" height="76" rx="9"></rect>
+            <text x="301" y="73" text-anchor="middle">Strict parser</text>
+            <text class="flow-note" x="301" y="96" text-anchor="middle">status + pathspecs</text>
+          </g>
+          <path class="flow-arrow" d="M384 80H426" marker-end="url(#arrow-desktop)"></path>
+          <g class="flow-node guard">
+            <rect x="434" y="42" width="150" height="76" rx="9"></rect>
+            <text x="509" y="73" text-anchor="middle">Conflict gate</text>
+            <text class="flow-note" x="509" y="96" text-anchor="middle">是否存在 U？</text>
+          </g>
+          <path class="flow-arrow" d="M592 80H634" marker-end="url(#arrow-desktop)"></path>
+          <text class="branch-label" x="612" y="67" text-anchor="middle">否</text>
+          <g class="flow-node">
+            <rect x="642" y="42" width="118" height="76" rx="9"></rect>
+            <text x="701" y="73" text-anchor="middle">Patches</text>
+            <text class="flow-note" x="701" y="96" text-anchor="middle">逐檔收集</text>
+          </g>
+          <path class="flow-arrow" d="M768 80H810" marker-end="url(#arrow-desktop)"></path>
+          <g class="flow-node success">
+            <rect x="818" y="42" width="66" height="76" rx="9"></rect>
+            <text x="851" y="73" text-anchor="middle">Report</text>
+            <text class="flow-note" x="851" y="96" text-anchor="middle">coverage</text>
+          </g>
+          <path class="flow-arrow" d="M509 126V168" marker-end="url(#arrow-desktop)"></path>
+          <text class="branch-label" x="524" y="151">是</text>
+          <g class="flow-node guard">
+            <rect x="400" y="176" width="218" height="48" rx="9"></rect>
+            <text x="509" y="205" text-anchor="middle">GitUnmergedPathsError</text>
+          </g>
+        </svg>
+
+        <svg class="flow-mobile" role="img" aria-labelledby="flow-mobile-title flow-mobile-desc" viewBox="0 0 340 660">
+          <title id="flow-mobile-title">建議的 Git review 資料流</title>
+          <desc id="flow-mobile-desc">Git change discovery 經過嚴格 parser 與 conflict gate；有衝突時失敗，沒有衝突時才建立 patch 與 coverage。</desc>
+          <defs>
+            <marker id="arrow-mobile" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M0 0 10 5 0 10Z" fill="#c96343"></path>
+            </marker>
+          </defs>
+          <g class="flow-node"><rect x="55" y="12" width="230" height="68" rx="9"></rect><text x="170" y="40" text-anchor="middle">Git discovery</text><text class="flow-note" x="170" y="62" text-anchor="middle">name-status -z</text></g>
+          <path class="flow-arrow" d="M170 88V116" marker-end="url(#arrow-mobile)"></path>
+          <g class="flow-node"><rect x="55" y="124" width="230" height="68" rx="9"></rect><text x="170" y="152" text-anchor="middle">Strict parser</text><text class="flow-note" x="170" y="174" text-anchor="middle">status + pathspecs</text></g>
+          <path class="flow-arrow" d="M170 200V228" marker-end="url(#arrow-mobile)"></path>
+          <g class="flow-node guard"><rect x="55" y="236" width="230" height="68" rx="9"></rect><text x="170" y="264" text-anchor="middle">Conflict gate</text><text class="flow-note" x="170" y="286" text-anchor="middle">是否存在 U？</text></g>
+          <path class="flow-arrow" d="M170 312V340" marker-end="url(#arrow-mobile)"></path>
+          <text class="branch-label" x="185" y="331">否</text>
+          <g class="flow-node"><rect x="55" y="348" width="230" height="68" rx="9"></rect><text x="170" y="376" text-anchor="middle">逐檔收集 patch</text><text class="flow-note" x="170" y="398" text-anchor="middle">binary / size / content</text></g>
+          <path class="flow-arrow" d="M170 424V452" marker-end="url(#arrow-mobile)"></path>
+          <g class="flow-node success"><rect x="55" y="460" width="230" height="68" rx="9"></rect><text x="170" y="488" text-anchor="middle">建立 ReviewReport</text><text class="flow-note" x="170" y="510" text-anchor="middle">reviewed / skipped</text></g>
+          <path class="flow-arrow" d="M55 270H25V568H98" marker-end="url(#arrow-mobile)"></path>
+          <text class="branch-label" x="40" y="548">是</text>
+          <g class="flow-node guard"><rect x="106" y="548" width="179" height="68" rx="9"></rect><text x="195" y="577" text-anchor="middle">Unmerged error</text><text class="flow-note" x="195" y="599" text-anchor="middle">不產生 report</text></g>
+        </svg>
+        <figcaption>關鍵邊界在 conflict gate：只有可 review 的 change records 才能繼續轉成 patch。</figcaption>
+      </figure>
+    </section>
+
+    <section id="discovery">
+      <h2>3. Discovery command 與嚴格 parser</h2>
+      <p>Staged changes 使用以下 command。Working-tree scope 也會執行對應的 unstaged command，只是移除 <code>--cached</code>：</p>
+
+      <pre class="language-shell"><span class="label">Shell</span><code><span class="sh-command">git</span> <span class="sh-flag">--literal-pathspecs</span> diff \
+  <span class="sh-flag">--cached</span> <span class="sh-command">\</span>
+  <span class="sh-flag">--find-renames</span> <span class="sh-command">\</span>
+  <span class="sh-flag">--name-status</span> <span class="sh-command">\</span>
+  <span class="sh-flag">-z</span> <span class="sh-command">\</span>
+  <span class="sh-flag">--diff-filter=ACDMRTUXB</span> <span class="sh-command">\</span>
+  <span class="sh-command">--</span></code></pre>
+
+      <p><code>--name-status</code> 回傳 status 與路徑；<code>-z</code> 使用 NUL 分隔欄位，因此空格、tab 或換行都可以是檔名的一部分。<code>--literal-pathspecs</code> 則確保稍後把路徑交回 Git 時，不會把 path 中的特殊字元解釋成 pathspec magic。</p>
+
+      <h3>Change record 的資料模型</h3>
+      <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">type</span> <span class="t">GitChangeStatus</span> <span class="o">=</span>
+  <span class="o">|</span> <span class="s">"A"</span> <span class="o">|</span> <span class="s">"B"</span> <span class="o">|</span> <span class="s">"C"</span> <span class="o">|</span> <span class="s">"D"</span> <span class="o">|</span> <span class="s">"M"</span>
+  <span class="o">|</span> <span class="s">"R"</span> <span class="o">|</span> <span class="s">"T"</span> <span class="o">|</span> <span class="s">"U"</span> <span class="o">|</span> <span class="s">"X"</span><span class="o">;</span>
+
+interface <span class="t">GitChange</span> <span class="o">{</span>
+  readonly status<span class="o">:</span> <span class="t">GitChangeStatus</span><span class="o">;</span>
+  readonly score<span class="o">?</span><span class="o">:</span> number<span class="o">;</span>
+  readonly path<span class="o">:</span> string<span class="o">;</span>
+  readonly pathspecs<span class="o">:</span> <span class="t">ReadonlyArray</span><span class="o">&lt;</span>string<span class="o">&gt;</span><span class="o">;</span>
+<span class="o">}</span></code></pre>
+
+      <p>一般 status 是兩個欄位：<code>status, path</code>。Rename 與 copy 是三個欄位：<code>Rnnn/Cnnn, source, target</code>。此時 <code>path</code> 使用 target path 作為顯示與排序 identity，<code>pathspecs</code> 同時保留 source 與 target，讓後續 diff 不會漏掉 rename 的任一端。</p>
+
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>輸入形式</th><th>解析結果</th><th>用途</th></tr></thead>
+          <tbody>
+            <tr><td><code>M\0app/a.ts\0</code></td><td><code>status: "M"</code>、單一路徑</td><td>一般 tracked change</td></tr>
+            <tr><td><code>U\0app/conflict.ts\0</code></td><td><code>status: "U"</code></td><td>進入 conflict gate</td></tr>
+            <tr><td><code>R100\0old.ts\0new.ts\0</code></td><td><code>status: "R"</code>、<code>score: 100</code>、雙 pathspec</td><td>完整取得 rename patch</td></tr>
+            <tr><td>空字串</td><td>空陣列</td><td>代表該 scope 沒有 change</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Parser 採 all-or-nothing</h3>
+      <p><code>parseNulSeparatedChanges</code> 不會回傳部分結果。只要出現下列任一情況，就回傳 <code>GitInvalidOutputError</code>：</p>
+      <ul class="checklist">
+        <li>非空輸出沒有以 NUL 結尾。</li>
+        <li>任何欄位為空，包含空 path。</li>
+        <li>Status 不在允許格式內，例如 <code>Q</code>。</li>
+        <li>Rename 或 copy 缺少 target path。</li>
+        <li>Similarity score 大於 <code>100</code>。</li>
+      </ul>
+      <p>Error 只保存 operation 與 output byte count，不把原始 Git output 帶到終端，避免錯誤訊息意外回顯任意檔名或大量內容。</p>
+    </section>
+
+    <section id="conflict">
+      <h2>4. Unmerged path 的 fail-fast 設計</h2>
+      <p><code>findUnmergedPaths</code> 從解析完成的 records 中挑出 <code>status === "U"</code>，去除重複路徑並排序。這個檢查發生在任何 <code>collectDiffPatches</code> 呼叫之前。</p>
+
+      <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">const</span> paths <span class="o">=</span> <span class="f">findUnmergedPaths</span><span class="o">(</span>stagedPaths<span class="o">)</span><span class="o">;</span>
+
+<span class="k">if</span> <span class="o">(</span>paths<span class="o">.</span><span class="p">length</span> <span class="o">&gt;</span> <span class="n">0</span><span class="o">)</span> <span class="o">{</span>
+  <span class="k">return</span> <span class="k">yield</span><span class="o">*</span> <span class="k">new</span> <span class="f">GitUnmergedPathsError</span><span class="o">(</span><span class="o">{</span> paths <span class="o">}</span><span class="o">)</span><span class="o">;</span>
+<span class="o">}</span></code></pre>
+
+      <p>在 staged scope，只檢查 staged records；在 working-tree scope，會合併 staged 與 unstaged records 後再檢查。Working-tree scope 若發現衝突，甚至不會繼續列出 untracked files，因為整次 review 已經沒有機會建立可信的完整 report。</p>
+
+      <div class="callout">
+        <p><strong><code>* Unmerged path</code> 不屬於 patch。</strong>下游不會對 <code>U</code> record 執行逐檔 <code>git diff</code>，所以 Git 的提示文字不會進入應用程式的 <code>patch</code> 欄位。</p>
+      </div>
+
+      <p>CLI 捕捉 typed error，將所有 path 經過 terminal escaping 後列出，設定非零 exit code，並保持 review command 為 read-only：</p>
+
+      <pre><span class="label">Terminal</span><code>Review cannot start because unresolved merge conflicts exist:
+
+- app/auth/session.ts
+- app/conflict.ts
+
+Resolve and stage these files, or abort the merge/rebase, then run review again.</code></pre>
+
+      <p>工具不會自動選擇 ours、theirs，也不會改寫 index。使用者可以解決衝突後執行 <code>git add</code>，或中止目前的 merge／rebase，再重新執行 review。</p>
+    </section>
+
+    <section id="scope">
+      <h2>5. Staged 與 working-tree scope</h2>
+      <p>兩種 scope 共用 repository 檢查、strict parser、conflict gate 與 patch collection，但「比較基準」和「納入的 change 類型」不同。</p>
+
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>行為</th><th><code>review --staged</code></th><th><code>review</code>（working-tree）</th></tr></thead>
+          <tbody>
+            <tr><td>納入範圍</td><td>Index 中的 staged changes</td><td>Staged、unstaged、untracked</td></tr>
+            <tr><td>Conflict gate</td><td>檢查 staged records</td><td>合併 staged 與 unstaged 後檢查</td></tr>
+            <tr><td>Tracked diff</td><td><code>git diff --cached</code></td><td><code>git diff &lt;base&gt;</code></td></tr>
+            <tr><td>Base</td><td>由 <code>--cached</code> 決定</td><td>正常使用 <code>HEAD</code>；首次 commit 前使用 empty tree</td></tr>
+            <tr><td>Untracked</td><td>不納入</td><td><code>git ls-files --others --exclude-standard -z</code> discovery，再用 <code>git diff --no-index</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Working-tree 如何合併重複的 tracked path</h3>
+      <p>同一個 tracked file 可能同時有 staged 與 unstaged change。Working-tree 模式應以顯示 path 分組、聯集所有 pathspecs，再從 base 到目前 working tree 只取一次完整 patch。這避免同一 tracked path 被 review 兩次，也保留 rename 的 source 與 target。</p>
+
+      <p>若 repository 還沒有第一個 commit，<code>HEAD^{commit}</code> 解析會以 exit code <code>1</code> 表示不存在。此時可把空 stdin 傳給 <code>git hash-object -t tree --stdin</code>，由 Git 依 repository 的 object format 計算 empty tree Object ID，讓 initial working tree 仍有穩定且跨平台的 diff base。</p>
+    </section>
+
+    <section id="patch">
+      <h2>6. 逐檔 patch collection</h2>
+      <p>設計刻意保留「先列 records、再逐檔取 patch」，因為這讓每個檔案都能獨立套用大小限制、binary 判斷與 coverage reason。命令 adapter、純 parser 與 patch collector 應分離；collector 依序執行以下步驟：</p>
+
+      <ol class="steps">
+        <li><strong>取得檔案大小。</strong>Staged file 優先查 index object；working-tree 與 untracked file 優先檢查 filesystem，必要時再查 HEAD 或 index object。</li>
+        <li><strong>先排除超大檔案。</strong>若大小超過產品設定的上限，不讀 patch，建立包含實際大小與 limit 的 <code>file-too-large</code> skipped entry。上限必須是明文化政策，不應散落成 magic number。</li>
+        <li><strong>執行受限制的 diff。</strong>Tracked change 使用 <code>--no-color --no-ext-diff --unified=3</code>；untracked change 使用 <code>--no-index</code> 與 platform adapter 建立的空檔案比較，不能把 <code>/dev/null</code> 寫死成跨平台路徑。</li>
+        <li><strong>驗證 command 結果。</strong>Unexpected exit code、空 stdout 或執行失敗都不是 reviewed，而是 fatal Git error。</li>
+        <li><strong>分類內容。</strong>Binary patch 轉成 <code>binary</code> skipped entry；其餘非空文字輸出才建立 <code>GitFilePatch</code>。</li>
+      </ol>
+
+      <pre class="language-typescript"><span class="label">TypeScript</span><code>interface <span class="t">GitDiff</span> <span class="o">{</span>
+  readonly files<span class="o">:</span> <span class="t">ReadonlyArray</span><span class="o">&lt;</span><span class="t">GitFilePatch</span><span class="o">&gt;</span><span class="o">;</span>
+  readonly skippedFiles<span class="o">:</span> <span class="t">ReadonlyArray</span><span class="o">&lt;</span><span class="t">GitSkippedFile</span><span class="o">&gt;</span><span class="o">;</span>
+<span class="o">}</span></code></pre>
+
+      <p>Tracked patch command 預期 exit code <code>0</code>；<code>git diff --no-index</code> 則以 <code>1</code> 表示「有差異」，因此 untracked patch 接受 <code>0</code> 或 <code>1</code>。這是 Git command contract 的差異，不代表後者失敗。</p>
+    </section>
+
+    <section id="coverage">
+      <h2>7. Coverage 的精確語意</h2>
+      <p>Report builder 只在 <code>readDiff(scope)</code> 成功後建立 report。每個文字 patch 轉為 <code>status: "reviewed"</code>；binary 或 oversized file 轉為 <code>status: "skipped"</code>，並保留 reason。</p>
+
+      <pre class="language-typescript"><span class="label">TypeScript pseudocode</span><code>coverage<span class="o">:</span> <span class="o">{</span>
+  complete<span class="o">:</span> diff<span class="o">.</span><span class="p">skippedFiles</span><span class="o">.</span><span class="p">length</span> <span class="o">=</span><span class="o">=</span><span class="o">=</span> <span class="n">0</span><span class="o">,</span>
+  files<span class="o">:</span> coverageFiles<span class="o">,</span>
+<span class="o">}</span></code></pre>
+
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>情況</th><th>結果</th><th><code>coverage.complete</code></th></tr></thead>
+          <tbody>
+            <tr><td>成功取得文字 patch</td><td><code>reviewed</code></td><td>不受影響</td></tr>
+            <tr><td>Binary file</td><td><code>skipped: binary</code></td><td><code>false</code></td></tr>
+            <tr><td>超過設定的檔案上限</td><td><code>skipped: file-too-large</code></td><td><code>false</code></td></tr>
+            <tr><td>Unmerged path</td><td><code>GitUnmergedPathsError</code>，沒有 report</td><td>不存在</td></tr>
+            <tr><td>Malformed Git output、timeout、空 patch 等</td><td>Typed fatal error，沒有 report</td><td>不存在</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="callout success">
+        <p><strong><code>complete</code> 不是「Git command 都有跑完」。</strong>它代表這份已成功產生的 report 中沒有已知 skipped file。任何無法可靠建立 report 的狀況會直接失敗，而不是回傳看似完整的 coverage。</p>
+      </div>
+    </section>
+
+    <section id="errors">
+      <h2>8. 錯誤模型與資源邊界</h2>
+      <p>Git adapter 應使用 typed errors，把 repository 狀態、Git process failure、輸出格式問題和檔案生命週期問題分開。CLI、HTTP 或 worker adapter 再依 error tag 產生可操作的訊息；下列名稱是可採用的示例 taxonomy。</p>
+
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Error</th><th>代表的邊界</th></tr></thead>
+          <tbody>
+            <tr><td><code>GitNotRepositoryError</code></td><td>目前位置不是 Git repository。</td></tr>
+            <tr><td><code>GitWorkingTreeUnavailableError</code></td><td>Repository 沒有可用 working tree。</td></tr>
+            <tr><td><code>GitInvalidOutputError</code></td><td>Git output 不符合 parser 或 object-id contract。</td></tr>
+            <tr><td><code>GitUnmergedPathsError</code></td><td>Review 前置條件不成立，附帶排序後的 conflict paths。</td></tr>
+            <tr><td><code>GitChangedFileUnavailableError</code></td><td>Discovery 後檔案消失，或列出的 change 無法取得非空 patch。</td></tr>
+            <tr><td><code>GitCommandTimeoutError</code>／<code>GitCommandOutputLimitError</code></td><td>Command 超時或超過輸出資源限制。</td></tr>
+            <tr><td><code>GitCommandError</code></td><td>Git 非預期 exit，並分類 index lock、權限、repository corruption 等原因。</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>所有 Git command 共用的防護</h3>
+      <ul class="checklist">
+        <li><code>LC_ALL=C</code>：讓 Git 訊息與錯誤分類不受本機語系影響。</li>
+        <li><code>--literal-pathspecs</code>：路徑以字面值解讀。</li>
+        <li>Timeout：所有 command 都有依操作類型設定的 deadline，逾時後終止並等待程序真正結束。</li>
+        <li>Output 上限：metadata list、object metadata 與單檔 patch 使用不同 byte budget；stdout 與 stderr 都受控。</li>
+        <li>Concurrency 上限：大量 changed files 不能無界啟動 Git process，並要支援 cancellation。</li>
+        <li>排序：changed paths、unmerged paths 與 coverage files 都使用穩定的字串順序。</li>
+      </ul>
+    </section>
+
+    <section id="tests">
+      <h2>9. 測試如何鎖住這個設計</h2>
+      <p>測試不能只檢查 happy path；必須直接驗證 parser contract、fail-fast 時機與真實 Git conflict。</p>
+
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>測試層級</th><th>必要行為</th></tr></thead>
+          <tbody>
+            <tr><td>Parser unit tests</td><td>保留 <code>U</code>、<code>M</code>、<code>R100</code>、score、rename 雙路徑，以及含換行／tab 的特殊檔名。</td></tr>
+            <tr><td>Malformed-output tests</td><td>缺少結尾 NUL、缺少 rename target、未知 status、非法 score、空 path 都必須失敗。</td></tr>
+            <tr><td>GitService mocked test</td><td>Staged 與 unstaged 都含 <code>U</code> 時，paths 會去重排序，而且不會繼續讀 untracked 或 patch。</td></tr>
+            <tr><td>Real repository integration</td><td>建立真實 merge conflict 後執行 CLI，確認非零 exit code、診斷列出路徑，而且沒有產生成功 report。</td></tr>
+            <tr><td>Patch boundary tests</td><td>Binary、oversized、empty patch、output limit 與檔案消失都維持各自的錯誤或 skipped 語意。</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="boundaries">
+      <h2>10. 產品選項與取捨</h2>
+      <p>以下選項沒有唯一答案，但必須在公開契約中明確選擇；否則不同 caller 會對 coverage 產生互相矛盾的理解。</p>
+
+      <ul class="checklist">
+        <li><strong>Fail-fast conflict 是安全預設。</strong>任何 unmerged path 都阻擋整次 review。若產品支援 partial mode，必須新增 <code>reason: "unmerged"</code>、固定 <code>complete: false</code>，並讓使用者明確 opt in。</li>
+        <li><strong>Fatal error 與成功 report 分流。</strong>CLI 可用 stderr 與非零 exit code；API 則可使用 versioned error envelope。兩者都不能回傳看似成功的 coverage。</li>
+        <li><strong>Path identity 仍以輸出 entry 為準。</strong>Working-tree 的 tracked records 會依 path 合併，但 staged deletion 後又建立同名 untracked file，仍可能形成兩個不同 source entries。</li>
+        <li><strong>是否解析 unified diff 取決於信任邊界。</strong>若下游只把 patch 當不透明文字，可依 Git contract、非空 stdout 與 conflict gate；若要逐 hunk 計算或接受非 Git producer，就必須加入完整 parser。</li>
+      </ul>
+    </section>
+
+    <section id="implementation">
+      <h2>11. 元件邊界與 Production readiness</h2>
+      <p>模組名稱可以依語言與 framework 調整，但責任不應混成一個巨型 Git wrapper：</p>
+
+      <div class="table-wrap file-map">
+        <table>
+          <thead><tr><th>元件</th><th>單一責任</th></tr></thead>
+          <tbody>
+            <tr><td>Command runner</td><td>以 argument array 啟動 Git，固定 cwd／locale，管理 stdin、timeout、output budget、termination 與 cancellation。</td></tr>
+            <tr><td>Change parser</td><td>嚴格解析 NUL records、status 與 rename/copy 雙路徑；輸入不完整時 all-or-nothing 失敗。</td></tr>
+            <tr><td>Scope planner</td><td>定義 staged／working-tree 語意、選擇 HEAD 或 empty tree、合併 tracked targets 並執行 conflict gate。</td></tr>
+            <tr><td>Patch collector</td><td>以有界 concurrency 收集逐檔 patch，套用大小與 binary 政策，保留 skip reason。</td></tr>
+            <tr><td>Coverage builder</td><td>只從完整的 collector 結果建立 reviewed／skipped records，不自行猜測缺失檔案。</td></tr>
+            <tr><td>Presentation adapter</td><td>把 typed errors 映射成 CLI／API 訊息，並確保機器輸出的 schema 與 exit semantics 穩定。</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <ul class="checklist">
+        <li>威脅模型涵蓋惡意檔名、pathspec magic、external diff、pager、hooks、巨量變更與 repository race。</li>
+        <li>Observability 記錄操作名稱、耗時、exit code 分類、byte 數、skip reason 與 cancellation；預設不記錄 patch 或敏感路徑。</li>
+        <li>大型 monorepo 以有界 queue、deadline 與 backpressure 控制資源，並用壓力測試驗證最壞情況。</li>
+        <li>支援的 Git 版本、object format、平台、bare repository 政策與 submodule 語意都有明確文件。</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>結論</h2>
+      <p>穩健的設計把 Git status 保留為一級資料，並在 patch collection 前建立明確的 conflict gate。Parser 負責完整性，scope planner 負責流程決策，patch collection 負責內容與資源限制，coverage builder 只對成功取得的結果建立 report。</p>
+      <p>因此，<code>reviewed</code> 代表「系統真的取得並處理了文字 patch」；<code>skipped</code> 代表「已知但因明確政策未 review」；unmerged 或其他不可靠狀態則不會偽裝成一份完整 report。</p>
+    </section>
+
+    <footer>
+      獨立系統設計指南 · Git diff discovery、patch collection 與 review coverage
+    </footer>
+  </main>
+
+  <script>
+    (() => {
+      const copyIcon = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="11" height="11" rx="2"></rect><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"></path></svg>';
+      const checkIcon = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"></path></svg>';
+
+      const copyText = async (value) => {
+        if (navigator.clipboard?.writeText) {
+          await navigator.clipboard.writeText(value);
+          return;
+        }
+
+        const field = document.createElement('textarea');
+        field.value = value;
+        field.style.position = 'fixed';
+        field.style.opacity = '0';
+        document.body.append(field);
+        field.select();
+        document.execCommand('copy');
+        field.remove();
+      };
+
+      document.querySelectorAll('pre').forEach((pre) => {
+        const code = pre.querySelector('code');
+        if (!code) return;
+
+        const button = document.createElement('button');
+        button.className = 'copy-code';
+        button.type = 'button';
+        button.setAttribute('aria-label', '複製程式碼');
+        button.innerHTML = copyIcon;
+        button.addEventListener('click', async () => {
+          await copyText(code.textContent ?? '');
+          button.classList.add('copied');
+          button.innerHTML = checkIcon;
+          window.setTimeout(() => {
+            button.classList.remove('copied');
+            button.innerHTML = copyIcon;
+          }, 1200);
+        });
+        pre.append(button);
+      });
+    })();
+  </script>
+</body>
+</html>

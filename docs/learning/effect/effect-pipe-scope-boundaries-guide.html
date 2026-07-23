@@ -1,0 +1,473 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="用包裝層次與執行時間線看懂 Effect 4 的 pipe、scoped、catch 與 provide，掌握 operator 位置如何改變 Scope 和錯誤邊界。">
+  <title>Effect pipe 與 Scope 邊界：轉換順序、包裝層次與生命週期</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --clay: #D97757;
+      --slate: #141413;
+      --ivory: #FAF9F5;
+      --oat: #E3DACC;
+      --white: #FFFFFF;
+      --gray-100: #F0EEE6;
+      --gray-300: #D1CFC5;
+      --gray-500: #87867F;
+      --gray-700: #3D3D3A;
+      --warning: #C78E3F;
+      --space-sm: 8px;
+      --space-md: 12px;
+      --space-lg: 16px;
+      --space-xl: 24px;
+      --space-2xl: 32px;
+      --space-3xl: 48px;
+      --radius-sm: 4px;
+      --radius-md: 8px;
+      --content-width: 68ch;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      background: var(--ivory);
+      color: var(--slate);
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 16px;
+      font-weight: 430;
+      line-height: 1.55;
+    }
+
+    main {
+      max-width: var(--content-width);
+      margin: 0 auto;
+      padding: var(--space-3xl) var(--space-xl);
+    }
+
+    article { background: transparent; border: 0; padding: 0; }
+    h1, h2, h3 { letter-spacing: -0.015em; }
+    h1 { margin: 0 0 var(--space-lg); font-size: 1.8rem; line-height: 1.18; text-wrap: balance; }
+    h2 { margin: var(--space-3xl) 0 var(--space-lg); font-size: 1.22rem; line-height: 1.25; }
+    h3 { margin: var(--space-2xl) 0 var(--space-md); font-size: 1rem; line-height: 1.35; }
+    p, ul, ol, .deck, .callout, table, pre { max-width: var(--content-width); }
+    p { margin: 0 0 var(--space-lg); }
+    ul, ol { margin-top: 0; padding-left: 1.35rem; }
+    li + li { margin-top: var(--space-sm); }
+    .deck { margin: 0 0 var(--space-2xl); color: var(--gray-700); font-size: 1.05rem; }
+    strong { font-weight: 700; }
+    a { color: var(--clay); text-decoration-thickness: 1px; text-underline-offset: 3px; }
+
+    :not(pre) > code {
+      padding: 0.08em 0.32em;
+      border: 1px solid var(--oat);
+      border-radius: var(--radius-sm);
+      background: var(--gray-100);
+      overflow-wrap: anywhere;
+      font-size: 0.92em;
+    }
+
+    pre {
+      position: relative;
+      width: 100%;
+      margin: var(--space-lg) 0 var(--space-xl);
+      border: 1px solid #26241f;
+      border-radius: var(--radius-md);
+      background: #11110f;
+      color: #d8d4ca;
+      overflow: hidden;
+    }
+
+    pre code {
+      display: block;
+      border: 0;
+      background: transparent;
+      padding: 18px 64px 18px 22px;
+      color: inherit;
+      overflow-x: auto;
+      white-space: pre;
+      font-size: 0.875rem;
+      font-weight: 400;
+      line-height: 1.62;
+      scrollbar-width: none;
+    }
+
+    pre code::-webkit-scrollbar { width: 0; height: 0; }
+    pre .label { display: none; }
+    pre code .k { color: #ff946e; font-weight: 400; }
+    pre code .s { color: #8fb86a; }
+    pre code .n, pre code .p { color: #d8d4ca; }
+    pre code .c { color: #858177; font-style: italic; }
+    pre code .f, pre code .t { color: #cfc6a2; font-weight: 400; }
+    pre code .o { color: #ff946e; }
+
+    .copy-code {
+      position: absolute;
+      top: 9px;
+      right: 9px;
+      z-index: 1;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 30px;
+      height: 30px;
+      padding: 0;
+      border: 1px solid rgba(250, 249, 245, 0.14);
+      border-radius: var(--radius-sm);
+      background: rgba(250, 249, 245, 0.06);
+      color: rgba(250, 249, 245, 0.72);
+      cursor: pointer;
+    }
+
+    .copy-code:hover, .copy-code:focus-visible {
+      border-color: rgba(250, 249, 245, 0.28);
+      background: rgba(250, 249, 245, 0.12);
+      color: var(--ivory);
+      outline: none;
+    }
+
+    .copy-code.copied { border-color: rgba(143, 184, 106, 0.42); background: rgba(143, 184, 106, 0.14); color: #b8d99a; }
+    .copy-code svg { width: 13px; height: 13px; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; fill: none; pointer-events: none; }
+    .code-scrollbar { position: absolute; right: 0; bottom: 0; left: 0; height: 3px; border-radius: 999px; background: rgba(250, 249, 245, 0.1); cursor: pointer; }
+    .code-scrollbar.hidden { display: none; }
+    .code-scrollbar-thumb { height: 100%; border-radius: inherit; background: rgba(255, 148, 110, 0.82); transform: translateX(0); cursor: grab; }
+    .code-scrollbar-thumb:active { cursor: grabbing; }
+
+    .callout {
+      margin: var(--space-xl) 0;
+      padding: var(--space-lg);
+      border: 1px solid var(--oat);
+      border-left: 4px solid var(--clay);
+      border-radius: var(--radius-md);
+      background: var(--gray-100);
+    }
+
+    .callout p:last-child { margin-bottom: 0; }
+
+    table { width: 100%; margin: var(--space-lg) 0 var(--space-xl); border-collapse: collapse; font-size: 0.94rem; }
+    th, td { padding: 10px 12px; border: 1px solid var(--oat); text-align: left; vertical-align: top; }
+    th { background: var(--gray-100); font-weight: 700; }
+
+    .flow-figure { margin: var(--space-xl) 0 var(--space-2xl); }
+    .flow-figure svg { display: block; width: 100%; height: auto; }
+    .flow-figure .flow-mobile { display: none; }
+    .flow-figure figcaption { margin-top: var(--space-md); color: var(--gray-700); font-size: 0.9rem; }
+    .flow-shell { fill: var(--white); stroke: var(--oat); stroke-width: 2; }
+    .flow-shell.layer { fill: #f6eee7; stroke: var(--clay); }
+    .flow-shell.scope { fill: #f2f5ec; stroke: #819963; }
+    .flow-shell.program { fill: var(--white); stroke: var(--gray-500); }
+    .flow-title { fill: var(--slate); font-size: 16px; font-weight: 700; }
+    .flow-note { fill: var(--gray-700); font-size: 13px; font-weight: 500; }
+    .flow-order { fill: var(--clay); font-size: 13px; font-weight: 700; }
+    .flow-arrow { fill: none; stroke: var(--clay); stroke-width: 2; marker-end: url(#pipe-arrow-desktop); }
+    .flow-arrow.return { stroke: var(--gray-500); marker-end: url(#pipe-return-desktop); }
+    .flow-mobile .flow-arrow { marker-end: url(#pipe-arrow-mobile); }
+    .flow-mobile .flow-arrow.return { marker-end: url(#pipe-return-mobile); }
+
+    .closing { margin-top: var(--space-3xl); padding-top: var(--space-xl); border-top: 1px solid var(--oat); }
+
+    @media (max-width: 640px) {
+      body { font-size: 15px; }
+      h1 { font-size: 1.65rem; }
+      main { padding: var(--space-xl); }
+      pre code { font-size: 0.8125rem; line-height: 1.5; }
+      p code, li code, td code { font-size: 0.9em; }
+      table, .deck { font-size: 0.875rem; }
+      .table-wrap { width: 100%; overflow-x: auto; }
+      .flow-figure .flow-desktop { display: none; }
+      .flow-figure .flow-mobile { display: block; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <article>
+      <h1>Effect pipe 與 Scope 邊界：轉換順序、包裝層次與生命週期</h1>
+      <p><strong>版本基準：</strong><code>effect@4.0.0-beta.98</code>。</p>
+      <p class="deck"><code>pipe</code> 讓程式碼按照閱讀方向寫，但它建立的仍然是巢狀函式呼叫。只要分清楚「左到右轉換」和「外層到內層執行」，就能準確判斷錯誤處理、依賴提供與資源釋放的順序。</p>
+
+      <h2>先從最小規則開始</h2>
+      <p><code>pipe</code> 接收一個初始值，再把每一步的輸出交給下一步。一般函式可以寫成：</p>
+
+      <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="f">pipe</span><span class="o">(</span>value<span class="o">,</span> first<span class="o">,</span> second<span class="o">,</span> third<span class="o">)</span></code></pre>
+
+      <p>它等價於下面的巢狀呼叫：</p>
+
+      <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="f">third</span><span class="o">(</span><span class="f">second</span><span class="o">(</span><span class="f">first</span><span class="o">(</span>value<span class="o">)</span><span class="o">)</span><span class="o">)</span></code></pre>
+
+      <p>Effect 提供的 method syntax 只是把初始值移到點號左邊，規則完全相同：</p>
+
+      <pre class="language-typescript"><span class="label">TypeScript</span><code>program<span class="o">.</span><span class="p">pipe</span><span class="o">(</span>first<span class="o">,</span> second<span class="o">,</span> third<span class="o">)</span>
+
+<span class="c">// 等價於</span>
+<span class="f">pipe</span><span class="o">(</span>program<span class="o">,</span> first<span class="o">,</span> second<span class="o">,</span> third<span class="o">)</span></code></pre>
+
+      <p>因此，資料的轉換順序是：</p>
+
+      <ol>
+        <li><code>first(value)</code></li>
+        <li><code>second</code> 接收第一步的結果</li>
+        <li><code>third</code> 接收第二步的結果</li>
+      </ol>
+
+      <div class="callout">
+        <p><strong>重要區分：</strong>程式碼由左到右建立結果，但最後一個函式會位於最外層。也就是「轉換方向向右走，包裝層次向外長」。</p>
+      </div>
+
+      <h2>在 Effect 裡，pipe 通常是在組裝程式</h2>
+      <p><code>Effect</code> 值描述一段稍後才會執行的工作。把 <code>Effect.scoped</code>、<code>Effect.catch</code> 或 <code>Effect.provide</code> 放進 pipeline，通常不是當場執行 I/O，而是在原本的 Effect 外增加新的行為與邊界。</p>
+
+      <p>以這段程式為例：</p>
+
+      <pre class="language-typescript"><span class="label">TypeScript</span><code>program<span class="o">.</span><span class="p">pipe</span><span class="o">(</span>
+  <span class="t">Effect</span><span class="o">.</span><span class="p">scoped</span><span class="o">,</span>
+  <span class="t">Effect</span><span class="o">.</span><span class="k">catch</span><span class="o">(</span><span class="o">(</span>error<span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span>
+    <span class="t">Console</span><span class="o">.</span><span class="p">error</span><span class="o">(</span>error<span class="o">.</span><span class="p">message</span><span class="o">)</span><span class="o">.</span><span class="p">pipe</span><span class="o">(</span>
+      <span class="t">Effect</span><span class="o">.</span><span class="p">andThen</span><span class="o">(</span>
+        <span class="t">Effect</span><span class="o">.</span><span class="p">sync</span><span class="o">(</span><span class="o">(</span><span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span> <span class="o">{</span>
+          process<span class="o">.</span><span class="p">exitCode</span> <span class="o">=</span> <span class="n">1</span><span class="o">;</span>
+        <span class="o">}</span><span class="o">)</span><span class="o">,</span>
+      <span class="o">)</span><span class="o">,</span>
+    <span class="o">)</span><span class="o">,</span>
+  <span class="o">)</span><span class="o">,</span>
+  <span class="t">Effect</span><span class="o">.</span><span class="p">provide</span><span class="o">(</span><span class="t">BunServices</span><span class="o">.</span><span class="p">layer</span><span class="o">)</span><span class="o">,</span>
+  <span class="t">BunRuntime</span><span class="o">.</span><span class="p">runMain</span><span class="o">,</span>
+<span class="o">)</span><span class="o">;</span></code></pre>
+
+      <p>不要一次在腦中展開全部。先替每一步命名：</p>
+
+      <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">const</span> step1 <span class="o">=</span> <span class="t">Effect</span><span class="o">.</span><span class="p">scoped</span><span class="o">(</span>program<span class="o">)</span><span class="o">;</span>
+<span class="k">const</span> step2 <span class="o">=</span> <span class="t">Effect</span><span class="o">.</span><span class="k">catch</span><span class="o">(</span>step1<span class="o">,</span> errorHandler<span class="o">)</span><span class="o">;</span>
+<span class="k">const</span> step3 <span class="o">=</span> <span class="t">Effect</span><span class="o">.</span><span class="p">provide</span><span class="o">(</span>step2<span class="o">,</span> <span class="t">BunServices</span><span class="o">.</span><span class="p">layer</span><span class="o">)</span><span class="o">;</span>
+<span class="t">BunRuntime</span><span class="o">.</span><span class="p">runMain</span><span class="o">(</span>step3<span class="o">)</span><span class="o">;</span></code></pre>
+
+      <p>再把暫存變數消掉，就會看到真正的巢狀關係：</p>
+
+      <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="t">BunRuntime</span><span class="o">.</span><span class="p">runMain</span><span class="o">(</span>
+  <span class="t">Effect</span><span class="o">.</span><span class="p">provide</span><span class="o">(</span>
+    <span class="t">Effect</span><span class="o">.</span><span class="k">catch</span><span class="o">(</span>
+      <span class="t">Effect</span><span class="o">.</span><span class="p">scoped</span><span class="o">(</span>program<span class="o">)</span><span class="o">,</span>
+      errorHandler<span class="o">,</span>
+    <span class="o">)</span><span class="o">,</span>
+    <span class="t">BunServices</span><span class="o">.</span><span class="p">layer</span><span class="o">,</span>
+  <span class="o">)</span><span class="o">,</span>
+<span class="o">)</span><span class="o">;</span></code></pre>
+
+      <h2>位置代表邊界：越右邊，通常包得越外面</h2>
+      <p>下面的圖把上一段巢狀呼叫畫成生命週期邊界。外層需要先建立，才能進入內層；離開時則反過來，內層先結束。</p>
+
+      <figure class="flow-figure">
+        <svg class="flow-desktop" role="img" aria-labelledby="pipe-boundary-title-desktop pipe-boundary-desc-desktop" viewBox="0 0 760 330">
+          <title id="pipe-boundary-title-desktop">Effect pipeline 的巢狀執行邊界</title>
+          <desc id="pipe-boundary-desc-desktop">BunServices layer 位於最外層，catch 位於中間，program scope 位於內層；執行時由外向內進入，完成時由內向外離開。</desc>
+          <defs>
+            <marker id="pipe-arrow-desktop" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--clay)"></path>
+            </marker>
+            <marker id="pipe-return-desktop" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--gray-500)"></path>
+            </marker>
+          </defs>
+          <rect class="flow-shell layer" x="22" y="26" width="716" height="264" rx="14"></rect>
+          <text class="flow-title" x="44" y="58">Effect.provide(BunServices.layer)</text>
+          <text class="flow-note" x="44" y="80">最外層：提供服務，生命週期最長</text>
+          <rect class="flow-shell" x="118" y="104" width="546" height="154" rx="12"></rect>
+          <text class="flow-title" x="140" y="136">Effect.catch(...)</text>
+          <text class="flow-note" x="140" y="158">接住內層傳出的 typed error</text>
+          <rect class="flow-shell scope" x="322" y="124" width="306" height="110" rx="10"></rect>
+          <text class="flow-title" x="344" y="157">Effect.scoped(program)</text>
+          <text class="flow-note" x="344" y="179">管理 program 的資源</text>
+          <rect class="flow-shell program" x="456" y="191" width="142" height="29" rx="6"></rect>
+          <text class="flow-note" x="527" y="211" text-anchor="middle">program</text>
+          <path class="flow-arrow" d="M 48 305 H 316"></path>
+          <text class="flow-order" x="48" y="325">進入：外 → 內</text>
+          <path class="flow-arrow return" d="M 712 305 H 444"></path>
+          <text class="flow-order" x="712" y="325" text-anchor="end">離開：內 → 外</text>
+        </svg>
+
+        <svg class="flow-mobile" role="img" aria-labelledby="pipe-boundary-title-mobile pipe-boundary-desc-mobile" viewBox="0 0 360 548">
+          <title id="pipe-boundary-title-mobile">Effect pipeline 的巢狀執行邊界</title>
+          <desc id="pipe-boundary-desc-mobile">BunServices layer 位於最外層，catch 位於中間，program scope 位於內層；執行時由外向內進入，完成時由內向外離開。</desc>
+          <defs>
+            <marker id="pipe-arrow-mobile" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--clay)"></path>
+            </marker>
+            <marker id="pipe-return-mobile" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--gray-500)"></path>
+            </marker>
+          </defs>
+          <rect class="flow-shell layer" x="10" y="20" width="340" height="448" rx="14"></rect>
+          <text class="flow-title" x="28" y="52">Effect.provide(...)</text>
+          <text class="flow-note" x="28" y="74">最外層：提供服務</text>
+          <rect class="flow-shell" x="28" y="104" width="304" height="326" rx="12"></rect>
+          <text class="flow-title" x="46" y="136">Effect.catch(...)</text>
+          <text class="flow-note" x="46" y="158">接住內層 error</text>
+          <rect class="flow-shell scope" x="46" y="190" width="268" height="200" rx="10"></rect>
+          <text class="flow-title" x="64" y="222">Effect.scoped(program)</text>
+          <text class="flow-note" x="64" y="244">管理 program 資源</text>
+          <rect class="flow-shell program" x="64" y="278" width="232" height="72" rx="8"></rect>
+          <text class="flow-title" x="180" y="319" text-anchor="middle">program</text>
+          <path class="flow-arrow" d="M 28 496 H 154"></path>
+          <text class="flow-order" x="28" y="518">進入：外 → 內</text>
+          <path class="flow-arrow return" d="M 332 496 H 206"></path>
+          <text class="flow-order" x="332" y="540" text-anchor="end">離開：內 → 外</text>
+        </svg>
+        <figcaption>pipeline 最右側的 Effect transformer 通常形成更外層的邊界；最右側的 <code>runMain</code> 則是終端操作，真正把組裝好的 Effect 交給 runtime 執行。</figcaption>
+      </figure>
+
+      <h2>「建構順序」不等於「執行事件順序」</h2>
+      <p>pipeline 的文字順序告訴你 Effect 如何被一層層轉換；實際執行還要按照巢狀邊界進出。以上面的配置來說，事件順序大致是：</p>
+
+      <ol>
+        <li>外層 <code>provide</code> 建立並提供 <code>BunServices.layer</code>。</li>
+        <li><code>scoped</code> 建立 program 使用的 Scope。</li>
+        <li>執行 <code>program</code>。</li>
+        <li>program 完成、失敗或被中斷時，關閉 Scope 並執行它的 finalizers。</li>
+        <li>如果 program 失敗，錯誤向外傳到 <code>catch</code>，執行 error handler。</li>
+        <li>整段工作結束後，關閉 <code>BunServices.layer</code>。</li>
+      </ol>
+
+      <p>因此目前的順序具有實際意義：program 的資源會先釋放，它依賴的 Bun services 才在更外層關閉。</p>
+
+      <h2>移動 operator，就是改變它包住的範圍</h2>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>寫法</th>
+              <th>巢狀關係</th>
+              <th>主要差異</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>scoped → catch</code></td>
+              <td><code>catch(scoped(program))</code></td>
+              <td>先關閉 program Scope，再執行 error handler。</td>
+            </tr>
+            <tr>
+              <td><code>catch → scoped</code></td>
+              <td><code>scoped(catch(program))</code></td>
+              <td>error handler 也在同一個 Scope 裡，handler 完成後才 cleanup。</td>
+            </tr>
+            <tr>
+              <td><code>provide → scoped</code></td>
+              <td><code>scoped(provide(program))</code></td>
+              <td>外層 program Scope 可能比 layer 活得更久，容易讓依賴與 cleanup 的順序變得不直觀。</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h2>判讀任何 Effect pipeline 的方法</h2>
+      <p>看到較長的 pipeline 時，可以固定做三件事：</p>
+
+      <ol>
+        <li><strong>逐步命名：</strong>把每一步寫成 <code>step1</code>、<code>step2</code>，確認誰接收誰。</li>
+        <li><strong>展開一層括號：</strong>記住 <code>x.pipe(f, g)</code> 等價於 <code>g(f(x))</code>。</li>
+        <li><strong>圈出生命週期 operator：</strong>特別留意 <code>scoped</code>、<code>provide</code>、錯誤處理與 retry；它們的位置決定邊界。</li>
+      </ol>
+
+      <p>若只需要標準的錯誤回報與 process exit code，Bun runtime 可以直接處理未捕捉失敗，入口通常可以保持精簡：</p>
+
+      <pre class="language-typescript"><span class="label">TypeScript</span><code>program<span class="o">.</span><span class="p">pipe</span><span class="o">(</span>
+  <span class="t">Effect</span><span class="o">.</span><span class="p">scoped</span><span class="o">,</span>
+  <span class="t">Effect</span><span class="o">.</span><span class="p">provide</span><span class="o">(</span><span class="t">BunServices</span><span class="o">.</span><span class="p">layer</span><span class="o">)</span><span class="o">,</span>
+  <span class="t">BunRuntime</span><span class="o">.</span><span class="p">runMain</span><span class="o">,</span>
+<span class="o">)</span><span class="o">;</span></code></pre>
+
+      <p class="closing"><strong>可重複使用的心智模型：</strong><code>pipe</code> 的值由左向右傳；每個 transformer 把目前的 Effect 包成新的 Effect；越靠右的 transformer 通常越外層；runtime 執行時由外進內，結束時由內退外。</p>
+      <p><a href="./effect-learning-path.html">返回 Effect 4 學習路徑</a></p>
+    </article>
+  </main>
+
+  <script>
+    (() => {
+      const copyIcon = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="11" height="11" rx="2"></rect><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"></path></svg>';
+      const checkIcon = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"></path></svg>';
+
+      const copyText = async (text) => {
+        if (navigator.clipboard && window.isSecureContext) {
+          await navigator.clipboard.writeText(text);
+          return;
+        }
+        const area = document.createElement('textarea');
+        area.value = text;
+        area.style.position = 'fixed';
+        area.style.opacity = '0';
+        document.body.append(area);
+        area.select();
+        document.execCommand('copy');
+        area.remove();
+      };
+
+      document.querySelectorAll('pre').forEach((pre) => {
+        const code = pre.querySelector('code');
+        if (!code) return;
+
+        const button = document.createElement('button');
+        button.className = 'copy-code';
+        button.type = 'button';
+        button.setAttribute('aria-label', '複製程式碼');
+        button.innerHTML = copyIcon;
+        button.addEventListener('click', async () => {
+          await copyText(code.textContent || '');
+          button.classList.add('copied');
+          button.innerHTML = checkIcon;
+          window.setTimeout(() => {
+            button.classList.remove('copied');
+            button.innerHTML = copyIcon;
+          }, 1400);
+        });
+        pre.append(button);
+
+        const track = document.createElement('div');
+        track.className = 'code-scrollbar';
+        const thumb = document.createElement('div');
+        thumb.className = 'code-scrollbar-thumb';
+        track.append(thumb);
+        pre.append(track);
+
+        const sync = () => {
+          const ratio = code.clientWidth / code.scrollWidth;
+          if (ratio >= 1) {
+            track.classList.add('hidden');
+            return;
+          }
+          track.classList.remove('hidden');
+          const width = Math.max(36, track.clientWidth * ratio);
+          const travel = track.clientWidth - width;
+          const progress = code.scrollLeft / (code.scrollWidth - code.clientWidth);
+          thumb.style.width = `${width}px`;
+          thumb.style.transform = `translateX(${travel * progress}px)`;
+        };
+
+        code.addEventListener('scroll', sync, { passive: true });
+        window.addEventListener('resize', sync, { passive: true });
+        requestAnimationFrame(sync);
+
+        let startX = 0;
+        let startScroll = 0;
+        thumb.addEventListener('pointerdown', (event) => {
+          startX = event.clientX;
+          startScroll = code.scrollLeft;
+          thumb.setPointerCapture(event.pointerId);
+        });
+        thumb.addEventListener('pointermove', (event) => {
+          if (!thumb.hasPointerCapture(event.pointerId)) return;
+          const maxThumb = track.clientWidth - thumb.clientWidth;
+          const maxScroll = code.scrollWidth - code.clientWidth;
+          code.scrollLeft = startScroll + (event.clientX - startX) * (maxScroll / maxThumb);
+        });
+        track.addEventListener('click', (event) => {
+          if (event.target === thumb) return;
+          const ratio = (event.clientX - track.getBoundingClientRect().left) / track.clientWidth;
+          code.scrollLeft = ratio * (code.scrollWidth - code.clientWidth);
+        });
+      });
+    })();
+  </script>
+</body>
+</html>

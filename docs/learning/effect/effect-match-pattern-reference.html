@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Effect Match 的 when、tag、valueTags、whenOr 與 whenAnd 選擇參考。">
+  <title>Effect Match Pattern Reference</title>
+  <link rel="stylesheet" href="../../assets/learning-article.css">
+</head>
+<body><main><article>
+  <h1>Effect Match Pattern Reference</h1>
+  <p class="deck">先依資料形狀選 pattern，再決定 matcher 如何完成。這份參考集中 API 差異，不重複介紹 Match 的基礎心智模型。</p>
+  <p class="meta"><strong>版本基準：</strong><code>effect@4.0.0-beta.98</code>。｜<a href="./effect-learning-path.html">Effect 學習路徑</a></p>
+
+  <table><thead><tr><th>需求</th><th>工具</th></tr></thead><tbody>
+    <tr><td>literal、結構或 predicate</td><td><code>Match.when(pattern, handler)</code></td></tr>
+    <tr><td>discriminated union 的單一 <code>_tag</code></td><td><code>Match.tag("Tag", handler)</code></td></tr>
+    <tr><td>同一 handler 接受多個 tags</td><td><code>Match.typeTags</code> 或對應 tag combinator</td></tr>
+    <tr><td>立即匹配一個 tagged value</td><td><code>Match.valueTags(value, handlers)</code></td></tr>
+    <tr><td>任一 pattern 成立</td><td><code>Match.whenOr(...patterns, handler)</code></td></tr>
+    <tr><td>所有 pattern 同時成立</td><td><code>Match.whenAnd(...patterns, handler)</code></td></tr>
+  </tbody></table>
+
+  <h2><code>type</code> 與 <code>value</code></h2>
+  <p><code>Match.type&lt;A&gt;()</code> 建立可重用函式；<code>Match.value(value)</code> 立即處理既有值。若把過度收窄的 <code>as const</code> value 傳入，matcher 可能只看見單一 variant，失去 union exhaustiveness 的意義。</p>
+
+  <h2>Completion</h2>
+  <ul><li><code>exhaustive</code>：型別上必須完整處理。</li><li><code>orElse</code>：提供 fallback。</li><li>Option-like completion：未命中本身是正常資料。</li></ul>
+
+  <h2>常見陷阱</h2>
+  <ul><li>把廣泛 predicate 放在精確 tag 前。</li><li>把 object pattern 當成 deep equality。</li><li>認為自訂 predicate 自動證明 exhaustiveness。</li><li>handler 回傳彼此無關型別，卻沒有先定義 matcher 的共同輸出。</li></ul>
+
+  <p><a href="./effect-match-core-guide.html">返回 Effect Match 基礎</a></p>
+</article></main></body></html>

@@ -1,0 +1,469 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="理解 Effect TypeScript 為什麼常使用 import * as Effect，以及 namespace import、named import 與 barrel import 的取捨。">
+  <title>Effect Namespace Import：為什麼常用 import * as Effect？</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --clay: #d97757;
+      --slate: #141413;
+      --ivory: #faf9f5;
+      --oat: #e3dacc;
+      --white: #ffffff;
+      --gray-100: #f0eee6;
+      --gray-300: #d1cfc5;
+      --gray-500: #87867f;
+      --gray-700: #3d3d3a;
+      --space-sm: 8px;
+      --space-md: 12px;
+      --space-lg: 16px;
+      --space-xl: 24px;
+      --space-2xl: 32px;
+      --space-3xl: 48px;
+      --radius-sm: 4px;
+      --radius-md: 8px;
+      --content-width: 68ch;
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      background: var(--ivory);
+      color: var(--slate);
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 16px;
+      font-weight: 430;
+      line-height: 1.55;
+      letter-spacing: 0;
+    }
+    main { max-width: var(--content-width); margin: 0 auto; padding: var(--space-3xl) var(--space-xl); }
+    article { padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+    h1, h2, h3 { color: var(--slate); text-wrap: balance; }
+    h1 { max-width: none; margin: 0; font-size: 1.8rem; line-height: 1.18; overflow-wrap: normal; }
+    h2 { margin: var(--space-3xl) 0 var(--space-lg); font-size: 1.22rem; line-height: 1.25; }
+    h3 { margin: var(--space-2xl) 0 var(--space-sm); font-size: 1rem; line-height: 1.35; }
+    p { margin: 0 0 var(--space-lg); }
+    p, ul, ol, .deck, .callout, table, pre { max-width: var(--content-width); }
+    a { color: var(--clay); text-decoration-thickness: 1px; text-underline-offset: 3px; }
+    a:hover { text-decoration-thickness: 2px; }
+    code { font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace; font-size: .9em; }
+    :not(pre) > code {
+      padding: .1em .34em;
+      border: 1px solid var(--oat);
+      border-radius: var(--radius-sm);
+      background: var(--gray-100);
+      overflow-wrap: anywhere;
+    }
+    .deck { margin: var(--space-lg) 0 0; color: var(--gray-700); font-size: 1.05rem; }
+    .toc { margin: var(--space-2xl) 0 0; padding: var(--space-lg) var(--space-xl); border: 1px solid var(--oat); border-radius: var(--radius-md); background: transparent; }
+    .toc strong { display: block; margin-bottom: var(--space-sm); }
+    .toc ol { margin: 0; padding-left: 1.3rem; }
+    .toc li, li { margin: 6px 0; }
+
+    pre {
+      position: relative;
+      width: 100%;
+      margin: var(--space-lg) 0 var(--space-xl);
+      border: 1px solid #26241f;
+      border-radius: var(--radius-md);
+      background: #11110f;
+      color: #d8d4ca;
+      overflow: hidden;
+    }
+    pre code {
+      display: block;
+      padding: 18px 64px 18px 22px;
+      border: 0;
+      background: transparent;
+      color: inherit;
+      overflow-x: auto;
+      white-space: pre;
+      font-size: .875rem;
+      font-weight: 400;
+      line-height: 1.62;
+      scrollbar-width: none;
+    }
+    pre code::-webkit-scrollbar { width: 0; height: 0; }
+    pre .label { display: none; }
+    pre code .k { color: #ff946e; font-weight: 400; }
+    pre code .s { color: #8fb86a; }
+    pre code .n, pre code .p { color: #d8d4ca; }
+    pre code .c { color: #858177; font-style: italic; }
+    pre code .f, pre code .t { color: #cfc6a2; font-weight: 400; }
+    pre code .o { color: #ff946e; }
+
+    .copy-code {
+      position: absolute;
+      top: 9px;
+      right: 9px;
+      z-index: 1;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 30px;
+      height: 30px;
+      padding: 0;
+      border: 1px solid rgba(250, 249, 245, .14);
+      border-radius: var(--radius-sm);
+      background: rgba(250, 249, 245, .06);
+      color: rgba(250, 249, 245, .72);
+      cursor: pointer;
+    }
+    .copy-code:hover, .copy-code:focus-visible { border-color: rgba(250, 249, 245, .28); background: rgba(250, 249, 245, .12); color: var(--ivory); outline: none; }
+    .copy-code.copied { border-color: rgba(143, 184, 106, .42); background: rgba(143, 184, 106, .14); color: #b8d99a; }
+    .copy-code svg { width: 13px; height: 13px; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; fill: none; pointer-events: none; }
+    .code-scrollbar { position: absolute; right: 0; bottom: 0; left: 0; height: 3px; border-radius: 999px; background: rgba(250, 249, 245, .1); cursor: pointer; }
+    .code-scrollbar.hidden { display: none; }
+    .code-scrollbar-thumb { height: 100%; border-radius: inherit; background: rgba(255, 148, 110, .82); transform: translateX(0); cursor: grab; }
+    .code-scrollbar-thumb:active { cursor: grabbing; }
+
+    .concept {
+      display: grid;
+      grid-template-columns: 1fr auto 1fr;
+      gap: var(--space-md);
+      align-items: center;
+      margin: var(--space-xl) 0;
+      padding: var(--space-xl);
+      border: 1px solid var(--oat);
+      border-radius: var(--radius-md);
+    }
+    .concept-box { min-width: 0; padding: var(--space-lg); border: 1px solid var(--oat); border-radius: var(--radius-md); background: var(--white); }
+    .concept-box strong { display: block; margin-bottom: var(--space-sm); }
+    .concept-box code { display: block; margin: 4px 0; overflow-wrap: anywhere; }
+    .arrow { color: var(--clay); font-size: 1.4rem; font-weight: 700; }
+    .callout { margin: var(--space-xl) 0; padding: var(--space-lg) var(--space-xl); border: 1px solid var(--oat); border-left: 4px solid var(--clay); border-radius: var(--radius-sm); background: var(--gray-100); }
+    .callout p:last-child { margin-bottom: 0; }
+    .comparison { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-lg); margin: var(--space-xl) 0; }
+    .comparison article { min-width: 0; padding: var(--space-lg); border: 1px solid var(--oat); border-radius: var(--radius-md); }
+    .comparison h3 { margin-top: 0; }
+    .comparison pre { margin-bottom: 0; }
+    table { width: 100%; margin: var(--space-xl) 0; border-collapse: collapse; background: var(--white); }
+    th, td { padding: 10px 12px; border: 1px solid var(--oat); text-align: left; vertical-align: top; }
+    th { background: var(--gray-100); font-size: .9rem; }
+    ul { padding-left: 1.35rem; }
+    .term { margin: var(--space-xl) 0; padding: 0; }
+    .term div { padding: var(--space-lg) 0; border-bottom: 1px solid var(--oat); }
+    .term dt { font-weight: 700; }
+    .term dd { margin: 4px 0 0; color: var(--gray-700); }
+    .sources { margin-top: var(--space-3xl); padding-top: var(--space-xl); border-top: 1px solid var(--oat); color: var(--gray-700); font-size: .9rem; }
+    .sources h2 { margin-top: 0; }
+
+    @media (max-width: 640px) {
+      body { font-size: 15px; }
+      h1 { font-size: 1.65rem; }
+      main { padding: var(--space-xl); }
+      pre code { font-size: .8125rem; line-height: 1.5; }
+      p code, li code, td code { font-size: .9em; }
+      table, .deck, .sources { font-size: .875rem; }
+      .concept { grid-template-columns: 1fr; padding: var(--space-lg); }
+      .arrow { text-align: center; transform: rotate(90deg); }
+      .comparison { grid-template-columns: 1fr; }
+      table { display: block; overflow-x: auto; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <article>
+      <h1>Effect Namespace Import：為什麼常用 <code>import * as Effect</code>？</h1>
+      <p><strong>版本基準：</strong><code>effect@4.0.0-beta.98</code>；namespace import 本身是 TypeScript module style，不是 Effect 語法要求。</p>
+      <p class="deck">這不是 Effect 的語法要求，而是一種刻意保留「模組名稱」的寫法。理解它的關鍵，是把模組想成有名稱的工具箱，而不是一袋要全部倒進目前檔案的函式。</p>
+
+      <nav class="toc" aria-label="文章目錄">
+        <strong>閱讀路徑</strong>
+        <ol>
+          <li><a href="#mental-model">先建立工具箱心智模型</a></li>
+          <li><a href="#comparison">比較星號與具名匯入</a></li>
+          <li><a href="#effect">看 Effect 為什麼特別適合這種寫法</a></li>
+          <li><a href="#t3">理解混合 import 策略</a></li>
+          <li><a href="#rules">用簡單規則做選擇</a></li>
+        </ol>
+      </nav>
+
+      <section id="mental-model">
+        <h2>先把模組想成一個工具箱</h2>
+        <p><code>effect/Effect</code> 是一個 JavaScript 模組。它對外提供許多東西，例如 <code>gen</code>、<code>map</code>、<code>runPromise</code>，也提供名為 <code>Effect</code> 的型別。</p>
+        <p>namespace import 做的事情，是替這整個模組取一個本地名稱：</p>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">import</span> <span class="o">*</span> <span class="k">as</span> <span class="t">Effect</span> <span class="k">from</span> <span class="s">"effect/Effect"</span><span class="o">;</span>
+
+<span class="t">Effect</span><span class="o">.</span><span class="p">gen</span><span class="o">(</span><span class="o">.</span><span class="o">.</span><span class="o">.</span><span class="o">)</span><span class="o">;</span>
+<span class="t">Effect</span><span class="o">.</span><span class="p">map</span><span class="o">(</span><span class="o">.</span><span class="o">.</span><span class="o">.</span><span class="o">)</span><span class="o">;</span>
+<span class="t">Effect</span><span class="o">.</span><span class="p">runPromise</span><span class="o">(</span><span class="o">.</span><span class="o">.</span><span class="o">.</span><span class="o">)</span><span class="o">;</span></code></pre>
+
+        <div class="concept" aria-label="namespace import 的工具箱心智模型">
+          <div class="concept-box">
+            <strong>套件裡的模組</strong>
+            <code>effect/Effect</code>
+            <code>├─ gen</code>
+            <code>├─ map</code>
+            <code>└─ runPromise</code>
+          </div>
+          <div class="arrow" aria-hidden="true">→</div>
+          <div class="concept-box">
+            <strong>目前檔案裡的名稱</strong>
+            <code>Effect.gen</code>
+            <code>Effect.map</code>
+            <code>Effect.runPromise</code>
+          </div>
+        </div>
+
+        <p>因此，這裡的星號可以讀成：「把這個模組的公開內容放在 <code>Effect</code> 這個命名空間下面。」它不是在說「我要手動使用所有函式」。</p>
+
+        <aside class="callout">
+          <p><strong>容易誤會的地方：</strong><code>import *</code> 不代表每個函式都會被執行，也不等同於傳統 CommonJS 把整包內容複製進目前檔案。它建立的是 ECMAScript 模組的 namespace binding；最後 bundle 能移除多少未使用程式碼，仍取決於套件設計與 bundler 的 tree shaking。</p>
+        </aside>
+      </section>
+
+      <section id="comparison">
+        <h2>它和 named import 到底差在哪裡？</h2>
+        <p>以下兩種寫法都可以合法地使用 Effect。差別主要不在功能，而在閱讀、命名與維護方式。</p>
+
+        <div class="comparison">
+          <article>
+            <h3>Namespace import</h3>
+            <p>保留模組名稱，每次使用時都看得出 API 來自哪裡。</p>
+            <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">import</span> <span class="o">*</span> <span class="k">as</span> <span class="t">Effect</span>
+  <span class="k">from</span> <span class="s">"effect/Effect"</span><span class="o">;</span>
+
+<span class="t">Effect</span><span class="o">.</span><span class="p">gen</span><span class="o">(</span><span class="o">.</span><span class="o">.</span><span class="o">.</span><span class="o">)</span><span class="o">;</span>
+<span class="t">Effect</span><span class="o">.</span><span class="p">map</span><span class="o">(</span>program<span class="o">,</span> fn<span class="o">)</span><span class="o">;</span></code></pre>
+          </article>
+          <article>
+            <h3>Named import</h3>
+            <p>把個別名稱直接放進目前檔案，呼叫較短，但來源會隱藏起來。</p>
+            <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">import</span> <span class="o">{</span> gen<span class="o">,</span> map <span class="o">}</span>
+  <span class="k">from</span> <span class="s">"effect/Effect"</span><span class="o">;</span>
+
+<span class="f">gen</span><span class="o">(</span><span class="o">.</span><span class="o">.</span><span class="o">.</span><span class="o">)</span><span class="o">;</span>
+<span class="f">map</span><span class="o">(</span>program<span class="o">,</span> fn<span class="o">)</span><span class="o">;</span></code></pre>
+          </article>
+        </div>
+
+        <table>
+          <thead>
+            <tr><th>考量</th><th><code>import * as Effect</code></th><th><code>import { gen, map }</code></th></tr>
+          </thead>
+          <tbody>
+            <tr><td>閱讀呼叫處</td><td>一眼知道來自 Effect</td><td>需要從上下文或 import 區確認</td></tr>
+            <tr><td>命名衝突</td><td>較少；名稱放在 <code>Effect.*</code> 下</td><td><code>map</code>、<code>match</code> 等常見名稱容易碰撞</td></tr>
+            <tr><td>新增使用項目</td><td>通常不需修改 import</td><td>每增加一個函式就要加到清單</td></tr>
+            <tr><td>呼叫長度</td><td>較長，但來源清楚</td><td>較短</td></tr>
+            <tr><td>適合情境</td><td>一個模組提供完整 API 家族</td><td>只需要少數、角色明確的項目</td></tr>
+          </tbody>
+        </table>
+
+        <h3>一個實際的命名衝突</h3>
+        <p>Effect 很多模組都有常見的函式名稱。例如 <code>map</code> 可能同時來自 Effect、Array、Option 或 Stream。全部使用 named import 時，通常要重新命名：</p>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">import</span> <span class="o">{</span> map <span class="k">as</span> mapEffect <span class="o">}</span> <span class="k">from</span> <span class="s">"effect/Effect"</span><span class="o">;</span>
+<span class="k">import</span> <span class="o">{</span> map <span class="k">as</span> mapArray <span class="o">}</span> <span class="k">from</span> <span class="s">"effect/Array"</span><span class="o">;</span>
+
+<span class="f">mapEffect</span><span class="o">(</span>program<span class="o">,</span> value <span class="o">=</span><span class="o">&gt;</span> value <span class="o">+</span> <span class="n">1</span><span class="o">)</span><span class="o">;</span>
+<span class="f">mapArray</span><span class="o">(</span><span class="o">[</span><span class="n">1</span><span class="o">,</span> <span class="n">2</span><span class="o">]</span><span class="o">,</span> value <span class="o">=</span><span class="o">&gt;</span> value <span class="o">+</span> <span class="n">1</span><span class="o">)</span><span class="o">;</span></code></pre>
+
+        <p>保留模組 namespace 時，名稱本身就提供上下文：</p>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">import</span> <span class="o">*</span> <span class="k">as</span> <span class="t">Effect</span> <span class="k">from</span> <span class="s">"effect/Effect"</span><span class="o">;</span>
+<span class="k">import</span> <span class="o">*</span> <span class="k">as</span> <span class="t">Arr</span> <span class="k">from</span> <span class="s">"effect/Array"</span><span class="o">;</span>
+
+<span class="t">Effect</span><span class="o">.</span><span class="p">map</span><span class="o">(</span>program<span class="o">,</span> value <span class="o">=</span><span class="o">&gt;</span> value <span class="o">+</span> <span class="n">1</span><span class="o">)</span><span class="o">;</span>
+<span class="t">Arr</span><span class="o">.</span><span class="p">map</span><span class="o">(</span><span class="o">[</span><span class="n">1</span><span class="o">,</span> <span class="n">2</span><span class="o">]</span><span class="o">,</span> value <span class="o">=</span><span class="o">&gt;</span> value <span class="o">+</span> <span class="n">1</span><span class="o">)</span><span class="o">;</span></code></pre>
+      </section>
+
+      <section id="effect">
+        <h2>為什麼 Effect 特別常這樣寫？</h2>
+        <p>Effect 的 API 是按照概念拆成許多模組：<code>Effect</code>、<code>Layer</code>、<code>Schema</code>、<code>Stream</code>、<code>Option</code>、<code>FileSystem</code>。每個模組又提供一組彼此相關的型別、建構函式與組合函式。</p>
+        <p>namespace import 讓程式碼保留這個概念邊界：</p>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">import</span> <span class="o">*</span> <span class="k">as</span> <span class="t">BunServices</span> <span class="k">from</span> <span class="s">"@effect/platform-bun/BunServices"</span><span class="o">;</span>
+<span class="k">import</span> <span class="o">*</span> <span class="k">as</span> <span class="t">Effect</span> <span class="k">from</span> <span class="s">"effect/Effect"</span><span class="o">;</span>
+<span class="k">import</span> <span class="o">*</span> <span class="k">as</span> <span class="t">FileSystem</span> <span class="k">from</span> <span class="s">"effect/FileSystem"</span><span class="o">;</span>
+
+<span class="k">const</span> program <span class="o">=</span> <span class="t">Effect</span><span class="o">.</span><span class="p">gen</span><span class="o">(</span><span class="k">function</span><span class="o">*</span> <span class="o">(</span><span class="o">)</span> <span class="o">{</span>
+  <span class="k">const</span> fs <span class="o">=</span> <span class="k">yield</span><span class="o">*</span> <span class="t">FileSystem</span><span class="o">.</span><span class="p">FileSystem</span><span class="o">;</span>
+  <span class="k">yield</span><span class="o">*</span> fs<span class="o">.</span><span class="p">makeDirectory</span><span class="o">(</span><span class="s">"dist"</span><span class="o">,</span> <span class="o">{</span> recursive<span class="o">:</span> <span class="n">true</span> <span class="o">}</span><span class="o">)</span><span class="o">;</span>
+<span class="o">}</span><span class="o">)</span><span class="o">;</span>
+
+<span class="k">const</span> runnable <span class="o">=</span> <span class="t">Effect</span><span class="o">.</span><span class="p">provide</span><span class="o">(</span>program<span class="o">,</span> <span class="t">BunServices</span><span class="o">.</span><span class="p">layer</span><span class="o">)</span><span class="o">;</span></code></pre>
+
+        <p>閱讀者不用回到檔案頂端，就能辨認 <code>Effect.gen</code> 是 Effect 運算、<code>FileSystem.FileSystem</code> 是檔案系統 service tag、<code>BunServices.layer</code> 則是 Bun 平台提供的依賴集合。</p>
+
+        <h3>為什麼會出現 <code>FileSystem.FileSystem</code>？</h3>
+        <p>兩個相同單字扮演不同角色。左邊是你替模組取的本地名稱；右邊是該模組輸出的 service tag：</p>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="t">FileSystem</span><span class="o">.</span><span class="p">FileSystem</span>
+<span class="c">// ──────────  ──────────</span>
+<span class="c">// 模組名稱      模組輸出的 service tag</span></code></pre>
+
+        <p>這看起來有些重複，但能準確表達「從 FileSystem 模組取得 FileSystem service」。如果覺得特定情境太冗長，也可以只對該項目採 named import；那是風格取捨，不是正確性差異。</p>
+      </section>
+
+      <section id="t3">
+        <h2>不必把星號當成鐵律</h2>
+        <p>成熟的 TypeScript 程式通常混合使用兩種形式：核心 Effect 模組保留 namespace；聚合入口、CLI 定義與測試 helper 則可採 named import。標準不是「全案只能選一種」，而是呼叫處是否清楚且同類檔案是否一致。</p>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="c">// 一組完整 API：保留 namespace</span>
+<span class="k">import</span> <span class="o">*</span> <span class="k">as</span> <span class="t">Effect</span> <span class="k">from</span> <span class="s">"effect/Effect"</span><span class="o">;</span>
+<span class="k">import</span> <span class="o">*</span> <span class="k">as</span> <span class="t">Schema</span> <span class="k">from</span> <span class="s">"effect/Schema"</span><span class="o">;</span>
+<span class="k">import</span> <span class="o">*</span> <span class="k">as</span> <span class="t">NodeRuntime</span> <span class="k">from</span> <span class="s">"@effect/platform-node/NodeRuntime"</span><span class="o">;</span>
+
+<span class="c">// 聚合模組中只取少數明確項目：使用 named import</span>
+<span class="k">import</span> <span class="o">{</span> <span class="t">Argument</span><span class="o">,</span> <span class="t">Command</span><span class="o">,</span> <span class="t">Flag</span> <span class="o">}</span> <span class="k">from</span> <span class="s">"effect/unstable/cli"</span><span class="o">;</span>
+<span class="k">import</span> <span class="o">{</span> <span class="t">ChildProcess</span> <span class="o">}</span> <span class="k">from</span> <span class="s">"effect/unstable/process"</span><span class="o">;</span></code></pre>
+
+        <p>同一個公開 API 也可能有兩種合法匯入方式：</p>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="c">// 從聚合入口取得一個名為 ChildProcess 的子模組</span>
+<span class="k">import</span> <span class="o">{</span> <span class="t">ChildProcess</span> <span class="o">}</span> <span class="k">from</span> <span class="s">"effect/unstable/process"</span><span class="o">;</span>
+
+<span class="c">// 直接進入子模組，再替整個子模組取名</span>
+<span class="k">import</span> <span class="o">*</span> <span class="k">as</span> <span class="t">ChildProcess</span>
+  <span class="k">from</span> <span class="s">"effect/unstable/process/ChildProcess"</span><span class="o">;</span></code></pre>
+
+        <p>使用時兩者都可以寫成 <code>ChildProcess.make(...)</code>。第一種是從 barrel module 取出 Effect 已經幫忙命名的 namespace；第二種則是直接匯入子模組並在目前檔案命名。它們在閱讀結果上很接近，選擇通常取決於專案的一致性、套件公開入口與團隊偏好。</p>
+      </section>
+
+      <section id="rules">
+        <h2>實務上怎麼選？</h2>
+        <p>不必記一套複雜規章。先問：「我現在拿的是一整組有共同概念的 API，還是幾個角色非常明確的名字？」</p>
+
+        <table>
+          <thead>
+            <tr><th>你正在匯入什麼？</th><th>建議寫法</th><th>例子</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Effect 的核心概念模組</td><td>namespace import</td><td><code>Effect</code>、<code>Layer</code>、<code>Schema</code>、<code>Stream</code></td></tr>
+            <tr><td>平台 runtime 或 services 模組</td><td>namespace import</td><td><code>BunRuntime</code>、<code>BunServices</code></td></tr>
+            <tr><td>聚合入口中的少數子模組</td><td>named import</td><td><code>{ ChildProcess }</code></td></tr>
+            <tr><td>CLI 或測試框架的少數 helper</td><td>named import</td><td><code>{ Command, Flag }</code>、<code>{ describe, it }</code></td></tr>
+            <tr><td>只作為 TypeScript 型別使用</td><td>加上 <code>import type</code></td><td><code>import type * as Duration</code></td></tr>
+          </tbody>
+        </table>
+
+        <aside class="callout">
+          <p><strong>對小型 Effect 專案的實用預設：</strong>看到 <code>effect/Effect</code>、<code>effect/Data</code>、<code>effect/FileSystem</code> 這種直接子模組路徑時，先使用 <code>import * as</code>；看到 <code>effect/unstable/cli</code>、<code>effect/unstable/process</code> 這種聚合入口時，再考慮 named import。</p>
+        </aside>
+
+        <h3>一份一致的 Effect import 範例</h3>
+        <p>下面示範核心模組使用 namespace，而聚合入口只取一個角色清楚的子模組：</p>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">import</span> <span class="o">*</span> <span class="k">as</span> <span class="t">BunRuntime</span> <span class="k">from</span> <span class="s">"@effect/platform-bun/BunRuntime"</span><span class="o">;</span>
+<span class="k">import</span> <span class="o">*</span> <span class="k">as</span> <span class="t">BunServices</span> <span class="k">from</span> <span class="s">"@effect/platform-bun/BunServices"</span><span class="o">;</span>
+<span class="k">import</span> <span class="o">*</span> <span class="k">as</span> <span class="t">Console</span> <span class="k">from</span> <span class="s">"effect/Console"</span><span class="o">;</span>
+<span class="k">import</span> <span class="o">*</span> <span class="k">as</span> <span class="t">Data</span> <span class="k">from</span> <span class="s">"effect/Data"</span><span class="o">;</span>
+<span class="k">import</span> <span class="o">*</span> <span class="k">as</span> <span class="t">Effect</span> <span class="k">from</span> <span class="s">"effect/Effect"</span><span class="o">;</span>
+<span class="k">import</span> <span class="o">*</span> <span class="k">as</span> <span class="t">FileSystem</span> <span class="k">from</span> <span class="s">"effect/FileSystem"</span><span class="o">;</span>
+<span class="k">import</span> <span class="o">{</span> <span class="t">ChildProcess</span> <span class="o">}</span> <span class="k">from</span> <span class="s">"effect/unstable/process"</span><span class="o">;</span></code></pre>
+
+        <p>這並不是「更正確」的版本。真正重要的是：核心模組的呼叫保留清楚來源，而同類檔案採取一致風格。當團隊能看到 <code>Effect.gen</code> 就立刻辨認抽象層次時，namespace import 的價值就已經發揮了。</p>
+      </section>
+
+      <section id="glossary">
+        <h2>幾個容易混在一起的名詞</h2>
+        <dl class="term">
+          <div><dt>Module</dt><dd>一個 JavaScript／TypeScript 檔案或套件公開入口，以及它對外 export 的內容。</dd></div>
+          <div><dt>Namespace import</dt><dd><code>import * as Name</code>；把模組的公開內容放在一個本地名稱底下。</dd></div>
+          <div><dt>Named import</dt><dd><code>import { name }</code>；把指定 export 直接帶進目前檔案作用域。</dd></div>
+          <div><dt>Barrel module</dt><dd>集中重新 export 多個子模組或項目的入口，例如 <code>effect/unstable/process</code>。</dd></div>
+          <div><dt>Tree shaking</dt><dd>bundler 分析 ESM 使用情形並嘗試移除未使用程式碼的最佳化過程。</dd></div>
+        </dl>
+      </section>
+
+      <footer class="sources">
+        <h2>版本與查核</h2>
+        <ul>
+          <li>本文範例以 <code>effect@4.0.0-beta.98</code> 的公開 module export 為準。</li>
+          <li>匯入路徑屬於 API 契約；升級 major／beta 版本時應以套件 exports 與 TypeScript typecheck 重新確認。</li>
+        </ul>
+      </footer>
+      <p><a href="./effect-learning-path.html">返回 Effect 4 學習路徑</a></p>
+    </article>
+  </main>
+  <script>
+    (() => {
+      const copyIcon = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="11" height="11" rx="2"></rect><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"></path></svg>';
+      const checkIcon = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"></path></svg>';
+
+      const copyText = async (text) => {
+        if (navigator.clipboard?.writeText) return navigator.clipboard.writeText(text);
+        const area = document.createElement("textarea");
+        area.value = text;
+        area.style.position = "fixed";
+        area.style.opacity = "0";
+        document.body.append(area);
+        area.select();
+        document.execCommand("copy");
+        area.remove();
+      };
+
+      document.querySelectorAll("pre").forEach((pre) => {
+        const code = pre.querySelector("code");
+        if (!code) return;
+
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "copy-code";
+        button.setAttribute("aria-label", "複製程式碼");
+        button.innerHTML = copyIcon;
+        button.addEventListener("click", async () => {
+          await copyText(code.textContent ?? "");
+          button.classList.add("copied");
+          button.innerHTML = checkIcon;
+          window.setTimeout(() => {
+            button.classList.remove("copied");
+            button.innerHTML = copyIcon;
+          }, 1400);
+        });
+        pre.append(button);
+
+        const track = document.createElement("div");
+        track.className = "code-scrollbar";
+        const thumb = document.createElement("div");
+        thumb.className = "code-scrollbar-thumb";
+        track.append(thumb);
+        pre.append(track);
+
+        const sync = () => {
+          const ratio = Math.min(1, code.clientWidth / code.scrollWidth);
+          const trackWidth = track.clientWidth;
+          const thumbWidth = trackWidth * ratio;
+          const maxLeft = Math.max(0, trackWidth - thumbWidth);
+          const scrollMax = Math.max(1, code.scrollWidth - code.clientWidth);
+          thumb.style.width = `${thumbWidth}px`;
+          thumb.style.transform = `translateX(${maxLeft * code.scrollLeft / scrollMax}px)`;
+          track.classList.toggle("hidden", ratio >= 1);
+        };
+
+        code.addEventListener("scroll", sync, { passive: true });
+        window.addEventListener("resize", sync, { passive: true });
+        track.addEventListener("click", (event) => {
+          if (event.target === thumb) return;
+          const rect = track.getBoundingClientRect();
+          const ratio = (event.clientX - rect.left) / rect.width;
+          code.scrollLeft = ratio * (code.scrollWidth - code.clientWidth);
+        });
+
+        let dragStart = 0;
+        let scrollStart = 0;
+        thumb.addEventListener("pointerdown", (event) => {
+          dragStart = event.clientX;
+          scrollStart = code.scrollLeft;
+          thumb.setPointerCapture(event.pointerId);
+        });
+        thumb.addEventListener("pointermove", (event) => {
+          if (!thumb.hasPointerCapture(event.pointerId)) return;
+          const movable = Math.max(1, track.clientWidth - thumb.clientWidth);
+          const scrollable = Math.max(0, code.scrollWidth - code.clientWidth);
+          code.scrollLeft = scrollStart + (event.clientX - dragStart) * scrollable / movable;
+        });
+        sync();
+      });
+    })();
+  </script>
+</body>
+</html>

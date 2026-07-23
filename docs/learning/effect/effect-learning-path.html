@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Effect 4 教學文章的分級學習路徑。">
+  <title>Effect 4 學習路徑</title>
+  <link rel="stylesheet" href="../../assets/learning-article.css">
+</head>
+<body>
+  <main>
+    <article>
+      <h1>Effect 4 學習路徑</h1>
+      <p class="deck">這些文章不是同一主題的重複版本，而是從語法、組合、錯誤、依賴到資源生命週期的不同層級。依序閱讀能避免一開始同時承擔太多概念。</p>
+      <p class="meta"><strong>版本基準：</strong><code>effect@4.0.0-beta.98</code>；Bun 文章另使用 <code>@effect/platform-bun@4.0.0-beta.98</code>。</p>
+
+      <h2>第一階段：讀懂型別與組合</h2>
+      <ol>
+        <li><a href="./effect-namespace-imports-guide.html">Namespace imports</a></li>
+        <li><a href="./effect-flatmap-and-pipe-guide.html">pipe、map 與 flatMap</a></li>
+        <li><a href="./effect-composition-guide.html">依需求選擇組合方式</a></li>
+        <li><a href="./effect-laziness-and-suspend-guide.html">Effect 的建構與執行時間</a></li>
+      </ol>
+
+      <h2>第二階段：Typed errors</h2>
+      <ol>
+        <li><a href="./effect-tagged-error-introduction.html">為什麼使用 tagged error</a></li>
+        <li><a href="./effect-data-tagged-error-guide.html">定義、產生與處理 TaggedError</a></li>
+        <li><a href="./effect-error-cause-contract-guide.html">cause 的公開型別邊界</a></li>
+        <li><a href="./effect-tagged-error-sensitive-cause-weakmap-guide.html">敏感 cause 與 WeakMap</a></li>
+      </ol>
+
+      <h2>第三階段：依賴與 Layer</h2>
+      <ol>
+        <li><a href="./effect-context-service-guide.html">Context.Service 完整入門</a></li>
+        <li><a href="./effect-context-service-git-case-study.html">以 Git service 練習 contract 與 Layer</a></li>
+        <li><a href="./effect-bun-services-dependency-injection-guide.html">BunServices、provide 與 R = never</a></li>
+        <li><a href="./effect-service-file-layout-guide.html">Service module 的檔案版型</a></li>
+      </ol>
+
+      <h2>第四階段：資源、分支與 CLI</h2>
+      <ol>
+        <li><a href="./effect-scope-scoped-guide.html">Scope 與 Effect.scoped</a></li>
+        <li><a href="./effect-pipe-scope-boundaries-guide.html">Operator 位置如何改變包裝邊界</a></li>
+        <li><a href="./effect-match-core-guide.html">Match 與 exhaustive handling</a></li>
+        <li><a href="./effect-cli-flag-guide.html">CLI Flags</a></li>
+        <li><a href="./effect-cli-argument-flag-error-boundaries.html">Argument、Flag 與 CliError</a></li>
+        <li><a href="./effect-bun-cli-command-guide.html">CLI Command 與 ChildProcess 的責任</a></li>
+      </ol>
+
+      <div class="callout">
+        <strong>案例文章的定位</strong>
+        <p>Git service、Bun build script 與 WeakMap error 都是把前面概念放進真實邊界的案例，不應拿來取代 Context、Scope 或 TaggedError 的基礎文章。</p>
+      </div>
+    </article>
+  </main>
+</body>
+</html>
