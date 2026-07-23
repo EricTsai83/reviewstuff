@@ -1,0 +1,878 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>讀懂 Effect TaggedError 裡的 WeakMap 與 cause</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --clay: #D97757;
+      --slate: #141413;
+      --ivory: #FAF9F5;
+      --oat: #E3DACC;
+      --white: #FFFFFF;
+      --gray-100: #F0EEE6;
+      --gray-300: #D1CFC5;
+      --gray-500: #87867F;
+      --gray-700: #3D3D3A;
+      --warning: #C78E3F;
+      --safe: #477D6B;
+      --safe-soft: #E7F0EB;
+      --space-sm: 8px;
+      --space-md: 12px;
+      --space-lg: 16px;
+      --space-xl: 24px;
+      --space-2xl: 32px;
+      --space-3xl: 48px;
+      --radius-sm: 4px;
+      --radius-md: 8px;
+      --content-width: 68ch;
+    }
+
+    * { box-sizing: border-box; }
+
+    html {
+      scroll-behavior: smooth;
+      background: var(--ivory);
+    }
+
+    body {
+      margin: 0;
+      color: var(--slate);
+      background: var(--ivory);
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 16px;
+      font-weight: 430;
+      line-height: 1.55;
+      letter-spacing: 0;
+      text-rendering: optimizeLegibility;
+    }
+
+    main {
+      max-width: var(--content-width);
+      margin: 0 auto;
+      padding: var(--space-3xl) var(--space-xl);
+    }
+
+    article {
+      padding: 0;
+      border: 0;
+      border-radius: 0;
+      background: transparent;
+      box-shadow: none;
+    }
+
+    h1, h2, h3 {
+      color: var(--slate);
+      text-wrap: balance;
+    }
+
+    h1 {
+      margin: 0;
+      max-width: none;
+      font-size: 1.8rem;
+      line-height: 1.18;
+      overflow-wrap: normal;
+    }
+
+    h2 {
+      margin: var(--space-3xl) 0 var(--space-md);
+      font-size: 1.22rem;
+      line-height: 1.25;
+    }
+
+    h3 {
+      margin: var(--space-xl) 0 var(--space-sm);
+      font-size: 1rem;
+      line-height: 1.35;
+    }
+
+    p, ul, ol { margin: 0 0 var(--space-md); }
+
+    .deck {
+      margin: var(--space-md) 0 0;
+      color: var(--gray-700);
+      font-size: 1rem;
+    }
+
+    nav {
+      margin: var(--space-xl) 0 0;
+      padding: var(--space-lg);
+      border: 1px solid var(--oat);
+      border-radius: var(--radius-md);
+      background: rgba(255, 255, 255, 0.55);
+    }
+
+    nav strong {
+      display: block;
+      margin-bottom: var(--space-sm);
+      font-size: 0.92rem;
+    }
+
+    nav ol {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 0.3rem 1.5rem;
+      margin: 0;
+      padding-left: 1.3rem;
+    }
+
+    a {
+      color: var(--clay);
+      text-decoration-thickness: 1px;
+      text-underline-offset: 0.16em;
+    }
+
+    code {
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+      font-size: 0.88em;
+    }
+
+    p code, li code, td code {
+      padding: 0.08em 0.3em;
+      border: 1px solid var(--oat);
+      border-radius: var(--radius-sm);
+      background: var(--gray-100);
+      overflow-wrap: anywhere;
+    }
+
+    pre {
+      position: relative;
+      width: 100%;
+      margin: var(--space-lg) 0 var(--space-xl);
+      border: 1px solid #26241f;
+      border-radius: var(--radius-md);
+      background: #11110f;
+      color: #d8d4ca;
+      overflow: hidden;
+    }
+
+    pre .label {
+      display: none;
+    }
+
+    pre code {
+      display: block;
+      padding: 18px 64px 18px 22px;
+      border: 0;
+      color: inherit;
+      background: transparent;
+      overflow-x: auto;
+      white-space: pre;
+      font-size: 0.875rem;
+      font-weight: 400;
+      line-height: 1.62;
+      scrollbar-width: none;
+      tab-size: 2;
+    }
+
+    pre code::-webkit-scrollbar { width: 0; height: 0; }
+
+    .copy-code {
+      position: absolute;
+      top: 9px;
+      right: 9px;
+      z-index: 2;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 30px;
+      height: 30px;
+      padding: 0;
+      border: 1px solid rgba(250, 249, 245, 0.14);
+      border-radius: var(--radius-sm);
+      background: rgba(250, 249, 245, 0.06);
+      color: rgba(250, 249, 245, 0.72);
+      cursor: pointer;
+    }
+
+    .copy-code:hover,
+    .copy-code:focus-visible {
+      border-color: rgba(250, 249, 245, 0.28);
+      color: var(--ivory);
+      background: rgba(250, 249, 245, 0.12);
+      outline: none;
+    }
+
+    .copy-code.copied {
+      border-color: rgba(143, 184, 106, 0.42);
+      color: #b8d99a;
+      background: rgba(143, 184, 106, 0.14);
+    }
+
+    .copy-code svg {
+      width: 13px;
+      height: 13px;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 1.8;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      pointer-events: none;
+    }
+
+    .code-scrollbar {
+      position: absolute;
+      right: 0;
+      bottom: 0;
+      left: 0;
+      height: 3px;
+      border-radius: 999px;
+      background: rgba(250, 249, 245, 0.1);
+      cursor: pointer;
+    }
+
+    .code-scrollbar.hidden { display: none; }
+
+    .code-scrollbar-thumb {
+      height: 100%;
+      border-radius: inherit;
+      background: rgba(255, 148, 110, 0.82);
+      transform: translateX(0);
+      cursor: grab;
+    }
+
+    .code-scrollbar-thumb:active { cursor: grabbing; }
+
+    pre code .k { color: #ff946e; font-weight: 400; }
+    pre code .s { color: #8fb86a; }
+    pre code .n,
+    pre code .p { color: #d8d4ca; }
+    pre code .c { color: #858177; font-style: italic; }
+    pre code .f { color: #cfc6a2; }
+    pre code .t { color: #cfc6a2; font-weight: 400; }
+    pre code .o { color: #ff946e; }
+
+    .callout {
+      margin: var(--space-lg) 0;
+      padding: var(--space-md) var(--space-lg);
+      border: 1px solid var(--oat);
+      border-left: 4px solid var(--clay);
+      border-radius: var(--radius-md);
+      background: var(--gray-100);
+    }
+
+    .callout.safe {
+      border-left-color: var(--safe);
+      background: var(--safe-soft);
+    }
+
+    .callout p:last-child { margin-bottom: 0; }
+
+    .analogy {
+      display: grid;
+      grid-template-columns: 1fr auto 1fr;
+      gap: 0.9rem;
+      align-items: center;
+      margin: var(--space-lg) 0;
+      padding: var(--space-lg);
+      border: 1px solid #c9d9d1;
+      border-radius: var(--radius-md);
+      background: var(--safe-soft);
+    }
+
+    .analogy-part {
+      min-height: 7.2rem;
+      padding: var(--space-md);
+      border-radius: var(--radius-md);
+      background: rgba(255, 255, 255, 0.82);
+    }
+
+    .analogy-part strong {
+      display: block;
+      margin-bottom: 0.3rem;
+      color: var(--safe);
+    }
+
+    .analogy-arrow {
+      color: var(--safe);
+      font-size: 1.4rem;
+      font-weight: 800;
+    }
+
+    .table-wrap {
+      overflow-x: auto;
+      margin: var(--space-lg) 0;
+      border: 1px solid var(--oat);
+      border-radius: var(--radius-md);
+      background: var(--white);
+    }
+
+    table {
+      width: 100%;
+      min-width: 630px;
+      border-collapse: collapse;
+      font-size: 0.94rem;
+      line-height: 1.55;
+    }
+
+    th, td {
+      padding: 0.85rem 1rem;
+      border-bottom: 1px solid var(--oat);
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th {
+      color: var(--gray-700);
+      background: var(--gray-100);
+      font-size: 0.8rem;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    tr:last-child td { border-bottom: 0; }
+
+    .steps {
+      counter-reset: step;
+      display: grid;
+      gap: var(--space-md);
+      margin: var(--space-lg) 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .steps li {
+      position: relative;
+      padding: 1rem 1rem 1rem 3.5rem;
+      border: 1px solid var(--oat);
+      border-radius: var(--radius-md);
+      background: var(--white);
+    }
+
+    .steps li::before {
+      counter-increment: step;
+      content: counter(step);
+      position: absolute;
+      top: 1rem;
+      left: 1rem;
+      display: grid;
+      width: 1.7rem;
+      height: 1.7rem;
+      place-items: center;
+      border-radius: 50%;
+      color: white;
+      background: var(--clay);
+      font-size: 0.8rem;
+      font-weight: 800;
+    }
+
+    .steps strong { display: block; margin-bottom: 0.15rem; }
+
+    .object-model {
+      margin: var(--space-lg) 0;
+      padding: 1.2rem;
+      border: 1px solid var(--oat);
+      border-radius: var(--radius-md);
+      background: var(--white);
+    }
+
+    .object-model ul {
+      display: grid;
+      gap: 0.6rem;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .object-model li {
+      display: grid;
+      grid-template-columns: 8rem 1fr;
+      gap: 1rem;
+      padding-bottom: 0.6rem;
+      border-bottom: 1px dashed var(--oat);
+    }
+
+    .object-model li:last-child {
+      padding-bottom: 0;
+      border-bottom: 0;
+    }
+
+    .object-model strong { color: var(--clay); }
+
+    .closing {
+      margin-top: var(--space-2xl);
+      padding-top: var(--space-xl);
+      border-top: 1px solid var(--oat);
+    }
+
+    @media (max-width: 640px) {
+      body { font-size: 15px; }
+      h1 { font-size: 1.65rem; }
+      main { padding: var(--space-xl); }
+      nav ol { grid-template-columns: 1fr; }
+      .analogy {
+        grid-template-columns: 1fr;
+      }
+      .analogy-part { min-height: 0; }
+      .analogy-arrow {
+        justify-self: center;
+        transform: rotate(90deg);
+      }
+      .object-model li {
+        grid-template-columns: 1fr;
+        gap: 0.15rem;
+      }
+      pre code { font-size: 0.8125rem; line-height: 1.5; }
+      p code,
+      li code,
+      td code { font-size: 0.9em; }
+      table,
+      .deck { font-size: 0.875rem; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <article>
+      <h1>讀懂 Effect TaggedError 裡的 WeakMap 與 cause</h1>
+      <p class="deck">這篇文章從最普通的錯誤類別開始，逐步解釋為什麼某些錯誤需要自己寫 <code>constructor</code>、把資料放進 <code>WeakMap</code>，再用 getter 提供 <code>cause</code>。讀完後，你應該能逐行說出這段程式在做什麼，以及它保護了什麼、沒有保護什麼。</p>
+
+      <nav aria-label="文章目錄">
+        <strong>閱讀路徑</strong>
+        <ol>
+          <li><a href="#job">這個 error 負責什麼</a></li>
+          <li><a href="#simple">先看最簡單版本</a></li>
+          <li><a href="#problem">問題出在序列化</a></li>
+          <li><a href="#solution">特殊版本怎麼解決</a></li>
+          <li><a href="#read-vs-json">可讀取不等於會序列化</a></li>
+          <li><a href="#line-by-line">逐行拆解</a></li>
+          <li><a href="#boundary">保護範圍與限制</a></li>
+        </ol>
+      </nav>
+
+      <section id="job">
+        <h2>先確定：這個 error 負責什麼？</h2>
+        <p>假設程式會讀取一份 JSON 設定檔。讀取過程可能在兩個不同階段失敗：</p>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>失敗階段</th>
+                <th>例子</th>
+                <th>適合的錯誤</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>檔案讀取</td>
+                <td>檔案不存在、權限不足、硬碟錯誤</td>
+                <td><code>ConfigFileReadError</code></td>
+              </tr>
+              <tr>
+                <td>內容驗證</td>
+                <td>JSON 欄位錯誤、型別錯誤、不符合 Schema</td>
+                <td><code>ConfigFileInvalidError</code></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p><code>ConfigFileInvalidError</code> 處理的是第二種情況：檔案已經讀到了，但內容不能被程式接受。</p>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="t">Schema</span><span class="o">.</span><span class="p">decodeUnknownEffect</span><span class="o">(</span><span class="t">ConfigSchema</span><span class="o">)</span><span class="o">(</span>contents<span class="o">)</span><span class="o">.</span><span class="p">pipe</span><span class="o">(</span>
+  <span class="t">Effect</span><span class="o">.</span><span class="p">mapError</span><span class="o">(</span>
+    <span class="o">(</span>cause<span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span>
+      <span class="k">new</span> <span class="f">ConfigFileInvalidError</span><span class="o">(</span><span class="o">{</span>
+        path<span class="o">:</span> <span class="s">"reviewstuff.config.json"</span><span class="o">,</span>
+        cause<span class="o">,</span>
+      <span class="o">}</span><span class="o">)</span><span class="o">,</span>
+  <span class="o">)</span><span class="o">,</span>
+<span class="o">)</span></code></pre>
+
+        <p>上面的 <code>cause</code> 是 Schema 驗證失敗產生的原始錯誤。新的 domain error 則補上「哪一個設定檔無效」這個應用程式層級的資訊。</p>
+      </section>
+
+      <section id="simple">
+        <h2>先看其他 error 為什麼只有空的 <code>{}</code></h2>
+        <p>Effect 的 <code>Data.TaggedError</code> 是一個「產生錯誤 class 的函式」。最常見的寫法如下：</p>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">class</span> <span class="t">ConfigFileReadError</span> <span class="k">extends</span> <span class="t">Data</span><span class="o">.</span><span class="p">TaggedError</span><span class="o">(</span>
+  <span class="s">"ConfigFileReadError"</span><span class="o">,</span>
+<span class="o">)</span><span class="o">&lt;</span><span class="o">{</span>
+  readonly path<span class="o">:</span> string
+  readonly cause<span class="o">:</span> unknown
+<span class="o">}</span><span class="o">&gt;</span> <span class="o">{</span><span class="o">}</span></code></pre>
+
+        <p>這裡看起來有很多符號，但實際上只做三件事：</p>
+        <div class="object-model">
+          <ul>
+            <li><strong>錯誤名稱</strong><span><code>"ConfigFileReadError"</code> 會成為錯誤的 <code>_tag</code>，方便 Effect 按種類處理錯誤。</span></li>
+            <li><strong>錯誤資料</strong><span>泛型中的 <code>path</code> 和 <code>cause</code> 規定建立 instance 時必須傳入哪些資料。</span></li>
+            <li><strong>空 class body</strong><span><code>{}</code> 表示不額外改造父類別提供的行為。</span></li>
+          </ul>
+        </div>
+
+        <p>因此可以直接這樣建立錯誤：</p>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">const</span> error <span class="o">=</span> <span class="k">new</span> <span class="f">ConfigFileReadError</span><span class="o">(</span><span class="o">{</span>
+  path<span class="o">:</span> <span class="s">"reviewstuff.config.json"</span><span class="o">,</span>
+  cause<span class="o">:</span> originalError<span class="o">,</span>
+<span class="o">}</span><span class="o">)</span>
+
+error<span class="o">.</span><span class="p">_tag</span>  <span class="c">// "ConfigFileReadError"</span>
+error<span class="o">.</span><span class="p">path</span>  <span class="c">// "reviewstuff.config.json"</span>
+error<span class="o">.</span><span class="p">cause</span> <span class="c">// originalError</span></code></pre>
+
+        <div class="callout safe">
+          <p><strong>先建立一個心智模型：</strong>空的 <code>{}</code> 不是「什麼都沒做」，而是「完全採用 <code>Data.TaggedError</code> 預設幫我做好的 constructor 和資料儲存方式」。</p>
+        </div>
+      </section>
+
+      <section id="problem">
+        <h2>為什麼設定檔驗證錯誤不能直接用簡單版本？</h2>
+        <p>直覺上，我們也可以把它寫成空 class body：</p>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">class</span> <span class="t">ConfigFileInvalidError</span> <span class="k">extends</span> <span class="t">Data</span><span class="o">.</span><span class="p">TaggedError</span><span class="o">(</span>
+  <span class="s">"ConfigFileInvalidError"</span><span class="o">,</span>
+<span class="o">)</span><span class="o">&lt;</span><span class="o">{</span>
+  readonly path<span class="o">:</span> string
+  readonly cause<span class="o">:</span> unknown
+<span class="o">}</span><span class="o">&gt;</span> <span class="o">{</span><span class="o">}</span></code></pre>
+
+        <p>這在型別與錯誤處理上都能運作。問題是 Effect 的 <code>Data.TaggedError</code> 會記住傳給預設 constructor 的欄位，之後 <code>JSON.stringify(error)</code> 可能把這些欄位放入 JSON。</p>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">const</span> error <span class="o">=</span> <span class="k">new</span> <span class="f">ConfigFileInvalidError</span><span class="o">(</span><span class="o">{</span>
+  path<span class="o">:</span> <span class="s">"reviewstuff.config.json"</span><span class="o">,</span>
+  cause<span class="o">:</span> <span class="o">{</span>
+    rejectedValue<span class="o">:</span> <span class="s">"sk-secret-value"</span><span class="o">,</span>
+  <span class="o">}</span><span class="o">,</span>
+<span class="o">}</span><span class="o">)</span>
+
+<span class="t">JSON</span><span class="o">.</span><span class="p">stringify</span><span class="o">(</span>error<span class="o">)</span>
+<span class="c">// 可能包含：</span>
+<span class="c">// {"path":"reviewstuff.config.json",</span>
+<span class="c">//  "cause":{"rejectedValue":"sk-secret-value"},</span>
+<span class="c">//  "_tag":"ConfigFileInvalidError"}</span></code></pre>
+
+        <p>Schema 驗證錯誤常常需要指出「哪一個值不合法」，所以原始 <code>cause</code> 可能保留被拒絕的設定內容。如果設定檔意外包含 API key、token 或密碼，把整個 error 寫進結構化 log 時，就可能把敏感值一起送出去。</p>
+
+        <div class="callout">
+          <p><strong>真正的問題不是 <code>cause</code> 不能存在。</strong>程式仍需要它來除錯。問題是不能讓它自動成為 error 的可序列化資料。</p>
+        </div>
+      </section>
+
+      <section id="solution">
+        <h2>解法：提供 <code>cause</code> 的讀取入口，但不把本體交給預設序列化</h2>
+        <p>特殊版本把同一份錯誤資料分成兩個儲存位置：</p>
+
+        <div class="analogy" role="img" aria-label="error instance 像寄物牌，WeakMap 像寄物櫃；寄物牌可以找到櫃中的 cause，但掃描寄物牌本身不會看到 cause。">
+          <div class="analogy-part">
+            <strong>Error instance＝寄物牌</strong>
+            <span>牌面只有安全的 <code>path</code>。一般序列化主要看到這一邊。</span>
+          </div>
+          <div class="analogy-arrow" aria-hidden="true">→</div>
+          <div class="analogy-part">
+            <strong>WeakMap＝寄物櫃</strong>
+            <span>以寄物牌作為 key，另外保存可能敏感的 <code>cause</code>。</span>
+          </div>
+        </div>
+
+        <p>拿著某個 error instance，就能透過 getter 找到它在 <code>WeakMap</code> 裡的 cause；但只序列化 error instance 時，不會順便把外部寄物櫃的內容倒出來。</p>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>資料</th>
+                <th>放在哪裡</th>
+                <th>為什麼</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>path</code></td>
+                <td>傳給 <code>super({ path })</code></td>
+                <td>這是安全且適合被序列化的公開資料。</td>
+              </tr>
+              <tr>
+                <td><code>cause</code></td>
+                <td>外部的 <code>WeakMap</code></td>
+                <td>仍可供程式讀取，但不會成為傳給父類別的序列化參數。</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">const</span> configFileInvalidCauses <span class="o">=</span> <span class="k">new</span> <span class="t">WeakMap</span><span class="o">&lt;</span>object<span class="o">,</span> unknown<span class="o">&gt;</span><span class="o">(</span><span class="o">)</span>
+
+<span class="k">export</span> <span class="k">class</span> <span class="t">ConfigFileInvalidError</span> <span class="k">extends</span> <span class="t">Data</span><span class="o">.</span><span class="p">TaggedError</span><span class="o">(</span>
+  <span class="s">"ConfigFileInvalidError"</span><span class="o">,</span>
+<span class="o">)</span><span class="o">&lt;</span><span class="o">{</span>
+  readonly path<span class="o">:</span> string
+<span class="o">}</span><span class="o">&gt;</span> <span class="o">{</span>
+  <span class="f">constructor</span><span class="o">(</span>args<span class="o">:</span> <span class="o">{</span> readonly path<span class="o">:</span> string<span class="o">;</span> readonly cause<span class="o">:</span> unknown <span class="o">}</span><span class="o">)</span> <span class="o">{</span>
+    <span class="f">super</span><span class="o">(</span><span class="o">{</span> path<span class="o">:</span> args<span class="o">.</span><span class="p">path</span> <span class="o">}</span><span class="o">)</span>
+    configFileInvalidCauses<span class="o">.</span><span class="p">set</span><span class="o">(</span>this<span class="o">,</span> args<span class="o">.</span><span class="p">cause</span><span class="o">)</span>
+  <span class="o">}</span>
+
+  override get <span class="f">cause</span><span class="o">(</span><span class="o">)</span><span class="o">:</span> unknown <span class="o">{</span>
+    <span class="k">return</span> configFileInvalidCauses<span class="o">.</span><span class="p">get</span><span class="o">(</span>this<span class="o">)</span>
+  <span class="o">}</span>
+<span class="o">}</span></code></pre>
+
+        <p>建立 instance 時，呼叫端仍然必須提供 <code>path</code> 和 <code>cause</code>；差別只在於 class 自己決定這兩份資料要存在哪裡。</p>
+
+        <ol class="steps">
+          <li><strong>呼叫 constructor</strong><span>收到 <code>{ path, cause }</code>。</span></li>
+          <li><strong>初始化父類別</strong><span>只把安全的 <code>path</code> 傳給 <code>Data.TaggedError</code>。</span></li>
+          <li><strong>另外保存 cause</strong><span>用目前的 error instance，也就是 <code>this</code>，當成 <code>WeakMap</code> 的 key。</span></li>
+          <li><strong>需要時再讀取</strong><span><code>error.cause</code> 會觸發 getter，使用同一個 instance 從 <code>WeakMap</code> 找回原始錯誤。</span></li>
+        </ol>
+
+        <section id="read-vs-json">
+          <h3>「能讀取」與「會被序列化」是兩個獨立問題</h3>
+          <p>這個設計最容易混淆的地方，是把「物件有某個公開屬性」理解成「JSON 一定會包含這個屬性」。JavaScript 並不是這樣運作。判斷時要分別問兩個問題：</p>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>問題</th>
+                  <th>由誰決定</th>
+                  <th>這個 class 的答案</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>程式能否寫 <code>error.cause</code>？</td>
+                  <td>class 有沒有提供屬性或 getter</td>
+                  <td>可以，因為有公開的 <code>get cause()</code>。</td>
+                </tr>
+                <tr>
+                  <td><code>JSON.stringify(error)</code> 會不會輸出 cause？</td>
+                  <td>物件的 <code>toJSON()</code> 與可列舉的自身屬性</td>
+                  <td>不會，因為 cause 沒有放進這兩個位置。</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p>換句話說，「公開」只代表呼叫端有合法的讀取方式；它不代表這份資料一定屬於物件的預設 JSON 表示。</p>
+
+          <h3>路徑一：讀取 <code>error.cause</code></h3>
+          <p>當程式讀取屬性時，JavaScript 會在 class prototype 上找到 getter，然後執行 getter 內的程式：</p>
+
+          <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">const</span> cause <span class="o">=</span> error<span class="o">.</span><span class="p">cause</span>
+
+<span class="c">// 上面一行實際觸發：</span>
+configFileInvalidCauses<span class="o">.</span><span class="p">get</span><span class="o">(</span>error<span class="o">)</span></code></pre>
+
+          <p>此時使用的是 error instance 本身。它就像寄物牌，能在 <code>WeakMap</code> 中找到對應的原始 cause。因此以下檢查仍然成立：</p>
+
+          <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="t">Schema</span><span class="o">.</span><span class="p">isSchemaError</span><span class="o">(</span>error<span class="o">.</span><span class="p">cause</span><span class="o">)</span>
+<span class="c">// true</span></code></pre>
+
+          <h3>路徑二：執行 <code>JSON.stringify(error)</code></h3>
+          <p><code>JSON.stringify()</code> 不會把「所有理論上讀得到的屬性」逐一叫出來。若物件提供 <code>toJSON()</code>，它會先採用 <code>toJSON()</code> 的結果。Effect 的 <code>Data.TaggedError</code> 在這個版本中的概念可簡化成：</p>
+
+          <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="f">toJSON</span><span class="o">(</span><span class="o">)</span> <span class="o">{</span>
+  <span class="k">return</span> <span class="o">{</span>
+    <span class="o">.</span><span class="o">.</span><span class="o">.</span><span class="p">originalConstructorArgs</span><span class="o">,</span>
+    <span class="o">.</span><span class="o">.</span><span class="o">.</span><span class="p">this</span><span class="o">,</span>
+  <span class="o">}</span>
+<span class="o">}</span></code></pre>
+
+          <p>這裡的 <code>originalConstructorArgs</code> 代表父類別保存的原始參數；物件展開運算 <code>...this</code> 則只收集 instance 自己的可列舉屬性。普通版本把 <code>path</code> 和 <code>cause</code> 都交給父類別，所以兩者都可能出現在 <code>toJSON()</code> 的結果：</p>
+
+          <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="f">super</span><span class="o">(</span><span class="o">{</span>
+  path<span class="o">:</span> <span class="s">"config.json"</span><span class="o">,</span>
+  cause<span class="o">:</span> <span class="o">{</span> secret<span class="o">:</span> <span class="s">"sk-123"</span> <span class="o">}</span><span class="o">,</span>
+<span class="o">}</span><span class="o">)</span>
+
+<span class="t">JSON</span><span class="o">.</span><span class="p">stringify</span><span class="o">(</span>error<span class="o">)</span>
+<span class="c">// 類似：</span>
+<span class="c">// {"path":"config.json",</span>
+<span class="c">//  "cause":{"secret":"sk-123"},</span>
+<span class="c">//  "_tag":"ConfigFileInvalidError"}</span></code></pre>
+
+          <p>特殊版本只把 <code>path</code> 交給父類別：</p>
+
+          <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="f">super</span><span class="o">(</span><span class="o">{</span>
+  path<span class="o">:</span> <span class="s">"config.json"</span><span class="o">,</span>
+<span class="o">}</span><span class="o">)</span>
+
+configFileInvalidCauses<span class="o">.</span><span class="p">set</span><span class="o">(</span>
+  this<span class="o">,</span>
+  <span class="o">{</span> secret<span class="o">:</span> <span class="s">"sk-123"</span> <span class="o">}</span><span class="o">,</span>
+<span class="o">)</span>
+
+<span class="t">JSON</span><span class="o">.</span><span class="p">stringify</span><span class="o">(</span>error<span class="o">)</span>
+<span class="c">// 類似：</span>
+<span class="c">// {"path":"config.json",</span>
+<span class="c">//  "_tag":"ConfigFileInvalidError"}</span></code></pre>
+
+          <p><code>cause</code> 的 getter 位於 class prototype，真正的值又放在物件外面的 <code>WeakMap</code>。它既不是傳給父類別的原始參數，也不是 error instance 上可列舉的普通資料欄位，因此 Effect 的預設 <code>toJSON()</code> 不會把它帶入結果。</p>
+
+          <div class="callout safe">
+            <p><strong>精確的心智模型：</strong><code>error.cause</code> 是一個「查詢入口」，不是裝著 cause 本體的「可序列化欄位」。讀取屬性會使用入口查詢 <code>WeakMap</code>；序列化 error 則只包裝 error 自己的預設 JSON 資料。</p>
+          </div>
+        </section>
+      </section>
+
+      <section id="line-by-line">
+        <h2>逐行拆解最容易卡住的部分</h2>
+
+        <h3><code>new WeakMap&lt;object, unknown&gt;()</code></h3>
+        <p>這建立了剛才比喻中的「寄物櫃」：一張物件對應附加資料的表。key 必須是物件，這裡會放 error instance；value 可以是任何東西，這裡會放原始 Schema error。</p>
+
+        <pre><span class="label">Concept</span><code>error instance A ──對應──&gt; schema cause A
+error instance B ──對應──&gt; schema cause B</code></pre>
+
+        <p>它使用 <code>WeakMap</code> 而不是普通 <code>Map</code>，是因為 <code>WeakMap</code> 不會為了保留 key 而阻止 error instance 被垃圾回收。當 error 已經沒有其他引用時，這筆關聯也可以消失。</p>
+
+        <h3>泛型裡為什麼只有 <code>path</code>？</h3>
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="o">)</span><span class="o">&lt;</span><span class="o">{</span>
+  readonly path<span class="o">:</span> string
+<span class="o">}</span><span class="o">&gt;</span></code></pre>
+        <p>這個泛型描述的是交給 <code>Data.TaggedError</code> 預設資料機制的欄位。<code>cause</code> 不放在這裡，是為了避免它進入 Effect 保存的原始 constructor 參數。</p>
+
+        <h3>constructor 為什麼仍要求 <code>cause</code>？</h3>
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="f">constructor</span><span class="o">(</span>args<span class="o">:</span> <span class="o">{</span>
+  readonly path<span class="o">:</span> string
+  readonly cause<span class="o">:</span> unknown
+<span class="o">}</span><span class="o">)</span></code></pre>
+        <p>雖然父類別只管理 <code>path</code>，這個錯誤本身仍需要原始原因。因此自訂 constructor 對呼叫端要求兩個欄位，再自行拆開保存。</p>
+
+        <h3><code>super({ path: args.path })</code> 在做什麼？</h3>
+        <p>JavaScript 的子類別 constructor 必須先呼叫 <code>super()</code>，才能使用 <code>this</code>。這一行同時初始化 <code>Data.TaggedError</code>，而且刻意只交出可以安全序列化的 <code>path</code>。</p>
+
+        <h3><code>configFileInvalidCauses.set(this, args.cause)</code> 在做什麼？</h3>
+        <p>這不是把 <code>cause</code> 寫進 <code>this</code>。它是在 class 外面的表中建立一筆關聯：「現在這個 error instance」對應「這次傳入的 cause」。也就是拿這張寄物牌，把 cause 放進它對應的櫃位。</p>
+
+        <h3><code>override get cause()</code> 在做什麼？</h3>
+        <p>getter 讓讀取屬性看起來仍然很自然：</p>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code>error<span class="o">.</span><span class="p">cause</span></code></pre>
+
+        <p>但背後不是直接讀取 <code>error</code> 自己保存的欄位，而是執行：</p>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code>configFileInvalidCauses<span class="o">.</span><span class="p">get</span><span class="o">(</span>error<span class="o">)</span></code></pre>
+
+        <p><code>override</code> 則告訴 TypeScript：這個 getter 是刻意重新定義父類別 <code>Error</code> 已有的 <code>cause</code> 屬性，而不是不小心撞名。</p>
+      </section>
+
+      <section id="boundary">
+        <h2>這個設計保護了什麼，又沒有保護什麼？</h2>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>操作</th>
+                <th>結果</th>
+                <th>原因</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>error.path</code></td>
+                <td>取得設定檔路徑</td>
+                <td><code>path</code> 由父類別正常保存。</td>
+              </tr>
+              <tr>
+                <td><code>error.cause</code></td>
+                <td>取得原始 Schema error</td>
+                <td>getter 從 <code>WeakMap</code> 取回。</td>
+              </tr>
+              <tr>
+                <td><code>JSON.stringify(error)</code></td>
+                <td>不應包含 <code>cause</code></td>
+                <td><code>cause</code> 沒有傳給父類別，也不是 instance 上的普通資料欄位。</td>
+              </tr>
+              <tr>
+                <td>程式直接檢查 <code>error.cause</code></td>
+                <td>仍可能看到敏感內容</td>
+                <td>原始 cause 仍在記憶體中；它只是被排除於一般 JSON 序列化之外。</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="callout">
+          <p><strong>這不是完整的祕密抹除機制。</strong>它解決的是「不要讓 <code>JSON.stringify(error)</code> 自動帶出 cause」這個明確問題。若 logger 會主動深度讀取 getter、直接記錄 <code>error.cause</code>，敏感資料仍可能外洩。</p>
+        </div>
+
+        <p>因此，不是每個 error 都需要這種寫法。當 <code>cause</code> 不包含敏感輸入，或原始原因本來就應該成為公開、可序列化的錯誤契約時，簡單的空 class body 通常更清楚。只有在「程式需要讀取 cause，但序列化結果不應包含它」時，這個額外設計才有價值。</p>
+      </section>
+
+      <section class="closing">
+        <h2>把整段程式濃縮成一句話</h2>
+        <p><code>ConfigFileInvalidError</code> 自訂 constructor，把安全的 <code>path</code> 放進正常的 error 資料，把可能敏感的 <code>cause</code> 放進 <code>WeakMap</code>；getter 讓程式仍可用 <code>error.cause</code> 讀取它，同時避免一般 JSON 序列化自動輸出它。</p>
+      </section>
+    </article>
+  </main>
+  <script>
+    (() => {
+      const copyIcon = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="11" height="11" rx="2"></rect><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"></path></svg>';
+      const checkIcon = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"></path></svg>';
+
+      const copyText = async (text) => {
+        if (navigator.clipboard && window.isSecureContext) {
+          await navigator.clipboard.writeText(text);
+          return;
+        }
+
+        const textarea = document.createElement("textarea");
+        textarea.value = text;
+        textarea.style.position = "fixed";
+        textarea.style.opacity = "0";
+        document.body.append(textarea);
+        textarea.select();
+        document.execCommand("copy");
+        textarea.remove();
+      };
+
+      document.querySelectorAll("pre").forEach((pre) => {
+        const code = pre.querySelector("code");
+        if (!code) return;
+
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "copy-code";
+        button.setAttribute("aria-label", "複製程式碼");
+        button.innerHTML = copyIcon;
+        button.addEventListener("click", async () => {
+          await copyText(code.textContent || "");
+          button.classList.add("copied");
+          button.setAttribute("aria-label", "已複製");
+          button.innerHTML = checkIcon;
+          window.setTimeout(() => {
+            button.classList.remove("copied");
+            button.setAttribute("aria-label", "複製程式碼");
+            button.innerHTML = copyIcon;
+          }, 1400);
+        });
+        pre.append(button);
+
+        const track = document.createElement("div");
+        track.className = "code-scrollbar";
+        track.setAttribute("aria-hidden", "true");
+        const thumb = document.createElement("div");
+        thumb.className = "code-scrollbar-thumb";
+        track.append(thumb);
+        pre.append(track);
+
+        const syncThumb = () => {
+          const visibleRatio = code.clientWidth / code.scrollWidth;
+          track.classList.toggle("hidden", visibleRatio >= 1);
+          const thumbWidth = Math.max(visibleRatio * track.clientWidth, 36);
+          const maxThumbLeft = Math.max(track.clientWidth - thumbWidth, 0);
+          const maxScroll = Math.max(code.scrollWidth - code.clientWidth, 1);
+          thumb.style.width = `${thumbWidth}px`;
+          thumb.style.transform = `translateX(${(code.scrollLeft / maxScroll) * maxThumbLeft}px)`;
+        };
+
+        code.addEventListener("scroll", syncThumb, { passive: true });
+        window.addEventListener("resize", syncThumb, { passive: true });
+        track.addEventListener("pointerdown", (event) => {
+          const bounds = track.getBoundingClientRect();
+          const ratio = Math.min(Math.max((event.clientX - bounds.left) / bounds.width, 0), 1);
+          code.scrollLeft = ratio * (code.scrollWidth - code.clientWidth);
+          syncThumb();
+        });
+        syncThumb();
+      });
+    })();
+  </script>
+</body>
+</html>
