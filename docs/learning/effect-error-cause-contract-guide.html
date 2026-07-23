@@ -241,7 +241,7 @@ pre code .o { color: #ff946e; }
 
 <h1>錯誤的 cause 該用精確型別還是 unknown?</h1>
 
-<p class="deck">設計應用層錯誤型別時,包裝底層錯誤的 <code>cause</code> 欄位該標成當下可推導的精確型別,還是刻意收窄成 <code>unknown</code>?本文以 Effect 的 <code>PlatformError</code> 為例,說明「目前實際是什麼型別」與「公開 API 承諾什麼型別」是兩件不同的事,並提供一套以維護成本為軸的決策方法。</p>
+<p class="deck">設計應用層錯誤型別時,包裝底層錯誤的 <code>cause</code> 欄位該標成當下可推導的精確型別,還是刻意拓寬為 <code>unknown</code>,以縮小公開 API 的承諾?本文以 Effect 的 <code>PlatformError</code> 為例,說明「目前實際是什麼型別」與「公開 API 承諾什麼型別」是兩件不同的事,並提供一套以維護成本為軸的決策方法。</p>
 
 <h2>背景:typed error 與 cause 欄位</h2>
 
@@ -350,7 +350,7 @@ declare <span class="k">const</span> error<span class="o">:</span> <span class="
 
 <h2>什麼時候公開精確型別才是對的</h2>
 
-<p>收窄成 <code>unknown</code> 不是通則。有兩種情況,精確型別本來就是契約的一部分:</p>
+<p>將型別拓寬為 <code>unknown</code>、縮小公開承諾,並不是通則。有兩種情況,精確型別本來就是契約的一部分:</p>
 
 <p><strong>服務本身就是平台抽象。</strong>如果介面的職責就是包裝檔案系統,那 <code>PlatformError</code> 不是實作細節,而是它的語意:</p>
 
@@ -385,7 +385,7 @@ declare <span class="k">const</span> error<span class="o">:</span> <span class="
 <p>當「哪個比較優雅」吵不出結果時,換一組問題,答案通常會變得清楚:</p>
 
 <ol>
-  <li><strong>現在改的成本是多少?</strong>如果呼叫端沒有任何程式碼碰 <code>cause</code> 的內部結構,收窄成 <code>unknown</code> 是一行修改、零連鎖影響。這種時候「先這樣之後再說」省不到任何東西。</li>
+  <li><strong>現在改的成本是多少?</strong>如果呼叫端沒有任何程式碼碰 <code>cause</code> 的內部結構,將型別拓寬為 <code>unknown</code> 是一行修改、零連鎖影響。這種時候「先這樣之後再說」省不到任何東西。</li>
   <li><strong>之後改的成本會不會上升?</strong>錯誤型別有一個關鍵的成本轉折點:當錯誤開始被序列化——寫進 machine-readable 輸出、NDJSON 事件流、exit-code 契約、跨程序邊界——它的形狀就從內部型別變成對外契約。在那之後想把 <code>PlatformError</code> 從公開結構裡拿掉,就不再是改一行的事。</li>
   <li><strong>有沒有機制會把你帶回來修它?</strong>檢查 roadmap 或計畫文件:如果沒有任何一項工作會迫使你重新審視這個型別,那麼「暫時先這樣」就是自欺——沒有排程的暫時性決定,實際上是永久決定,直到它造成問題為止。</li>
 </ol>
