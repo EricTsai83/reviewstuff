@@ -54,6 +54,7 @@ service skeleton、flag 或空目錄。
 | [ ] TODO | 015 | [Preview The Exact Outbound Request](./015-preview-the-exact-outbound-request.md) | Safe cloud dogfood |
 | [ ] TODO | 016 | [Implement The OpenAI Responses Adapter](./016-implement-the-openai-responses-adapter.md) | Safe cloud dogfood |
 | [ ] TODO | 017 | [Select And Run The OpenAI Engine](./017-select-and-run-the-openai-engine.md) | Safe cloud dogfood |
+| [ ] TODO | 026 | [Add The Light Review Workload](./026-add-light-review-workload.md) | Safe cloud dogfood |
 | [ ] TODO | 018 | [Select A Repository With `--dir`](./018-select-a-repository-with-dir.md) | Real repository UX |
 | [ ] TODO | 019 | [Review An Exact Committed Range](./019-review-an-exact-committed-range.md) | Real repository UX |
 | [ ] TODO | 020 | [Review A Branch Using Merge-base Semantics](./020-review-a-branch-using-merge-base-semantics.md) | Real repository UX |
@@ -62,7 +63,6 @@ service skeleton、flag 或空目錄。
 | [ ] TODO | 023 | [Filter Review Paths Explicitly](./023-filter-review-paths-explicitly.md) | Real repository UX |
 | [ ] TODO | 024 | [Apply `.reviewstuffignore` As Exclusion-only Policy](./024-apply-reviewstuffignore-as-exclusion-only-policy.md) | Real repository UX |
 | [ ] TODO | 025 | [Centralize File Skip Policy](./025-centralize-file-skip-policy.md) | Real repository UX |
-| [ ] TODO | 026 | [Add The Light Review Workload](./026-add-light-review-workload.md) | Real repository UX |
 | [ ] TODO | 027 | [Define The Persisted Review Session Schema](./027-define-the-persisted-review-session-schema.md) | Durable automation beta |
 | [ ] TODO | 028 | [Store And Load Sessions Atomically](./028-store-and-load-sessions-atomically.md) | Durable automation beta |
 | [ ] TODO | 029 | [Persist Successful Review Sessions](./029-persist-successful-review-sessions.md) | Durable automation beta |
@@ -92,8 +92,8 @@ service skeleton、flag 或空目錄。
 | Milestone | Plans | Exit state |
 | --- | --- | --- |
 | Baseline closure | 005 | 現有 deterministic review pipeline 正式關閉 |
-| Safe cloud dogfood | 007–017 | 有 budget、privacy、redaction、preview 的 OpenAI review |
-| Real repository UX | 018–026 | repo root、commit/branch scopes、filters、skip policy、light workload |
+| Safe cloud dogfood | 007–017、026 | 有 budget、privacy、redaction、preview 的 OpenAI review 與 light workload |
+| Real repository UX | 018–025 | repo root、commit/branch scopes、filters、skip policy |
 | Durable automation beta | 027–037 | sessions、queries、exit-code contract、NDJSON、doctor、Codex CLI、provider reliability |
 | Supported macOS v1 | 038–047 | report polish、CI、signed artifact、Homebrew/npm、docs、readiness gate |
 

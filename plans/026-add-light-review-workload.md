@@ -2,8 +2,12 @@
 
 [← Plan index](./README.md)
 
-**Depends on:** 025。 **Learning:** reduce optional context work through one
+**Depends on:** 017。 **Learning:** reduce optional context work through one
 explicit workload contract without branching the review architecture。
+
+> 本 plan 已提前至 017 之後執行：light workload 的價值由真實 engine 解鎖（省 token 與
+> 費用），不依賴 018–025 的 repository UX。後續 023–025 的 path filter 與 skip policy
+> 落地時，插入在 workload budget selection 之前，不得改變 workload contract。
 
 ## Goal
 
@@ -105,9 +109,11 @@ Report 的 `budget` 仍是實際執行證據；`workload` 是使用者選擇與 
 ## Pipeline Placement
 
 ```text
-scope → path filters → centralized skip policy → workload budget selection
-      → redaction → preview or engine → report
+scope → workload budget selection → redaction → preview or engine → report
 ```
+
+（Plan 023–025 之後會在 workload budget selection 之前插入 path filters 與 centralized
+skip policy；本 plan 不預建它們。）
 
 Light workload 不得繞過 Plan 013–015 的 privacy、redaction 或 exact-request preview，且
 coverage 必須照常揭露 reviewed、truncated 與 skipped hunks/files。
@@ -150,7 +156,8 @@ coverage 必須照常揭露 reviewed、truncated 與 skipped hunks/files。
 - v1 config migration 保留既有 effective execution settings。
 - invalid config 的錯誤訊息包含欄位級 schema 細節，不再只回報整份檔案不符。
 - `ReviewRequestV1` 與 Plan 016 adapter contract 不需改版。
-- privacy、redaction、preview、path filtering、skip policy 與 coverage contracts 全部維持。
+- privacy、redaction、preview 與 coverage contracts 全部維持（path filtering 與 skip
+  policy 由後續 023–025 引入，不在本 plan 驗收範圍）。
 - source CLI 與重新 build 後的 standalone binary 都通過 smoke/e2e。
 
 ## Verification
