@@ -56,6 +56,7 @@ service skeleton、flag 或空目錄。
 | [ ] TODO | 017 | [Select And Run The OpenAI Engine](./017-select-and-run-the-openai-engine.md) | Safe cloud dogfood |
 | [ ] TODO | 026 | [Add The Light Review Workload](./026-add-light-review-workload.md) | Safe cloud dogfood |
 | [ ] TODO | 018 | [Select A Repository With `--dir`](./018-select-a-repository-with-dir.md) | Real repository UX |
+| [ ] TODO | 048 | [Explain Effective Configuration Sources](./048-explain-effective-configuration-sources.md) | Real repository UX |
 | [ ] TODO | 019 | [Review An Exact Committed Range](./019-review-an-exact-committed-range.md) | Real repository UX |
 | [ ] TODO | 020 | [Review A Branch Using Merge-base Semantics](./020-review-a-branch-using-merge-base-semantics.md) | Real repository UX |
 | [ ] TODO | 021 | [Compose Committed And Uncommitted Scopes](./021-compose-committed-and-uncommitted-scopes.md) | Real repository UX |
@@ -93,7 +94,7 @@ service skeleton、flag 或空目錄。
 | --- | --- | --- |
 | Baseline closure | 005 | 現有 deterministic review pipeline 正式關閉 |
 | Safe cloud dogfood | 007–017、026 | 有 budget、privacy、redaction、preview 的 OpenAI review 與 light workload |
-| Real repository UX | 018–025 | repo root、commit/branch scopes、filters、skip policy |
+| Real repository UX | 018、048、019–025 | repo root、effective config provenance、commit/branch scopes、filters、skip policy |
 | Durable automation beta | 027–037 | sessions、queries、exit-code contract、NDJSON、doctor、Codex CLI、provider reliability |
 | Supported macOS v1 | 038–047 | report polish、CI、signed artifact、Homebrew/npm、docs、readiness gate |
 
