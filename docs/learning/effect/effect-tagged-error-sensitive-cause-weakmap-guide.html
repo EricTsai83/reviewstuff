@@ -137,6 +137,11 @@
       overflow-wrap: anywhere;
     }
 
+    td code {
+      white-space: nowrap;
+      overflow-wrap: normal;
+    }
+
     pre {
       position: relative;
       width: 100%;
@@ -427,24 +432,24 @@
   <main>
     <article>
       <h1>Effect TaggedError 的敏感 cause：WeakMap 與安全序列化</h1>
-      <p><strong>版本基準：</strong><code>effect@4.0.0-beta.98</code>。涉及 <code>Data.TaggedError</code> 序列化行為的內容應以此版本解讀。</p>
-      <p class="deck">這篇文章從最普通的錯誤類別開始，逐步解釋為什麼某些錯誤需要自己寫 <code>constructor</code>、把資料放進 <code>WeakMap</code>，再用 getter 提供 <code>cause</code>。讀完後，你應該能逐行說出這段程式在做什麼，以及它保護了什麼、沒有保護什麼。</p>
+      <p class="deck">全文只處理一個核心問題：原始 <code>cause</code> 對程式診斷很有用，卻可能包含不適合進入 JSON 或結構化 log 的敏感資料。這篇文章會從這個衝突開始，逐步推導出為什麼需要自訂 constructor、<code>WeakMap</code> 與 getter。</p>
+      <p><strong>版本基準：</strong><code>effect@4.0.0-beta.98</code>。本文談到的 <code>Data.TaggedError</code> 序列化細節，都是以這個版本的實作為準。</p>
 
       <nav aria-label="文章目錄">
         <strong>閱讀路徑</strong>
         <ol>
-          <li><a href="#job">這個 error 負責什麼</a></li>
-          <li><a href="#simple">先看最簡單版本</a></li>
-          <li><a href="#problem">問題出在序列化</a></li>
-          <li><a href="#solution">特殊版本怎麼解決</a></li>
-          <li><a href="#read-vs-json">可讀取不等於會序列化</a></li>
-          <li><a href="#line-by-line">逐行拆解</a></li>
-          <li><a href="#boundary">保護範圍與限制</a></li>
+          <li><a href="#job">建立全文主軸</a></li>
+          <li><a href="#simple">理解預設資料模型</a></li>
+          <li><a href="#problem">看見需求衝突</a></li>
+          <li><a href="#solution">分離介面與儲存</a></li>
+          <li><a href="#read-vs-json">追蹤讀取與序列化</a></li>
+          <li><a href="#line-by-line">回到每一行程式碼</a></li>
+          <li><a href="#boundary">判斷適用範圍</a></li>
         </ol>
       </nav>
 
       <section id="job">
-        <h2>先確定：這個 error 負責什麼？</h2>
+        <h2>一、先建立全文主軸：同一份 cause 有兩種不同需求</h2>
         <p>假設程式會讀取一份 JSON 設定檔。讀取過程可能在兩個不同階段失敗：</p>
         <div class="table-wrap">
           <table>
@@ -469,7 +474,7 @@
             </tbody>
           </table>
         </div>
-        <p><code>ConfigFileInvalidError</code> 處理的是第二種情況：檔案已經讀到了，但內容不能被程式接受。</p>
+        <p><code>ConfigFileInvalidError</code> 處理的是第二種情況：檔案已經讀到了，但內容不能被程式接受。它會把底層 Schema error 包裝成應用程式看得懂的錯誤。</p>
 
         <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="t">Schema</span><span class="o">.</span><span class="p">decodeUnknownEffect</span><span class="o">(</span><span class="t">ConfigSchema</span><span class="o">)</span><span class="o">(</span>contents<span class="o">)</span><span class="o">.</span><span class="p">pipe</span><span class="o">(</span>
   <span class="t">Effect</span><span class="o">.</span><span class="p">mapError</span><span class="o">(</span>
@@ -481,12 +486,21 @@
   <span class="o">)</span><span class="o">,</span>
 <span class="o">)</span></code></pre>
 
-        <p>上面的 <code>cause</code> 是 Schema 驗證失敗產生的原始錯誤。新的 domain error 則補上「哪一個設定檔無效」這個應用程式層級的資訊。</p>
+        <p>上面的 <code>cause</code> 是 Schema 驗證失敗產生的原始錯誤。新的 domain error 則補上「哪一個設定檔無效」這個應用程式層級的資訊。這裡同時產生兩項需求：</p>
+
+        <ol class="steps">
+          <li><strong>程式必須讀得到 cause</strong><span>測試、診斷工具與開發者仍應能透過 <code>error.cause</code> 檢查原始 Schema error。</span></li>
+          <li><strong>一般序列化不應自動帶出 cause</strong><span>Schema error 可能保留被拒絕的設定值；<code>JSON.stringify(error)</code> 不應因為記錄整個錯誤，就順便輸出敏感內容。</span></li>
+        </ol>
+
+        <div class="callout safe">
+          <p><strong>全文主軸：</strong>把「程式能不能讀取某個屬性」與「序列化會不會輸出該資料」拆成兩個可以獨立控制的問題。後面的每一段程式碼，都是為了完成這個分離。</p>
+        </div>
       </section>
 
       <section id="simple">
-        <h2>先看其他 error 為什麼只有空的 <code>{}</code></h2>
-        <p>Effect 的 <code>Data.TaggedError</code> 是一個「產生錯誤 class 的函式」。最常見的寫法如下：</p>
+        <h2>二、理解預設模型：constructor 參數也會成為錯誤資料</h2>
+        <p>在處理特殊版本以前，必須先知道普通版本做了什麼。Effect 的 <code>Data.TaggedError</code> 是一個「產生錯誤 class 的函式」。最常見的寫法如下：</p>
 
         <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">class</span> <span class="t">ConfigFileReadError</span> <span class="k">extends</span> <span class="t">Data</span><span class="o">.</span><span class="p">TaggedError</span><span class="o">(</span>
   <span class="s">"ConfigFileReadError"</span><span class="o">,</span>
@@ -499,8 +513,8 @@
         <div class="object-model">
           <ul>
             <li><strong>錯誤名稱</strong><span><code>"ConfigFileReadError"</code> 會成為錯誤的 <code>_tag</code>，方便 Effect 按種類處理錯誤。</span></li>
-            <li><strong>錯誤資料</strong><span>泛型中的 <code>path</code> 和 <code>cause</code> 規定建立 instance 時必須傳入哪些資料。</span></li>
-            <li><strong>空 class body</strong><span><code>{}</code> 表示不額外改造父類別提供的行為。</span></li>
+            <li><strong>建構契約</strong><span>泛型中的 <code>path</code> 和 <code>cause</code> 規定建立 instance 時必須傳入哪些資料。</span></li>
+            <li><strong>預設儲存</strong><span>空的 class body 表示完全採用 <code>Data.TaggedError</code> 的 constructor、屬性與序列化行為。</span></li>
           </ul>
         </div>
 
@@ -515,14 +529,30 @@ error<span class="o">.</span><span class="p">_tag</span>  <span class="c">// "Co
 error<span class="o">.</span><span class="p">path</span>  <span class="c">// "reviewstuff.config.json"</span>
 error<span class="o">.</span><span class="p">cause</span> <span class="c">// originalError</span></code></pre>
 
+        <p>在本文使用的 Effect 版本中，錯誤基底會把 constructor 收到的參數指定到 instance，也會另外保存原始參數。它的 <code>toJSON()</code> 概念上會合併兩者：</p>
+
+        <pre class="language-typescript"><span class="label">Conceptual TypeScript</span><code><span class="f">constructor</span><span class="o">(</span>args<span class="o">)</span> <span class="o">{</span>
+  <span class="t">Object</span><span class="o">.</span><span class="p">assign</span><span class="o">(</span>this<span class="o">,</span> args<span class="o">)</span>
+  <span class="f">rememberOriginalArgs</span><span class="o">(</span>args<span class="o">)</span>
+<span class="o">}</span>
+
+<span class="f">toJSON</span><span class="o">(</span><span class="o">)</span> <span class="o">{</span>
+  <span class="k">return</span> <span class="o">{</span>
+    <span class="o">.</span><span class="o">.</span><span class="o">.</span><span class="p">originalArgs</span><span class="o">,</span>
+    <span class="o">.</span><span class="o">.</span><span class="o">.</span><span class="p">this</span><span class="o">,</span>
+  <span class="o">}</span>
+<span class="o">}</span></code></pre>
+
+        <p>因此，constructor 參數不只是「建立時的輸入」，也會成為錯誤 instance 的資料與預設 JSON 表示。這對一般欄位很方便，但對可能敏感的 <code>cause</code> 就需要多想一步。</p>
+
         <div class="callout safe">
-          <p><strong>先建立一個心智模型：</strong>空的 <code>{}</code> 不是「什麼都沒做」，而是「完全採用 <code>Data.TaggedError</code> 預設幫我做好的 constructor 和資料儲存方式」。</p>
+          <p><strong>這一節的結論：</strong>空的 <code>{}</code> 不是「什麼都沒做」，而是「完全採用 <code>Data.TaggedError</code> 預設幫我做好的資料模型」。先理解這個預設，才看得出特殊版本刻意改變了哪裡。</p>
         </div>
       </section>
 
       <section id="problem">
-        <h2>為什麼設定檔驗證錯誤不能直接用簡單版本？</h2>
-        <p>直覺上，我們也可以把它寫成空 class body：</p>
+        <h2>三、需求衝突：最直覺的寫法會把 cause 一起序列化</h2>
+        <p>如果沿用上一節的預設模型，<code>ConfigFileInvalidError</code> 也可以寫成空 class body：</p>
 
         <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">class</span> <span class="t">ConfigFileInvalidError</span> <span class="k">extends</span> <span class="t">Data</span><span class="o">.</span><span class="p">TaggedError</span><span class="o">(</span>
   <span class="s">"ConfigFileInvalidError"</span><span class="o">,</span>
@@ -531,7 +561,7 @@ error<span class="o">.</span><span class="p">cause</span> <span class="c">// ori
   readonly cause<span class="o">:</span> unknown
 <span class="o">}</span><span class="o">&gt;</span> <span class="o">{</span><span class="o">}</span></code></pre>
 
-        <p>這在型別與錯誤處理上都能運作。問題是 Effect 的 <code>Data.TaggedError</code> 會記住傳給預設 constructor 的欄位，之後 <code>JSON.stringify(error)</code> 可能把這些欄位放入 JSON。</p>
+        <p>這在型別與錯誤處理上都能運作，而且 <code>error.cause</code> 可以正常讀取。問題是 <code>Data.TaggedError</code> 也會把交給預設 constructor 的 <code>cause</code> 納入 <code>toJSON()</code>。</p>
 
         <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">const</span> error <span class="o">=</span> <span class="k">new</span> <span class="f">ConfigFileInvalidError</span><span class="o">(</span><span class="o">{</span>
   path<span class="o">:</span> <span class="s">"reviewstuff.config.json"</span><span class="o">,</span>
@@ -549,13 +579,14 @@ error<span class="o">.</span><span class="p">cause</span> <span class="c">// ori
         <p>Schema 驗證錯誤常常需要指出「哪一個值不合法」，所以原始 <code>cause</code> 可能保留被拒絕的設定內容。如果設定檔意外包含 API key、token 或密碼，把整個 error 寫進結構化 log 時，就可能把敏感值一起送出去。</p>
 
         <div class="callout">
-          <p><strong>真正的問題不是 <code>cause</code> 不能存在。</strong>程式仍需要它來除錯。問題是不能讓它自動成為 error 的可序列化資料。</p>
+          <p><strong>真正的衝突不是「要不要 cause」。</strong>刪掉 <code>cause</code> 會失去診斷資訊；照預設方式保存，又可能讓它進入 JSON。我們需要第三種選擇：保留 <code>error.cause</code> 這個讀取介面，但改變資料的儲存位置。</p>
         </div>
       </section>
 
       <section id="solution">
-        <h2>解法：提供 <code>cause</code> 的讀取入口，但不把本體交給預設序列化</h2>
-        <p>特殊版本把同一份錯誤資料分成兩個儲存位置：</p>
+        <h2>四、關鍵觀念：公開介面不等於實際儲存位置</h2>
+        <p>看到 <code>error.cause</code> 時，很容易直覺認為 <code>cause</code> 一定直接存在 <code>error</code> 物件裡。JavaScript 並沒有這項限制。點號語法只表示「讀取名為 <code>cause</code> 的屬性」；這個值可以是 instance 自己的資料，也可以由 prototype 上的 getter 到其他地方查回來。</p>
+        <p>這正是解開衝突的關鍵：公開介面仍然保留 <code>error.cause</code>，真正的值則移到 class 外面的 <code>WeakMap</code>。特殊版本因此把錯誤資料分成兩個儲存位置：</p>
 
         <div class="analogy" role="img" aria-label="error instance 像寄物牌，WeakMap 像寄物櫃；寄物牌可以找到櫃中的 cause，但掃描寄物牌本身不會看到 cause。">
           <div class="analogy-part">
@@ -569,7 +600,7 @@ error<span class="o">.</span><span class="p">cause</span> <span class="c">// ori
           </div>
         </div>
 
-        <p>拿著某個 error instance，就能透過 getter 找到它在 <code>WeakMap</code> 裡的 cause；但只序列化 error instance 時，不會順便把外部寄物櫃的內容倒出來。</p>
+        <p>拿著某個 error instance，就能透過 getter 找到它在 <code>WeakMap</code> 裡的 cause；但只序列化 error instance 時，不會順便把外部寄物櫃的內容倒出來。換句話說，「怎麼讀」與「存在哪裡」是兩個不同層次。</p>
 
         <div class="table-wrap">
           <table>
@@ -595,6 +626,8 @@ error<span class="o">.</span><span class="p">cause</span> <span class="c">// ori
           </table>
         </div>
 
+        <p>有了這個分離原則，完整實作就不再像是一組零散技巧，而是可以逐步推導出來：</p>
+
         <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">const</span> configFileInvalidCauses <span class="o">=</span> <span class="k">new</span> <span class="t">WeakMap</span><span class="o">&lt;</span>object<span class="o">,</span> unknown<span class="o">&gt;</span><span class="o">(</span><span class="o">)</span>
 
 <span class="k">export</span> <span class="k">class</span> <span class="t">ConfigFileInvalidError</span> <span class="k">extends</span> <span class="t">Data</span><span class="o">.</span><span class="p">TaggedError</span><span class="o">(</span>
@@ -612,7 +645,7 @@ error<span class="o">.</span><span class="p">cause</span> <span class="c">// ori
   <span class="o">}</span>
 <span class="o">}</span></code></pre>
 
-        <p>建立 instance 時，呼叫端仍然必須提供 <code>path</code> 和 <code>cause</code>；差別只在於 class 自己決定這兩份資料要存在哪裡。</p>
+        <p>建立 instance 時，呼叫端仍然必須提供 <code>path</code> 和 <code>cause</code>；差別只在於 class 自己決定這兩份資料要存在哪裡。以下順序就是 constructor 實際建立資料邊界的過程：</p>
 
         <ol class="steps">
           <li><strong>呼叫 constructor</strong><span>收到 <code>{ path, cause }</code>。</span></li>
@@ -620,10 +653,11 @@ error<span class="o">.</span><span class="p">cause</span> <span class="c">// ori
           <li><strong>另外保存 cause</strong><span>用目前的 error instance，也就是 <code>this</code>，當成 <code>WeakMap</code> 的 key。</span></li>
           <li><strong>需要時再讀取</strong><span><code>error.cause</code> 會觸發 getter，使用同一個 instance 從 <code>WeakMap</code> 找回原始錯誤。</span></li>
         </ol>
+      </section>
 
-        <section id="read-vs-json">
-          <h3>「能讀取」與「會被序列化」是兩個獨立問題</h3>
-          <p>這個設計最容易混淆的地方，是把「物件有某個公開屬性」理解成「JSON 一定會包含這個屬性」。JavaScript 並不是這樣運作。判斷時要分別問兩個問題：</p>
+      <section id="read-vs-json">
+          <h2>五、沿著讀取與序列化兩條路徑追蹤 cause</h2>
+          <p>建立完成後，同一個 error 會因為後續操作不同而走上兩條完全不同的路徑。這個設計最容易混淆的地方，是把「物件有某個公開屬性」理解成「JSON 一定會包含這個屬性」。判斷時要分別追蹤兩個問題：</p>
 
           <div class="table-wrap">
             <table>
@@ -708,11 +742,11 @@ configFileInvalidCauses<span class="o">.</span><span class="p">set</span><span c
           <div class="callout safe">
             <p><strong>精確的心智模型：</strong><code>error.cause</code> 是一個「查詢入口」，不是裝著 cause 本體的「可序列化欄位」。讀取屬性會使用入口查詢 <code>WeakMap</code>；序列化 error 則只包裝 error 自己的預設 JSON 資料。</p>
           </div>
-        </section>
       </section>
 
       <section id="line-by-line">
-        <h2>逐行拆解最容易卡住的部分</h2>
+        <h2>六、回到每一行：它在主軸中扮演什麼角色？</h2>
+        <p>前面已經先建立需求、資料模型與執行路徑。現在回頭逐行閱讀，就能把每個語法放回同一條因果鏈，而不必分別死記 <code>WeakMap</code>、constructor 與 getter。</p>
 
         <h3><code>new WeakMap&lt;object, unknown&gt;()</code></h3>
         <p>這建立了剛才比喻中的「寄物櫃」：一張物件對應附加資料的表。key 必須是物件，這裡會放 error instance；value 可以是任何東西，這裡會放原始 Schema error。</p>
@@ -720,7 +754,8 @@ configFileInvalidCauses<span class="o">.</span><span class="p">set</span><span c
         <pre><span class="label">Concept</span><code>error instance A ──對應──&gt; schema cause A
 error instance B ──對應──&gt; schema cause B</code></pre>
 
-        <p>它使用 <code>WeakMap</code> 而不是普通 <code>Map</code>，是因為 <code>WeakMap</code> 不會為了保留 key 而阻止 error instance 被垃圾回收。當 error 已經沒有其他引用時，這筆關聯也可以消失。</p>
+        <p>它使用 <code>WeakMap</code> 而不是普通 <code>Map</code>，是因為 <code>WeakMap</code> 不會為了保留 key 而阻止 error instance 被垃圾回收。當 error 已經沒有其他引用時，這筆關聯也可以消失。普通 <code>Map</code> 則會持續持有 key，除非程式主動刪除。</p>
+        <p><code>WeakMap</code> 的「弱」只描述垃圾回收語意，不表示資料經過加密。只要程式仍持有 error instance，就能透過 getter 取得對應的 cause。</p>
 
         <h3>泛型裡為什麼只有 <code>path</code>？</h3>
         <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="o">)</span><span class="o">&lt;</span><span class="o">{</span>
@@ -750,11 +785,11 @@ error instance B ──對應──&gt; schema cause B</code></pre>
 
         <pre class="language-typescript"><span class="label">TypeScript</span><code>configFileInvalidCauses<span class="o">.</span><span class="p">get</span><span class="o">(</span>error<span class="o">)</span></code></pre>
 
-        <p><code>override</code> 則告訴 TypeScript：這個 getter 是刻意重新定義父類別 <code>Error</code> 已有的 <code>cause</code> 屬性，而不是不小心撞名。</p>
+        <p><code>override</code> 則要求 TypeScript 確認父類別型別確實已有可被重新定義的 <code>cause</code> 成員。若名稱拼錯或父類別契約改變，編譯器就能提醒，而不是默默產生另一個無關的 getter。</p>
       </section>
 
       <section id="boundary">
-        <h2>這個設計保護了什麼，又沒有保護什麼？</h2>
+        <h2>七、安全邊界：這個設計保護了什麼？</h2>
         <div class="table-wrap">
           <table>
             <thead>
@@ -790,15 +825,24 @@ error instance B ──對應──&gt; schema cause B</code></pre>
         </div>
 
         <div class="callout">
-          <p><strong>這不是完整的祕密抹除機制。</strong>它解決的是「不要讓 <code>JSON.stringify(error)</code> 自動帶出 cause」這個明確問題。若 logger 會主動深度讀取 getter、直接記錄 <code>error.cause</code>，敏感資料仍可能外洩。</p>
+          <p><strong>不要把「預設不序列化」誤解成「無法外洩」。</strong>這個設計只解決 <code>JSON.stringify(error)</code> 不自動帶出 cause 的問題。若 logger 會反射 getter、程式直接記錄 <code>error.cause</code>，或其他程式碼主動整理 cause，敏感內容仍可能被輸出；logging policy 仍需獨立控制。</p>
         </div>
 
-        <p>因此，不是每個 error 都需要這種寫法。當 <code>cause</code> 不包含敏感輸入，或原始原因本來就應該成為公開、可序列化的錯誤契約時，簡單的空 class body 通常更清楚。只有在「程式需要讀取 cause，但序列化結果不應包含它」時，這個額外設計才有價值。</p>
+        <p>是否值得使用這個額外設計，可以依序問三個問題：</p>
+
+        <ol class="steps">
+          <li><strong>cause 是否只供診斷？</strong><span>如果上層業務邏輯不應依賴它的具體結構，將它與公開 domain data 分開比較合理。</span></li>
+          <li><strong>cause 是否可能包含敏感或大量資料？</strong><span>如果是，就不應讓它自然進入預設 JSON。</span></li>
+          <li><strong>程式是否仍需要 error.cause？</strong><span>如果需要，getter 可以保留穩定而熟悉的讀取介面。</span></li>
+        </ol>
+
+        <p>若 <code>cause</code> 本來就是公開錯誤契約的一部分，也適合被序列化，那麼普通的空 class body 反而更簡單。只有當「需要保留」與「不應預設輸出」同時成立時，這套設計才真正有價值。</p>
       </section>
 
       <section class="closing">
-        <h2>把整段程式濃縮成一句話</h2>
-        <p><code>ConfigFileInvalidError</code> 自訂 constructor，把安全的 <code>path</code> 放進正常的 error 資料，把可能敏感的 <code>cause</code> 放進 <code>WeakMap</code>；getter 讓程式仍可用 <code>error.cause</code> 讀取它，同時避免一般 JSON 序列化自動輸出它。</p>
+        <h2>回到主軸：這段程式真正做了什麼？</h2>
+        <p><code>ConfigFileInvalidError</code> 沒有刪除原始 <code>cause</code>，而是把它從「TaggedError 預設管理、預設序列化的資料」移到「由 getter 查詢的外部 WeakMap」。因此，程式仍能使用 <code>error.cause</code> 進行診斷，一般 <code>JSON.stringify(error)</code> 卻只會看到適合公開的 <code>path</code> 與錯誤標籤。</p>
+        <p>constructor、<code>WeakMap.set</code> 與 getter 並不是三個零散技巧；它們共同完成同一件事：把公開讀取介面與預設序列化資料分開管理。</p>
       </section>
       <p><a href="./effect-learning-path.html">返回 Effect 4 學習路徑</a></p>
     </article>
