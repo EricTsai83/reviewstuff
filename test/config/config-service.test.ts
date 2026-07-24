@@ -42,11 +42,14 @@ const decodeConfig = (contents: string) =>
   }).pipe(Effect.runPromise);
 
 describe("config schema", () => {
-  test("decodes the versioned config shape", async () => {
+  test("accepts an empty config", async () => {
+    expect(await decodeConfig("{}")).toEqual({});
+  });
+
+  test("decodes the user-authored config shape", async () => {
     expect(
       await decodeConfig(
         JSON.stringify({
-          schemaVersion: 1,
           review: {
             preset: "standard",
             engine: "fake",
@@ -63,7 +66,6 @@ describe("config schema", () => {
         }),
       ),
     ).toEqual({
-      schemaVersion: 1,
       review: {
         preset: "standard",
         engine: "fake",
@@ -81,22 +83,12 @@ describe("config schema", () => {
   });
 
   test.each([
-    [{ schemaVersion: 2 }, "unsupported schema version"],
-    [
-      { schemaVersion: 1, review: { preset: "thorough" } },
-      "unsupported preset",
-    ],
-    [
-      { schemaVersion: 1, review: { timeoutMs: 0 } },
-      "non-positive timeout",
-    ],
-    [
-      { schemaVersion: 1, review: { concurrency: 1.5 } },
-      "non-integer concurrency",
-    ],
+    [{ schemaVersion: 1 }, "obsolete schema version property"],
+    [{ review: { preset: "thorough" } }, "unsupported preset"],
+    [{ review: { timeoutMs: 0 } }, "non-positive timeout"],
+    [{ review: { concurrency: 1.5 } }, "non-integer concurrency"],
     [
       {
-        schemaVersion: 1,
         review: {
           requestBudget: {
             maxTokens: 128_000,
@@ -107,13 +99,24 @@ describe("config schema", () => {
       },
       "negative request budget overhead",
     ],
-    [{ schemaVersion: 1, unknown: true }, "unknown property"],
+    [{ unknown: true }, "unknown property"],
   ])("rejects %s (%s)", async (input) => {
     expect(decodeConfig(JSON.stringify(input))).rejects.toBeDefined();
   });
 });
 
 describe("review config resolution", () => {
+  test("uses defaults when the config file is empty", async () => {
+    const config = await loadConfigWith(() => Effect.succeed("{}")).pipe(
+      Effect.runPromise,
+    );
+
+    expect(config).toEqual({
+      ...reviewPresets.standard,
+      preset: "standard",
+    });
+  });
+
   test("uses defaults when the config file does not exist", async () => {
     const config = await loadConfigWith(() =>
       Effect.fail(fileSystemError("NotFound"))
@@ -141,10 +144,9 @@ describe("review config resolution", () => {
   });
 
   test("maps invalid config contents to a decode failure", async () => {
-    const error = await loadConfigWith(() => Effect.succeed("{}")).pipe(
-      Effect.flip,
-      Effect.runPromise,
-    );
+    const error = await loadConfigWith(() =>
+      Effect.succeed('{"review":{"timeoutMs":0}}')
+    ).pipe(Effect.flip, Effect.runPromise);
 
     expect(error).toBeInstanceOf(ConfigFileDecodeError);
     expect(error.path).toBe("reviewstuff.config.json");
@@ -170,7 +172,6 @@ describe("review config resolution", () => {
     expect(
       resolveReviewConfig(
         {
-          schemaVersion: 1,
           review: {
             preset: "quick",
             engine: "config-engine",

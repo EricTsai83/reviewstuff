@@ -8,7 +8,7 @@ import * as Schema from "effect/Schema";
 import {
   type ReviewPresetName,
   type ReviewRequestBudgetConfig,
-  type ReviewstuffConfigV1,
+  type ReviewstuffConfig,
   ReviewstuffConfigJsonSchema,
   reviewConfigFileName,
 } from "./schema";
@@ -90,7 +90,7 @@ export class ConfigService extends Context.Service<
 >()("reviewstuff/ConfigService") {}
 
 export const resolveReviewConfig = (
-  config: ReviewstuffConfigV1 | undefined,
+  config: ReviewstuffConfig | undefined,
   overrides: ReviewConfigOverrides = {},
 ): ResolvedReviewConfig => {
   const configured = config?.review;
@@ -106,7 +106,7 @@ export const resolveReviewConfig = (
 
 const decodeConfigContents = (
   contents: string,
-): Effect.Effect<ReviewstuffConfigV1, ConfigFileDecodeError> =>
+): Effect.Effect<ReviewstuffConfig, ConfigFileDecodeError> =>
   Schema.decodeUnknownEffect(ReviewstuffConfigJsonSchema)(contents, {
     onExcessProperty: "error",
   }).pipe(
@@ -121,7 +121,7 @@ const decodeConfigContents = (
 
 const loadConfig = (
   fileSystem: FileSystem.FileSystem,
-): Effect.Effect<Option.Option<ReviewstuffConfigV1>, ConfigError> =>
+): Effect.Effect<Option.Option<ReviewstuffConfig>, ConfigError> =>
   fileSystem.readFileString(reviewConfigFileName).pipe(
     Effect.map(Option.some),
     Effect.catchTags({
@@ -137,7 +137,7 @@ const loadConfig = (
     }),
     Effect.flatMap(
       Option.match({
-        onNone: () => Effect.succeed(Option.none<ReviewstuffConfigV1>()),
+        onNone: () => Effect.succeed(Option.none<ReviewstuffConfig>()),
         onSome: (contents) =>
           decodeConfigContents(contents).pipe(Effect.map(Option.some)),
       }),

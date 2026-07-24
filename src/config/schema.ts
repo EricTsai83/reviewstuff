@@ -25,17 +25,15 @@ export const ReviewConfigSchema = Schema.Struct({
   requestBudget: Schema.optionalKey(ReviewRequestBudgetConfigSchema),
 });
 
-export const ReviewstuffConfigV1Schema = Schema.Struct({
-  schemaVersion: Schema.Literal(1),
+export const ReviewstuffConfigSchema = Schema.Struct({
   review: Schema.optionalKey(ReviewConfigSchema),
 });
 
 export const ReviewstuffConfigJsonSchema = Schema.fromJsonString(
-  ReviewstuffConfigV1Schema,
+  ReviewstuffConfigSchema,
 );
 
 export type ReviewPresetName = typeof ReviewPresetNameSchema.Type;
 export type ReviewRequestBudgetConfig =
   typeof ReviewRequestBudgetConfigSchema.Type;
-export type ReviewConfig = typeof ReviewConfigSchema.Type;
-export type ReviewstuffConfigV1 = typeof ReviewstuffConfigV1Schema.Type;
+export type ReviewstuffConfig = typeof ReviewstuffConfigSchema.Type;

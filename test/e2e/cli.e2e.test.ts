@@ -232,7 +232,6 @@ describe("reviewstuff binary", () => {
     await Bun.write(
       `${cwd}/reviewstuff.config.json`,
       JSON.stringify({
-        schemaVersion: 1,
         review: {
           preset: "quick",
           engine: "configured-engine",
@@ -275,7 +274,6 @@ describe("reviewstuff binary", () => {
     await Bun.write(
       `${cwd}/reviewstuff.config.json`,
       JSON.stringify({
-        schemaVersion: 1,
         review: { apiKey: rejectedValue },
       }),
     );
