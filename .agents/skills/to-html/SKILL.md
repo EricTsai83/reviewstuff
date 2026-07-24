@@ -1,6 +1,6 @@
 ---
 name: to-html
-description: Convert the current conversation or supplied context into a polished, independently readable knowledge article as a standalone HTML file saved under the project's documentation tree.
+description: Convert the current conversation or supplied context into a polished, independently readable knowledge article as a standalone HTML file saved under the project's documentation tree, including explanatory articles about design patterns, architecture, engineering choices, and best practices.
 ---
 
 # To HTML
@@ -33,18 +33,31 @@ Create a self-contained HTML knowledge article from durable ideas in the current
 Use this method for articles that explain architecture, engineering choices, workflows, or best practices. Do not force it onto incident reports, code reviews, status reports, or other inherently specific documents.
 
 1. **Find the reusable question.** Rewrite the immediate scenario as the broader problem a future reader will face.
-2. **Teach the mental model first.** Explain responsibilities, boundaries, invariants, and information flow before repository-specific implementation details.
-3. **Use one running example.** Let a concrete scenario make the pattern observable, but do not let an incidental feature become the article's subject.
-4. **Show the mechanics.** Use focused code, a diagram, or a table only when it materially explains how the pattern works.
-5. **State the best practice with scope.** Explain why it is the default, which tradeoffs it creates, and when an alternative is better.
-6. **Return to the real codebase when useful.** Apply the general model to the current implementation as evidence or a worked example, not as unstated prerequisite knowledge.
-7. **End with transferable decisions.** Give criteria, tests, or a concise synthesis the reader can reuse in another codebase.
+2. **Establish the real-world situation before naming the pattern.** Make the pattern's preconditions concrete: what the system is doing, who owns or changes it, where state and control live, what varies, what must remain invariant, and which scale, reliability, lifecycle, or coordination pressures matter. Distinguish facts observed in the source from reasonable hypothetical conditions.
+3. **Expose the forces and the naive failure mode.** Show why the straightforward approach becomes costly or unsafe under those conditions. Name the tensions the design must balance and the failure symptoms a practitioner would actually observe.
+4. **Teach the mental model.** Explain responsibilities, boundaries, invariants, and information flow before repository-specific implementation details.
+5. **Use one running example.** Let a concrete scenario make both the preconditions and the pattern observable, but do not let an incidental feature become the article's subject.
+6. **Show the causal fit, not only the mechanics.** For each important mechanism in the pattern, connect it to the force or failure mode it addresses. Use focused code, a diagram, or a table only when it materially clarifies that relationship.
+7. **Justify “best practice” conditionally.** Explain why this pattern is likely the best default *when the stated preconditions hold*: compare it with the most plausible simpler alternative, state the tradeoffs it accepts, and identify the property it optimizes. Never present popularity, convention, or abstraction alone as proof.
+8. **Define the boundary of applicability.** State which missing or changed conditions make the pattern unnecessary, excessive, or incorrect, and when an alternative is better. Include at least one recognizable “do not use this when…” case whenever making a best-practice recommendation.
+9. **Return to the real codebase when useful.** Apply the general model to the current implementation as evidence or a worked example, not as unstated prerequisite knowledge. Do not invent production conditions that the available evidence does not establish.
+10. **End with transferable decisions.** Give criteria, diagnostic questions, or a concise synthesis the reader can use to decide whether the same preconditions hold in another codebase.
 
 A strong explanatory sequence is usually:
 
-`practical problem → general model → implementation mechanics → alternatives and decision rules → codebase application`
+`real-world situation and preconditions → forces and naive failure → pattern model → mechanism-to-problem fit → alternatives and applicability boundary → codebase application`
 
 Treat this as a reasoning order, not a mandatory section template. Prefer the smallest structure that teaches the subject clearly.
+
+Before calling a pattern a best practice, make the following argument answerable from the article:
+
+- **Given:** Which concrete operating conditions and constraints are present?
+- **Problem:** What recurring failure, cost, or coordination burden follows from them?
+- **Fit:** Which mechanisms of the pattern directly reduce that burden?
+- **Choice:** Why does it fit better than the simplest credible alternative here?
+- **Limit:** Which changed condition would reverse or weaken the recommendation?
+
+If the source material does not establish the preconditions, write a conditional recommendation and identify what must be verified. Do not silently upgrade an assumed context into a fact.
 
 ## Independent Readability
 
@@ -73,7 +86,7 @@ The article must stand alone:
 - Keep technical articles prose-first. Avoid marketing layouts and decorative section cards.
 - Introduce concepts before code, tables, or figures that depend on them.
 - Use one coherent running example instead of several disconnected examples.
-- Include rationale, tradeoffs, exceptions, and decision criteria when they affect the recommendation.
+- For a pattern or best-practice recommendation, include its concrete preconditions, causal rationale, tradeoffs, exceptions, and decision criteria.
 - Use callouts only for a genuine warning, constraint, caveat, or exception.
 - Do not add exercises or homework unless requested.
 - Include only elements that directly teach, demonstrate, contrast, or support the article's subject.
