@@ -42,7 +42,7 @@ service skeleton、flag 或空目錄。
 | [x] DONE | 003 | [Local CLI Workflow](./003-local-cli-workflow.md) | 本機 binary workflow |
 | [x] DONE | 004 | [Repository Structure Boundaries](./004-repository-structure-boundaries.md) | module boundary 固定 |
 | [x] DONE | 005 | [Git Diff Review MVP](./005-git-diff-review-mvp.md) | deterministic Git diff review |
-| [x] DONE | 006 | [Config Profiles](./006-config-profiles-and-prompts.md) | versioned config v1/legacy profile |
+| [x] DONE | 006 | [Config Profiles](./006-config-profiles-and-prompts.md) | config resolution/legacy profile |
 | [x] DONE | 007 | [Normalize Review Contracts](./007-normalize-review-contracts.md) | Safe cloud dogfood |
 | [x] DONE | 008 | [Extract The Fake Review Engine](./008-extract-the-fake-review-engine.md) | Safe cloud dogfood |
 | [x] DONE | 009 | [Build A Pure Review Request](./009-build-a-pure-review-request.md) | Safe cloud dogfood |
@@ -104,6 +104,7 @@ service skeleton、flag 或空目錄。
 - `bun run typecheck` 通過。
 - `bun test` 通過；若該命令因 repository script 觸發 build，先取得 build 授權。
 - 需要 compiled artifact 的 plan 另跑它列出的 smoke commands。
-- Public/persisted schema 有 current 與 previous-version fixture。
+- Public/persisted machine-owned schema 有 current 與 previous-version fixture；user-authored config
+  維持 raw config → resolved config，只有實際相容需求才加入 legacy fixture。
 - 新增的 error 能在 human 與 machine-readable boundary 被穩定處理。
 - 更新本表狀態，而且下一個 plan 不需要先修正本 plan 的遺留問題。

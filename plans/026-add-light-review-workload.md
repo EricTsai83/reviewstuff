@@ -15,8 +15,9 @@ explicit workload contract without branching the review architecture。
 的 context budget；不改變 finding criteria，也不偷偷切換 engine、provider、model、timeout
 或 concurrency。
 
-這個 plan 是 config v1 `preset: "quick" | "standard"` 的正式後繼者。Plan 006
-仍保留為歷史紀錄，不回頭改寫當時使用 `profile` 的已完成 contract。
+這個 plan 是既有 config `preset: "quick" | "standard"` 的正式後繼者。Plan 006
+仍保留為歷史紀錄，不回頭改寫當時使用 `profile` 的已完成 contract。設定檔遵循
+user-authored raw config → resolved config 邊界，不加入 schema version 或逐版 migration。
 
 ## Working State
 
@@ -60,11 +61,10 @@ config/CLI resolution 控制。
 
 ## Config Evolution
 
-新增 config schema v2：
+current config schema 將 `preset` 替換為 `workload`：
 
 ```json
 {
-  "schemaVersion": 2,
   "review": {
     "workload": "light",
     "engine": "fake",
@@ -76,16 +76,12 @@ config/CLI resolution 控制。
 }
 ```
 
-loader 同時嚴格接受 v1 與 v2，並在 boundary 將 v1 migration 成 current config：
+loader 在 Effect Schema boundary 嚴格 decode raw config，再由 config resolution 產生單一
+resolved config。此 plan 尚未對外發布，不保留 `preset` alias；schema、文件與錯誤訊息都只使用
+`workload`。移除 preset 時不得改變 engine/provider/model/timeout/concurrency 的既有 resolution。
 
-- `preset: "standard"` → `workload: "standard"`
-- `preset: "quick"` → `workload: "light"`
-- migration 必須保留 v1 最終解析出的 engine/provider/model/timeout/concurrency，不能因為
-  新 workload 不再擁有 execution settings 而靜默改變舊 config 行為。
-- 新寫出的文件與錯誤訊息只使用 v2 `workload` 術語。
-
-Resolution precedence：explicit CLI workload > config v2 workload / migrated v1 preset >
-`standard` default。其他設定仍各自維持 CLI > config > default。
+Resolution precedence：explicit CLI workload > config workload > `standard` default。其他設定仍各自
+維持 CLI > config > default。
 
 ## Request And Report Boundaries
 
@@ -121,8 +117,8 @@ coverage 必須照常揭露 reviewed、truncated 與 skipped hunks/files。
 ## In Scope
 
 - `ReviewWorkload` schema/type 與 standard/light presets。
-- config v2、v1 migration、strict decode 與 precedence tests。
-- config decode 失敗時渲染欄位級錯誤細節（路徑、欄位、期望值），同時涵蓋 v1 與 v2。
+- raw config schema、resolved config、strict decode 與 precedence tests。
+- config decode 失敗時渲染欄位級錯誤細節（路徑、欄位、期望值）。
 - `--workload`、`--light` shortcut 與 conflict validation。
 - 將 effective workload 傳給 budget selection。
 - report schema evolution、migration、terminal/JSON rendering。
@@ -139,7 +135,7 @@ coverage 必須照常揭露 reviewed、truncated 與 skipped hunks/files。
 
 ## Implementation Slices
 
-1. Config/domain slice：加入 workload contract、presets、config v2 migration 與 resolution tests。
+1. Config/domain slice：加入 workload contract、presets、raw/resolved config resolution tests。
 2. CLI/use-case slice：加入 `--workload`/`--light`，只把 effective workload 映射到既有
    request-budget selection。
 3. Observability slice：升版 report、加入 migration 與 renderer，再補 compiled binary e2e。
@@ -153,7 +149,7 @@ coverage 必須照常揭露 reviewed、truncated 與 skipped hunks/files。
 - light 的 request budget 明確小於 standard，且可從 report 觀察。
 - 相同 diff 下，light 只能減少 selected context，不能改變 selection ordering。
 - 不切換 engine/provider/model/timeout/concurrency。
-- v1 config migration 保留既有 effective execution settings。
+- config terminology 變更不改變既有 effective execution settings。
 - invalid config 的錯誤訊息包含欄位級 schema 細節，不再只回報整份檔案不符。
 - `ReviewRequestV1` 與 Plan 016 adapter contract 不需改版。
 - privacy、redaction、preview 與 coverage contracts 全部維持（path filtering 與 skip

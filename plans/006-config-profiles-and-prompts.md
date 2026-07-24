@@ -2,8 +2,9 @@
 
 > Historical contract: this plan intentionally records the shipped config v1
 > `profile: "quick" | "standard"` behavior. Plan 026 replaces that terminology
-> with the `workload` contract through an explicit config migration; do not
-> rewrite this completed plan as though v2 existed here.
+> with the `workload` contract. The current implementation later removed the
+> user-authored config's `schemaVersion`; do not rewrite this completed plan as
+> though that later design existed here.
 
 ## Goal
 
