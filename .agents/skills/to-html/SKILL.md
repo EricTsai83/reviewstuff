@@ -1,7 +1,6 @@
 ---
 name: to-html
 description: Convert the current conversation context into a polished, independently readable knowledge article as a standalone HTML file saved under this project's docs folder.
-disable-model-invocation: true
 ---
 
 # To HTML
@@ -18,12 +17,27 @@ Turn the durable knowledge in the current context into an independently readable
    - Use a clean prose article by default.
    - Read `HTML-ARTICLE-DESIGN-PATTERNS.md` when a comparison, plan, report, code review, design sheet, diagram, table, or small interactive tool would communicate the material better.
    - Read `HTML-SVG-FLOW-DIAGRAMS.md` when a workflow, decision, state transition, boundary, or relationship needs a figure. Follow that reference for authoring, rendering, responsive behavior, and visual QA.
-6. Write a complete standalone HTML document and save it under `./docs` from the project root. Create the folder if needed and use a concise topic filename such as `effect-cli-command-guide.html`.
+6. Choose the output directory by following `Documentation Placement` below. Then write a complete standalone HTML document there, using a concise topic filename such as `effect-cli-command-guide.html`.
 7. After the first complete draft, read `IMPROVE-HTML-ARTICLE.md` and apply one revision pass directly to the file.
 8. Read `DESIGN-SYSTEM.md` and apply it as the final visual-system pass unless the user requested a different design system or no design-system pass.
 9. Run `bun .agents/skills/to-html/scripts/highlight-code-blocks.mjs <html-file>`.
 10. Run `bun .agents/skills/to-html/scripts/validate-html.mjs <html-file>` and fix every reported issue.
 11. Verify the final file, then report its relative path and a short summary. State any visual-QA limitation when figures could not be rendered and inspected.
+
+## Documentation Placement
+
+Choose the article's location from the project's documentation hierarchy instead of assuming every file belongs directly under `./docs`.
+
+1. Honor an explicit output path from the user first.
+2. Otherwise, locate the project's canonical documentation root. Prefer project guidance such as `AGENTS.md`, a documentation README/index, or an established `docs`/`Documents` tree. Fall back to `./docs`, creating it only when no documentation root exists.
+3. Inspect the root's existing directories, README/index files, neighboring filenames, and stated classification rules before choosing a destination.
+4. Classify the article by its durable purpose and the concept a reader intends to learn, not by incidental examples or keywords. For example, an Effect error tutorial demonstrated with TypeScript belongs in an Effect learning folder when that matches the documented taxonomy.
+5. Prefer the deepest existing directory whose documented scope clearly matches the article, while respecting any stated depth limit. Do not create redundant nesting or a new category when an existing category is a good semantic fit.
+6. When several directories are plausible, resolve the choice in this order: documented classification rules, article purpose, neighboring document precedent, then the least surprising existing category.
+7. Create a new subdirectory only when the topic is clearly reusable, no existing directory fits, and the new category follows the project's current naming and hierarchy conventions. Otherwise place the article at the nearest appropriate existing level.
+8. Check for filename collisions before writing. Do not overwrite an unrelated document; choose a more specific filename unless the user explicitly requested an update.
+
+Use best judgment and continue without asking when the hierarchy supplies enough evidence. Ask only when multiple materially different destinations remain equally plausible after inspection.
 
 ## Independent Readability — Hard Requirement
 
@@ -101,7 +115,8 @@ Before delivery, confirm that every included element earns its place, the headin
 
 ## Final Check
 
-- The file exists under `./docs` and is a complete standalone HTML document.
+- The file exists in the selected project documentation subtree and is a complete standalone HTML document.
+- The destination follows the project's documented hierarchy and classification rules, when present.
 - The original language is preserved.
 - A first-time reader without the conversation, codebase, or other prior information can follow the article from beginning to end.
 - The article supplies all essential background and functions primarily as knowledge transfer rather than task history.

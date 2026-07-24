@@ -1,0 +1,880 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="深入理解 Effect Data.TaggedError 的泛型 payload、繼承 constructor、super 初始化，以及必填、選填與預設欄位之間的關係。">
+  <title>Data.TaggedError 的 constructor 與 super：從型別契約到初始化</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --clay: #D97757;
+      --slate: #141413;
+      --ivory: #FAF9F5;
+      --oat: #E3DACC;
+      --gray-100: #F0EEE6;
+      --gray-300: #D1CFC5;
+      --gray-500: #87867F;
+      --gray-700: #3D3D3A;
+      --warning: #C78E3F;
+      --success: #56805D;
+      --space-sm: 8px;
+      --space-md: 12px;
+      --space-lg: 16px;
+      --space-xl: 24px;
+      --space-2xl: 32px;
+      --space-3xl: 48px;
+      --radius-sm: 4px;
+      --radius-md: 8px;
+      --content-width: 68ch;
+    }
+
+    * { box-sizing: border-box; }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      margin: 0;
+      background: var(--ivory);
+      color: var(--slate);
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 16px;
+      font-weight: 430;
+      line-height: 1.55;
+      letter-spacing: 0;
+    }
+
+    main {
+      max-width: var(--content-width);
+      margin: 0 auto;
+      padding: var(--space-3xl) var(--space-xl);
+    }
+
+    article {
+      border: 0;
+      border-radius: 0;
+      background: transparent;
+      box-shadow: none;
+      padding: 0;
+    }
+
+    h1,
+    h2,
+    h3 {
+      color: var(--slate);
+      line-height: 1.24;
+      text-wrap: balance;
+    }
+
+    h1 {
+      max-width: none;
+      margin: 0 0 var(--space-lg);
+      font-size: 1.8rem;
+      line-height: 1.18;
+      overflow-wrap: normal;
+    }
+
+    h2 {
+      margin: var(--space-3xl) 0 var(--space-md);
+      font-size: 1.22rem;
+      line-height: 1.25;
+    }
+
+    h3 {
+      margin: var(--space-2xl) 0 var(--space-sm);
+      font-size: 1rem;
+      line-height: 1.35;
+    }
+
+    p,
+    ul,
+    ol,
+    .deck,
+    .callout,
+    table,
+    pre {
+      max-width: var(--content-width);
+    }
+
+    p { margin: 0 0 var(--space-lg); }
+
+    section { scroll-margin-top: var(--space-xl); }
+
+    a {
+      color: var(--clay);
+      text-underline-offset: 3px;
+    }
+
+    a:hover { color: var(--slate); }
+
+    a:focus-visible {
+      border-radius: 3px;
+      outline: 3px solid rgba(217, 119, 87, 0.24);
+      outline-offset: 3px;
+    }
+
+    .deck {
+      margin-bottom: var(--space-xl);
+      color: var(--gray-700);
+      font-size: 1.03rem;
+    }
+
+    .toc {
+      margin: var(--space-2xl) 0;
+      border-top: 1px solid var(--oat);
+      border-bottom: 1px solid var(--oat);
+      padding: var(--space-lg) 0;
+    }
+
+    .toc strong {
+      display: block;
+      margin-bottom: var(--space-sm);
+    }
+
+    .toc ol {
+      columns: 2;
+      column-gap: var(--space-2xl);
+      margin-bottom: 0;
+    }
+
+    .toc li {
+      break-inside: avoid;
+      margin-bottom: var(--space-sm);
+    }
+
+    ul,
+    ol {
+      margin: 0 0 var(--space-xl);
+      padding-left: 1.35rem;
+    }
+
+    li + li { margin-top: var(--space-sm); }
+
+    :not(pre) > code {
+      border: 1px solid var(--oat);
+      border-radius: var(--radius-sm);
+      background: var(--gray-100);
+      padding: 0.08em 0.32em;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+      font-size: 0.91em;
+      overflow-wrap: anywhere;
+    }
+
+    pre {
+      position: relative;
+      width: 100%;
+      margin: var(--space-lg) 0 var(--space-xl);
+      border: 1px solid #26241f;
+      border-radius: var(--radius-md);
+      background: #11110f;
+      color: #d8d4ca;
+      overflow: hidden;
+    }
+
+    pre code {
+      display: block;
+      border: 0;
+      background: transparent;
+      padding: 18px 64px 18px 22px;
+      color: inherit;
+      overflow-x: auto;
+      white-space: pre;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+      font-size: 0.875rem;
+      font-weight: 400;
+      line-height: 1.62;
+      tab-size: 2;
+      scrollbar-width: none;
+    }
+
+    pre code::-webkit-scrollbar {
+      width: 0;
+      height: 0;
+    }
+
+    pre .label { display: none; }
+
+    .copy-code {
+      position: absolute;
+      top: 9px;
+      right: 9px;
+      z-index: 1;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 30px;
+      height: 30px;
+      padding: 0;
+      border: 1px solid rgba(250, 249, 245, 0.14);
+      border-radius: var(--radius-sm);
+      background: rgba(250, 249, 245, 0.06);
+      color: rgba(250, 249, 245, 0.72);
+      cursor: pointer;
+    }
+
+    .copy-code:hover,
+    .copy-code:focus-visible {
+      border-color: rgba(250, 249, 245, 0.28);
+      background: rgba(250, 249, 245, 0.12);
+      color: var(--ivory);
+      outline: none;
+    }
+
+    .copy-code.copied {
+      border-color: rgba(143, 184, 106, 0.42);
+      background: rgba(143, 184, 106, 0.14);
+      color: #b8d99a;
+    }
+
+    .copy-code svg {
+      width: 13px;
+      height: 13px;
+      fill: none;
+      stroke: currentColor;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      stroke-width: 1.8;
+      pointer-events: none;
+    }
+
+    .code-scrollbar {
+      position: absolute;
+      right: 0;
+      bottom: 0;
+      left: 0;
+      height: 3px;
+      border-radius: 999px;
+      background: rgba(250, 249, 245, 0.1);
+      cursor: pointer;
+    }
+
+    .code-scrollbar.hidden { display: none; }
+
+    .code-scrollbar-thumb {
+      height: 100%;
+      border-radius: inherit;
+      background: rgba(255, 148, 110, 0.82);
+      transform: translateX(0);
+      cursor: grab;
+    }
+
+    .code-scrollbar-thumb:active { cursor: grabbing; }
+
+    pre code .k {
+      color: #ff946e;
+      font-weight: 400;
+    }
+
+    pre code .s { color: #8fb86a; }
+
+    pre code .n,
+    pre code .p { color: #d8d4ca; }
+
+    pre code .c {
+      color: #858177;
+      font-style: italic;
+    }
+
+    pre code .f,
+    pre code .t { color: #cfc6a2; }
+
+    pre code .o { color: #ff946e; }
+
+    table {
+      width: 100%;
+      margin: var(--space-lg) 0 var(--space-xl);
+      border-collapse: collapse;
+      font-size: 0.93rem;
+    }
+
+    th,
+    td {
+      border: 1px solid var(--oat);
+      padding: 10px 12px;
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th {
+      background: var(--gray-100);
+      font-weight: 650;
+    }
+
+    .table-wrap {
+      width: 100%;
+      overflow-x: auto;
+    }
+
+    .callout {
+      margin: var(--space-xl) 0;
+      border: 1px solid var(--oat);
+      border-left: 4px solid var(--clay);
+      border-radius: var(--radius-md);
+      background: var(--gray-100);
+      padding: var(--space-lg);
+    }
+
+    .callout.warning { border-left-color: var(--warning); }
+    .callout.success { border-left-color: var(--success); }
+
+    .callout strong {
+      display: block;
+      margin-bottom: var(--space-sm);
+    }
+
+    .callout p:last-child { margin-bottom: 0; }
+
+    .decision-list {
+      margin-top: var(--space-lg);
+      border-top: 1px solid var(--oat);
+    }
+
+    .decision-list li {
+      padding-top: var(--space-sm);
+    }
+
+    footer {
+      margin-top: var(--space-3xl);
+      border-top: 1px solid var(--oat);
+      padding-top: var(--space-lg);
+      color: var(--gray-500);
+      font-size: 0.875rem;
+    }
+
+    @media (max-width: 640px) {
+      body { font-size: 15px; }
+      h1 { font-size: 1.65rem; }
+      main { padding: var(--space-xl); }
+      .toc ol { columns: 1; }
+      pre code {
+        font-size: 0.8125rem;
+        line-height: 1.5;
+      }
+      p code,
+      li code,
+      td code { font-size: 0.9em; }
+      table,
+      .deck { font-size: 0.875rem; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <article>
+      <h1><code>Data.TaggedError</code> 的 constructor 與 <code>super</code>：從型別契約到初始化</h1>
+      <p class="deck">同一段 class 宣告同時混合了 TypeScript 泛型、JavaScript 繼承與 Effect 的錯誤模型。只要把它拆成「資料形狀、公開建構介面、父類別初始化」三層，就能準確判斷哪些寫法等價、哪些只是產生相同結果。</p>
+
+      <nav class="toc" aria-label="文章目錄">
+        <strong>閱讀路徑</strong>
+        <ol>
+          <li><a href="#starting-point">先看完整宣告</a></li>
+          <li><a href="#three-layers">三層心智模型</a></li>
+          <li><a href="#implicit-constructor">空 class 做了什麼</a></li>
+          <li><a href="#not-equivalent">為何兩種寫法不完全等價</a></li>
+          <li><a href="#partial-input">預設值與部分輸入</a></li>
+          <li><a href="#runtime-details">執行期細節</a></li>
+          <li><a href="#effect-channel">進入 Effect 錯誤通道</a></li>
+          <li><a href="#common-mistakes">常見誤解</a></li>
+          <li><a href="#decision-rules">實務選擇規則</a></li>
+        </ol>
+      </nav>
+
+      <section id="starting-point">
+        <h2>先看完整宣告：三種語法疊在一起</h2>
+        <p>以下宣告建立一個名為 <code>UnsupportedReviewSelectionError</code> 的錯誤 class。錯誤能攜帶所選的引擎、供應商與模型，並有固定的 <code>_tag</code>，方便 Effect 依錯誤種類處理。</p>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">import</span> <span class="o">{</span> <span class="t">Data</span> <span class="o">}</span> <span class="k">from</span> <span class="s">"effect"</span>
+
+<span class="k">export</span> <span class="k">class</span> <span class="t">UnsupportedReviewSelectionError</span> <span class="k">extends</span> <span class="t">Data</span><span class="o">.</span><span class="p">TaggedError</span><span class="o">(</span>
+  <span class="s">"UnsupportedReviewSelectionError"</span><span class="o">,</span>
+<span class="o">)</span><span class="o">&lt;</span><span class="o">{</span>
+  readonly engine<span class="o">:</span> string
+  readonly provider<span class="o">:</span> string
+  readonly model<span class="o">:</span> string
+<span class="o">}</span><span class="o">&gt;</span> <span class="o">{</span><span class="o">}</span></code></pre>
+
+        <p>建立實例時，預設介面是「傳入一個物件」，而不是依序傳入三個字串：</p>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">const</span> error <span class="o">=</span> <span class="k">new</span> <span class="f">UnsupportedReviewSelectionError</span><span class="o">(</span><span class="o">{</span>
+  engine<span class="o">:</span> <span class="s">"codex"</span><span class="o">,</span>
+  provider<span class="o">:</span> <span class="s">"openai"</span><span class="o">,</span>
+  model<span class="o">:</span> <span class="s">"gpt-5"</span><span class="o">,</span>
+<span class="o">}</span><span class="o">)</span></code></pre>
+
+        <p>建立後，payload 欄位與 Effect 自動產生的 tag 都能直接讀取：</p>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code>error<span class="o">.</span><span class="p">engine</span>   <span class="c">// "codex"</span>
+error<span class="o">.</span><span class="p">provider</span> <span class="c">// "openai"</span>
+error<span class="o">.</span><span class="p">model</span>    <span class="c">// "gpt-5"</span>
+error<span class="o">.</span><span class="p">_tag</span>     <span class="c">// "UnsupportedReviewSelectionError"</span></code></pre>
+      </section>
+
+      <section id="three-layers">
+        <h2>最重要的心智模型：型別、介面、初始化是三件事</h2>
+        <p>這段語法看起來像一個整體，實際上分成三層。把責任拆開後，<code>super()</code> 的位置就會很清楚。</p>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>層次</th>
+                <th>語法</th>
+                <th>負責的事情</th>
+                <th>是否存在於執行期</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>錯誤辨識</td>
+                <td><code>Data.TaggedError("...")</code></td>
+                <td>建立帶有固定 <code>_tag</code> 的基底 class</td>
+                <td>是</td>
+              </tr>
+              <tr>
+                <td>payload 契約</td>
+                <td><code>&lt;{ engine; provider; model }&gt;</code></td>
+                <td>告訴 TypeScript 實例包含哪些欄位，以及預設 constructor 要收什麼物件</td>
+                <td>否，泛型會被編譯移除</td>
+              </tr>
+              <tr>
+                <td>建構流程</td>
+                <td><code>constructor(...) { super(...) }</code></td>
+                <td>定義呼叫者的輸入介面，並把初始化資料交給父類別</td>
+                <td>是</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="callout">
+          <strong>欄位型別不是函式回傳值</strong>
+          <p><code>&lt;{ ... }&gt;</code> 描述的是錯誤實例攜帶的 payload，也影響預設 constructor 的參數型別。它不是 arrow function 的回傳型別，也不會自行執行初始化程式。</p>
+        </div>
+
+        <h3>第一層：tag 決定「這是哪一種錯誤」</h3>
+        <p><code>Data.TaggedError("UnsupportedReviewSelectionError")</code> 產生一個可被繼承的基底 class。每個實例都會有固定的 <code>_tag</code>；呼叫者不需要，也不應在 payload 中重複提供它。</p>
+
+        <h3>第二層：泛型決定「錯誤攜帶什麼資料」</h3>
+        <p>泛型物件中的三個欄位都沒有問號，因此全部必填。<code>readonly</code> 則表示 TypeScript 不允許一般程式碼在建立後重新指定它們。</p>
+
+        <h3>第三層：constructor 決定「呼叫者怎麼建立它」</h3>
+        <p>若不自訂 constructor，就沿用基底 class 的單一物件介面。若自行宣告 constructor，就能改成 positional arguments、提供預設值、正規化輸入，或把某些內部欄位藏起來。</p>
+      </section>
+
+      <section id="implicit-constructor">
+        <h2>空的大括號不是沒有 constructor</h2>
+        <p>JavaScript 的衍生 class 沒有明寫 constructor 時，語言會提供預設 constructor。概念上，它把收到的所有參數原封不動轉交給父類別：</p>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="f">constructor</span><span class="o">(</span><span class="o">.</span><span class="o">.</span><span class="o">.</span><span class="p">args</span><span class="o">)</span> <span class="o">{</span>
+  <span class="f">super</span><span class="o">(</span><span class="o">.</span><span class="o">.</span><span class="o">.</span><span class="p">args</span><span class="o">)</span>
+<span class="o">}</span></code></pre>
+
+        <p>因此，這個空 class：</p>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">type</span> <span class="t">ReviewSelectionFields</span> <span class="o">=</span> <span class="o">{</span>
+  readonly engine<span class="o">:</span> string
+  readonly provider<span class="o">:</span> string
+  readonly model<span class="o">:</span> string
+<span class="o">}</span>
+
+<span class="k">export</span> <span class="k">class</span> <span class="t">UnsupportedReviewSelectionError</span>
+  <span class="k">extends</span> <span class="t">Data</span><span class="o">.</span><span class="p">TaggedError</span><span class="o">(</span><span class="s">"UnsupportedReviewSelectionError"</span><span class="o">)</span><span class="o">&lt;</span><span class="t">ReviewSelectionFields</span><span class="o">&gt;</span> <span class="o">{</span><span class="o">}</span></code></pre>
+
+        <p>若只討論一般 payload 呼叫方式，可以把它理解成下面這個明寫版本：</p>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">export</span> <span class="k">class</span> <span class="t">UnsupportedReviewSelectionError</span>
+  <span class="k">extends</span> <span class="t">Data</span><span class="o">.</span><span class="p">TaggedError</span><span class="o">(</span><span class="s">"UnsupportedReviewSelectionError"</span><span class="o">)</span><span class="o">&lt;</span><span class="t">ReviewSelectionFields</span><span class="o">&gt;</span> <span class="o">{</span>
+  <span class="f">constructor</span><span class="o">(</span>fields<span class="o">:</span> <span class="t">ReviewSelectionFields</span><span class="o">)</span> <span class="o">{</span>
+    <span class="f">super</span><span class="o">(</span>fields<span class="o">)</span>
+  <span class="o">}</span>
+<span class="o">}</span></code></pre>
+
+        <p>兩者都用同一個物件建立，而且父類別收到相同資料：</p>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">new</span> <span class="f">UnsupportedReviewSelectionError</span><span class="o">(</span><span class="o">{</span>
+  engine<span class="o">:</span> <span class="s">"codex"</span><span class="o">,</span>
+  provider<span class="o">:</span> <span class="s">"openai"</span><span class="o">,</span>
+  model<span class="o">:</span> <span class="s">"gpt-5"</span><span class="o">,</span>
+<span class="o">}</span><span class="o">)</span></code></pre>
+
+        <div class="callout warning">
+          <strong><code>super()</code> 不是可有可無的裝飾</strong>
+          <p>只要衍生 class 自訂 constructor，就必須先呼叫 <code>super()</code> 才能使用 <code>this</code>。它負責讓父類別完成標準 Error、Effect yieldable error 與 payload 欄位的初始化。</p>
+        </div>
+      </section>
+
+      <section id="not-equivalent">
+        <h2>為什麼三個 positional arguments 不完全等價</h2>
+        <p>以下自訂 constructor 最終可以建立出內容相同的錯誤，但它改變了公開 API：</p>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">export</span> <span class="k">class</span> <span class="t">UnsupportedReviewSelectionError</span> <span class="k">extends</span> <span class="t">Data</span><span class="o">.</span><span class="p">TaggedError</span><span class="o">(</span>
+  <span class="s">"UnsupportedReviewSelectionError"</span><span class="o">,</span>
+<span class="o">)</span><span class="o">&lt;</span><span class="o">{</span>
+  readonly engine<span class="o">:</span> string
+  readonly provider<span class="o">:</span> string
+  readonly model<span class="o">:</span> string
+<span class="o">}</span><span class="o">&gt;</span> <span class="o">{</span>
+  <span class="f">constructor</span><span class="o">(</span>engine<span class="o">:</span> string<span class="o">,</span> provider<span class="o">:</span> string<span class="o">,</span> model<span class="o">:</span> string<span class="o">)</span> <span class="o">{</span>
+    <span class="f">super</span><span class="o">(</span><span class="o">{</span>
+      engine<span class="o">,</span>
+      provider<span class="o">,</span>
+      model<span class="o">,</span>
+    <span class="o">}</span><span class="o">)</span>
+  <span class="o">}</span>
+<span class="o">}</span></code></pre>
+
+        <p>呼叫方式從一個具名物件變成三個位置參數：</p>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="c">// 空 class 或 constructor(fields)</span>
+<span class="k">new</span> <span class="f">UnsupportedReviewSelectionError</span><span class="o">(</span><span class="o">{</span>
+  engine<span class="o">:</span> <span class="s">"codex"</span><span class="o">,</span>
+  provider<span class="o">:</span> <span class="s">"openai"</span><span class="o">,</span>
+  model<span class="o">:</span> <span class="s">"gpt-5"</span><span class="o">,</span>
+<span class="o">}</span><span class="o">)</span>
+
+<span class="c">// 自訂三個 positional arguments</span>
+<span class="k">new</span> <span class="f">UnsupportedReviewSelectionError</span><span class="o">(</span><span class="s">"codex"</span><span class="o">,</span> <span class="s">"openai"</span><span class="o">,</span> <span class="s">"gpt-5"</span><span class="o">)</span></code></pre>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>比較項目</th>
+                <th>單一 payload 物件</th>
+                <th>三個 positional arguments</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>實例最後的欄位</td>
+                <td>可相同</td>
+                <td>可相同</td>
+              </tr>
+              <tr>
+                <td>constructor 型別</td>
+                <td><code>(fields: Fields)</code></td>
+                <td><code>(engine, provider, model)</code></td>
+              </tr>
+              <tr>
+                <td>欄位名稱是否出現在呼叫點</td>
+                <td>會，較容易閱讀</td>
+                <td>不會，依賴參數順序</td>
+              </tr>
+              <tr>
+                <td>新增選填欄位</td>
+                <td>通常不影響既有呼叫</td>
+                <td>常需要調整參數順序或簽名</td>
+              </tr>
+              <tr>
+                <td>顛倒同型別參數的風險</td>
+                <td>低</td>
+                <td>較高，三者都是 <code>string</code></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p>所以更精準的說法是：兩種寫法可以產生「資料相同的實例」，但不是「相同的 constructor API」。錯誤欄位較多，或像本例一樣有多個同為 <code>string</code> 的欄位時，保留物件參數通常比較安全。</p>
+      </section>
+
+      <section id="partial-input">
+        <h2><code>super()</code> 裡先填資料，呼叫者就能少傳嗎？</h2>
+        <p>可以，但要分清楚兩個契約：自訂 constructor 決定呼叫者要提供什麼；泛型 payload 決定父類別最後必須拿到什麼。呼叫者可以少傳，並不代表父類別可以缺少必填欄位。</p>
+
+        <h3>情境一：constructor 固定其中一個欄位</h3>
+        <p>若這個錯誤永遠只代表 OpenAI provider，可以由 constructor 補上固定值：</p>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">type</span> <span class="t">ReviewSelectionFields</span> <span class="o">=</span> <span class="o">{</span>
+  readonly engine<span class="o">:</span> string
+  readonly provider<span class="o">:</span> string
+  readonly model<span class="o">:</span> string
+<span class="o">}</span>
+
+<span class="k">export</span> <span class="k">class</span> <span class="t">UnsupportedReviewSelectionError</span>
+  <span class="k">extends</span> <span class="t">Data</span><span class="o">.</span><span class="p">TaggedError</span><span class="o">(</span><span class="s">"UnsupportedReviewSelectionError"</span><span class="o">)</span><span class="o">&lt;</span><span class="t">ReviewSelectionFields</span><span class="o">&gt;</span> <span class="o">{</span>
+  <span class="f">constructor</span><span class="o">(</span>engine<span class="o">:</span> string<span class="o">,</span> model<span class="o">:</span> string<span class="o">)</span> <span class="o">{</span>
+    <span class="f">super</span><span class="o">(</span><span class="o">{</span>
+      engine<span class="o">,</span>
+      provider<span class="o">:</span> <span class="s">"openai"</span><span class="o">,</span>
+      model<span class="o">,</span>
+    <span class="o">}</span><span class="o">)</span>
+  <span class="o">}</span>
+<span class="o">}</span></code></pre>
+
+        <p>呼叫者只傳兩個值，但 <code>super()</code> 仍收到三個完整欄位：</p>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">const</span> error <span class="o">=</span> <span class="k">new</span> <span class="f">UnsupportedReviewSelectionError</span><span class="o">(</span><span class="s">"codex"</span><span class="o">,</span> <span class="s">"gpt-5"</span><span class="o">)</span>
+
+error<span class="o">.</span><span class="p">provider</span> <span class="c">// "openai"</span></code></pre>
+
+        <h3>情境二：constructor 提供預設值，但仍保留物件介面</h3>
+        <p>不一定要改成位置參數。可以定義較小的輸入型別，再組成完整 payload：</p>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">type</span> <span class="t">ReviewSelectionFields</span> <span class="o">=</span> <span class="o">{</span>
+  readonly engine<span class="o">:</span> string
+  readonly provider<span class="o">:</span> string
+  readonly model<span class="o">:</span> string
+<span class="o">}</span>
+
+<span class="k">type</span> <span class="t">ReviewSelectionInput</span> <span class="o">=</span> <span class="o">{</span>
+  readonly engine<span class="o">:</span> string
+  readonly model<span class="o">:</span> string
+  readonly provider<span class="o">?</span><span class="o">:</span> string
+<span class="o">}</span>
+
+<span class="k">export</span> <span class="k">class</span> <span class="t">UnsupportedReviewSelectionError</span>
+  <span class="k">extends</span> <span class="t">Data</span><span class="o">.</span><span class="p">TaggedError</span><span class="o">(</span><span class="s">"UnsupportedReviewSelectionError"</span><span class="o">)</span><span class="o">&lt;</span><span class="t">ReviewSelectionFields</span><span class="o">&gt;</span> <span class="o">{</span>
+  <span class="f">constructor</span><span class="o">(</span>input<span class="o">:</span> <span class="t">ReviewSelectionInput</span><span class="o">)</span> <span class="o">{</span>
+    <span class="f">super</span><span class="o">(</span><span class="o">{</span>
+      engine<span class="o">:</span> input<span class="o">.</span><span class="p">engine</span><span class="o">,</span>
+      provider<span class="o">:</span> input<span class="o">.</span><span class="p">provider</span> <span class="o">?</span><span class="o">?</span> <span class="s">"openai"</span><span class="o">,</span>
+      model<span class="o">:</span> input<span class="o">.</span><span class="p">model</span><span class="o">,</span>
+    <span class="o">}</span><span class="o">)</span>
+  <span class="o">}</span>
+<span class="o">}</span></code></pre>
+
+        <p>這種寫法同時保留具名欄位與預設值，也明確區分「建立時可省略」和「實例上永遠存在」。</p>
+
+        <h3>情境三：payload 本身就是選填</h3>
+        <p>如果領域意義允許錯誤實例根本沒有 provider，可以直接把欄位宣告成 optional：</p>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">export</span> <span class="k">class</span> <span class="t">UnsupportedReviewSelectionError</span> <span class="k">extends</span> <span class="t">Data</span><span class="o">.</span><span class="p">TaggedError</span><span class="o">(</span>
+  <span class="s">"UnsupportedReviewSelectionError"</span><span class="o">,</span>
+<span class="o">)</span><span class="o">&lt;</span><span class="o">{</span>
+  readonly engine<span class="o">:</span> string
+  readonly provider<span class="o">?</span><span class="o">:</span> string
+  readonly model<span class="o">:</span> string
+<span class="o">}</span><span class="o">&gt;</span> <span class="o">{</span><span class="o">}</span></code></pre>
+
+        <p>這時預設 constructor 接受不含 <code>provider</code> 的 payload；建立後的型別則是 <code>string | undefined</code>。這和「建立時可省略，但實例一定補成 string」是不同契約。</p>
+
+        <div class="callout success">
+          <strong>判斷重點</strong>
+          <p>若欄位在有效的錯誤實例上一定存在，就讓 payload 維持必填，並在自訂 constructor 中補預設值。只有當「缺少該欄位」本身也是合法狀態時，才把 payload 欄位改成 optional。</p>
+        </div>
+
+        <h3>漏掉必填欄位會怎樣</h3>
+        <p>以下 <code>super()</code> 沒有提供 <code>provider</code>，因此無法滿足父類別的 payload 契約，TypeScript 應該報錯：</p>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="f">constructor</span><span class="o">(</span>engine<span class="o">:</span> string<span class="o">,</span> model<span class="o">:</span> string<span class="o">)</span> <span class="o">{</span>
+  <span class="f">super</span><span class="o">(</span><span class="o">{</span>
+    engine<span class="o">,</span>
+    model<span class="o">,</span>
+    <span class="c">// 缺少必要的 provider</span>
+  <span class="o">}</span><span class="o">)</span>
+<span class="o">}</span></code></pre>
+
+        <p>泛型檢查只存在於編譯期。若用不安全的型別斷言強行繞過，JavaScript 執行期不會替你補齊欄位，最後真的會得到資料不完整的實例。</p>
+      </section>
+
+      <section id="runtime-details">
+        <h2>父類別在執行期實際初始化什麼</h2>
+        <p>從使用者角度，可以把 <code>Data.TaggedError</code> 的建構流程理解為四個動作：</p>
+
+        <ol>
+          <li>初始化標準 JavaScript <code>Error</code> 行為，例如 stack 與 message。</li>
+          <li>讓錯誤成為 Effect 可 yield 的失敗值。</li>
+          <li>把 payload 物件的欄位指定到錯誤實例。</li>
+          <li>加入固定的 <code>_tag</code>，供 discriminated union 與 <code>catchTag</code> 使用。</li>
+        </ol>
+
+        <p>這也說明為什麼自訂 constructor 不能只把參數存在區域變數中：資料必須經過 <code>super(payload)</code> 交給基底 class，才能沿用完整行為。</p>
+
+        <h3><code>message</code> 與 <code>cause</code> 是有特殊用途的欄位</h3>
+        <p>payload 若包含 <code>message</code>，它會成為標準 Error 的 message；包含 <code>cause</code> 時，也會接入 Error 的 cause。它們仍可以是 payload 的一部分：</p>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">export</span> <span class="k">class</span> <span class="t">ReviewConfigError</span> <span class="k">extends</span> <span class="t">Data</span><span class="o">.</span><span class="p">TaggedError</span><span class="o">(</span>
+  <span class="s">"ReviewConfigError"</span><span class="o">,</span>
+<span class="o">)</span><span class="o">&lt;</span><span class="o">{</span>
+  readonly message<span class="o">:</span> string
+  readonly cause<span class="o">:</span> unknown
+  readonly model<span class="o">:</span> string
+<span class="o">}</span><span class="o">&gt;</span> <span class="o">{</span><span class="o">}</span>
+
+<span class="k">const</span> error <span class="o">=</span> <span class="k">new</span> <span class="f">ReviewConfigError</span><span class="o">(</span><span class="o">{</span>
+  message<span class="o">:</span> <span class="s">"無法讀取模型設定"</span><span class="o">,</span>
+  cause<span class="o">:</span> originalError<span class="o">,</span>
+  model<span class="o">:</span> <span class="s">"gpt-5"</span><span class="o">,</span>
+<span class="o">}</span><span class="o">)</span></code></pre>
+
+        <h3><code>readonly</code> 不等於 runtime freeze</h3>
+        <p><code>readonly</code> 是 TypeScript 的編譯期限制，不代表錯誤物件在 JavaScript 執行期一定被 <code>Object.freeze()</code>。它能防止一般 TypeScript 程式碼誤改欄位，但不是安全邊界或不可變性的 runtime 保證。</p>
+
+        <h3>空 payload 是特例</h3>
+        <p>當 payload 型別沒有任何欄位時，Effect 的型別會讓 constructor 參數可省略：</p>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">export</span> <span class="k">class</span> <span class="t">ReviewCancelledError</span> <span class="k">extends</span> <span class="t">Data</span><span class="o">.</span><span class="p">TaggedError</span><span class="o">(</span>
+  <span class="s">"ReviewCancelledError"</span><span class="o">,</span>
+<span class="o">)</span><span class="o">&lt;</span><span class="o">{</span><span class="o">}</span><span class="o">&gt;</span> <span class="o">{</span><span class="o">}</span>
+
+<span class="k">const</span> error <span class="o">=</span> <span class="k">new</span> <span class="f">ReviewCancelledError</span><span class="o">(</span><span class="o">)</span></code></pre>
+
+        <p>一旦 payload 有任何必填欄位，就要提供符合契約的物件，或由自訂 constructor 組出完整物件再交給 <code>super()</code>。</p>
+      </section>
+
+      <section id="effect-channel">
+        <h2>建立完成後，錯誤如何進入 Effect 的錯誤通道</h2>
+        <p><code>Data.TaggedError</code> 的實例不是成功值。將它交給 <code>Effect.fail</code> 時，它會成為 <code>Effect&lt;A, E, R&gt;</code> 中的 <code>E</code>，也就是 typed error channel：</p>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">import</span> <span class="o">{</span> <span class="t">Effect</span> <span class="o">}</span> <span class="k">from</span> <span class="s">"effect"</span>
+
+<span class="k">const</span> failure <span class="o">=</span> <span class="t">Effect</span><span class="o">.</span><span class="p">fail</span><span class="o">(</span>
+  <span class="k">new</span> <span class="f">UnsupportedReviewSelectionError</span><span class="o">(</span><span class="o">{</span>
+    engine<span class="o">:</span> <span class="s">"codex"</span><span class="o">,</span>
+    provider<span class="o">:</span> <span class="s">"openai"</span><span class="o">,</span>
+    model<span class="o">:</span> <span class="s">"unsupported-model"</span><span class="o">,</span>
+  <span class="o">}</span><span class="o">)</span><span class="o">,</span>
+<span class="o">)</span></code></pre>
+
+        <p>固定的 <code>_tag</code> 讓下游可以只恢復這一種錯誤，handler 內也能直接取得 payload：</p>
+
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">const</span> recovered <span class="o">=</span> failure<span class="o">.</span><span class="p">pipe</span><span class="o">(</span>
+  <span class="t">Effect</span><span class="o">.</span><span class="p">catchTag</span><span class="o">(</span><span class="s">"UnsupportedReviewSelectionError"</span><span class="o">,</span> <span class="o">(</span>error<span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span>
+    <span class="t">Effect</span><span class="o">.</span><span class="p">succeed</span><span class="o">(</span>
+      <span class="s">`不支援 ${error.provider}/${error.model}`</span><span class="o">,</span>
+    <span class="o">)</span><span class="o">,</span>
+  <span class="o">)</span><span class="o">,</span>
+<span class="o">)</span></code></pre>
+
+        <p>因此 payload 欄位的目的，是讓失敗攜帶足夠的領域資訊；<code>_tag</code> 的目的，是讓程式辨識失敗種類；<code>Effect.fail</code> 才是把這個值放進 Effect 錯誤通道的動作。</p>
+      </section>
+
+      <section id="common-mistakes">
+        <h2>常見誤解與修正方式</h2>
+
+        <h3>誤解一：泛型中的欄位是回傳值</h3>
+        <p>它們是實例 payload 與 constructor 輸入契約。成功回傳值仍由建立 Effect 的程式決定，兩者不是同一條 channel。</p>
+
+        <h3>誤解二：只要最後欄位相同，constructor 就等價</h3>
+        <p>實例狀態相同不代表建立介面相同。物件參數與位置參數在型別、可讀性、相容性與誤用風險上都不同。</p>
+
+        <h3>誤解三：constructor 少收一個參數，父類別也可以少一個欄位</h3>
+        <p>constructor 可以隱藏或補值，但 <code>super()</code> 最後仍要收到完整的必填 payload。除非 payload 契約本身把欄位設為 optional。</p>
+
+        <h3>誤解四：寫了泛型，runtime 就會驗證外部資料</h3>
+        <p>TypeScript 泛型在編譯後會消失。若資料來自 JSON、HTTP 或使用者輸入，仍要在信任邊界使用 Schema 或其他 runtime decoder 驗證。</p>
+      </section>
+
+      <section id="decision-rules">
+        <h2>實務上該保留空 class，還是自訂 constructor？</h2>
+        <p>預設先保留單一 payload 物件。它和 <code>Data.TaggedError</code> 的原生介面一致，也更容易閱讀與演進。只有在自訂建構流程確實創造價值時，才增加 constructor。</p>
+
+        <ul class="decision-list">
+          <li><strong>保留空 class：</strong>呼叫者本來就應該知道並提供所有 payload 欄位。</li>
+          <li><strong>使用 <code>constructor(fields) { super(fields) }</code>：</strong>需要在 class 內加入額外邏輯，但仍想維持原本的物件介面。</li>
+          <li><strong>建立較小的 input 型別：</strong>呼叫者可以省略某些值，但有效實例上仍必須存在完整欄位。</li>
+          <li><strong>使用 positional arguments：</strong>參數很少、意義非常明確，且位置不容易混淆；否則優先使用具名物件。</li>
+          <li><strong>將 payload 欄位設為 optional：</strong>缺少該資料本身就是領域允許的狀態，而不是單純想讓呼叫方便。</li>
+        </ul>
+
+        <div class="callout">
+          <strong>最後的判斷公式</strong>
+          <p>泛型回答「有效錯誤必須長什麼樣子」；constructor 回答「呼叫者要交出什麼」；<code>super()</code> 回答「父類別最後拿什麼完成初始化」。三個答案可以不同，但最後交給 <code>super()</code> 的資料必須滿足 payload 契約。</p>
+        </div>
+      </section>
+
+      <footer>
+        本文說明以 Effect 4 的 <code>Data.TaggedError</code> API 為基礎。若使用不同主要版本，應以該版本的型別簽名與官方文件為準。
+      </footer>
+    </article>
+  </main>
+
+  <script>
+    const copyIcon = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="11" height="11" rx="2"></rect><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"></path></svg>'
+    const checkIcon = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"></path></svg>'
+
+    for (const pre of document.querySelectorAll("pre")) {
+      const code = pre.querySelector("code")
+      if (!code) continue
+
+      const button = document.createElement("button")
+      button.className = "copy-code"
+      button.type = "button"
+      button.setAttribute("aria-label", "複製程式碼")
+      button.innerHTML = copyIcon
+
+      button.addEventListener("click", async () => {
+        const value = code.textContent ?? ""
+        try {
+          await navigator.clipboard.writeText(value)
+        } catch {
+          const textarea = document.createElement("textarea")
+          textarea.value = value
+          textarea.style.position = "fixed"
+          textarea.style.opacity = "0"
+          document.body.append(textarea)
+          textarea.select()
+          document.execCommand("copy")
+          textarea.remove()
+        }
+
+        button.classList.add("copied")
+        button.setAttribute("aria-label", "已複製")
+        button.innerHTML = checkIcon
+
+        window.setTimeout(() => {
+          button.classList.remove("copied")
+          button.setAttribute("aria-label", "複製程式碼")
+          button.innerHTML = copyIcon
+        }, 1400)
+      })
+
+      const scrollbar = document.createElement("div")
+      scrollbar.className = "code-scrollbar"
+      scrollbar.setAttribute("aria-hidden", "true")
+
+      const thumb = document.createElement("div")
+      thumb.className = "code-scrollbar-thumb"
+      scrollbar.append(thumb)
+
+      const updateScrollbar = () => {
+        const visibleRatio = code.clientWidth / code.scrollWidth
+        if (visibleRatio >= 1) {
+          scrollbar.classList.add("hidden")
+          return
+        }
+
+        scrollbar.classList.remove("hidden")
+        const trackWidth = scrollbar.clientWidth
+        const thumbWidth = Math.max(trackWidth * visibleRatio, 28)
+        const maxThumbLeft = trackWidth - thumbWidth
+        const maxScrollLeft = code.scrollWidth - code.clientWidth
+        const thumbLeft = maxScrollLeft > 0
+          ? (code.scrollLeft / maxScrollLeft) * maxThumbLeft
+          : 0
+
+        thumb.style.width = `${thumbWidth}px`
+        thumb.style.transform = `translateX(${thumbLeft}px)`
+      }
+
+      code.addEventListener("scroll", updateScrollbar, { passive: true })
+      window.addEventListener("resize", updateScrollbar, { passive: true })
+
+      let dragStartX = 0
+      let dragStartScrollLeft = 0
+
+      thumb.addEventListener("pointerdown", (event) => {
+        dragStartX = event.clientX
+        dragStartScrollLeft = code.scrollLeft
+        thumb.setPointerCapture(event.pointerId)
+      })
+
+      thumb.addEventListener("pointermove", (event) => {
+        if (!thumb.hasPointerCapture(event.pointerId)) return
+        const trackRange = scrollbar.clientWidth - thumb.clientWidth
+        const scrollRange = code.scrollWidth - code.clientWidth
+        if (trackRange <= 0) return
+        code.scrollLeft = dragStartScrollLeft
+          + ((event.clientX - dragStartX) / trackRange) * scrollRange
+      })
+
+      pre.append(button, scrollbar)
+      requestAnimationFrame(updateScrollbar)
+    }
+  </script>
+</body>
+</html>
