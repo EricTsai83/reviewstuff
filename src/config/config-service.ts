@@ -3,6 +3,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import {
   type ReviewPresetName,
@@ -70,25 +71,14 @@ export class ConfigFileReadError extends Data.TaggedError(
   readonly cause: unknown;
 }> {}
 
-export class ConfigFileInvalidError extends Data.TaggedError(
-  "ConfigFileInvalidError",
+export class ConfigFileDecodeError extends Data.TaggedError(
+  "ConfigFileDecodeError",
 )<{
   readonly path: string;
   readonly cause: unknown;
 }> {}
 
-export class UnsupportedReviewSelectionError extends Data.TaggedError(
-  "UnsupportedReviewSelectionError",
-)<{
-  readonly engine: string;
-  readonly provider: string;
-  readonly model: string;
-}> {}
-
-export type ConfigError =
-  | ConfigFileReadError
-  | ConfigFileInvalidError
-  | UnsupportedReviewSelectionError;
+export type ConfigError = ConfigFileReadError | ConfigFileDecodeError;
 
 export class ConfigService extends Context.Service<
   ConfigService,
@@ -116,13 +106,13 @@ export const resolveReviewConfig = (
 
 const decodeConfigContents = (
   contents: string,
-): Effect.Effect<ReviewstuffConfigV1, ConfigFileInvalidError> =>
+): Effect.Effect<ReviewstuffConfigV1, ConfigFileDecodeError> =>
   Schema.decodeUnknownEffect(ReviewstuffConfigJsonSchema)(contents, {
     onExcessProperty: "error",
   }).pipe(
     Effect.mapError(
       (cause) =>
-        new ConfigFileInvalidError({
+        new ConfigFileDecodeError({
           path: reviewConfigFileName,
           cause,
         }),
@@ -131,25 +121,27 @@ const decodeConfigContents = (
 
 const loadConfig = (
   fileSystem: FileSystem.FileSystem,
-): Effect.Effect<ReviewstuffConfigV1 | undefined, ConfigError> =>
-  fileSystem.exists(reviewConfigFileName).pipe(
-    Effect.mapError(
-      (cause) =>
-        new ConfigFileReadError({ path: reviewConfigFileName, cause }),
-    ),
-    Effect.flatMap((exists) => {
-      if (!exists) {
-        return Effect.succeed<undefined>(undefined);
-      }
+): Effect.Effect<Option.Option<ReviewstuffConfigV1>, ConfigError> =>
+  fileSystem.readFileString(reviewConfigFileName).pipe(
+    Effect.map(Option.some),
+    Effect.catchTags({
+      PlatformError: (cause) => {
+        if (cause.reason._tag === "NotFound") {
+          return Effect.succeed(Option.none<string>());
+        }
 
-      return fileSystem.readFileString(reviewConfigFileName).pipe(
-        Effect.mapError(
-          (cause) =>
-            new ConfigFileReadError({ path: reviewConfigFileName, cause }),
-        ),
-        Effect.flatMap(decodeConfigContents),
-      );
+        return Effect.fail(
+          new ConfigFileReadError({ path: reviewConfigFileName, cause }),
+        );
+      },
     }),
+    Effect.flatMap(
+      Option.match({
+        onNone: () => Effect.succeed(Option.none<ReviewstuffConfigV1>()),
+        onSome: (contents) =>
+          decodeConfigContents(contents).pipe(Effect.map(Option.some)),
+      }),
+    ),
   );
 
 export const make = Effect.gen(function* () {
@@ -158,7 +150,9 @@ export const make = Effect.gen(function* () {
   return ConfigService.of({
     load: (overrides) =>
       loadConfig(fileSystem).pipe(
-        Effect.map((config) => resolveReviewConfig(config, overrides)),
+        Effect.map((config) =>
+          resolveReviewConfig(Option.getOrUndefined(config), overrides)
+        ),
       ),
   });
 });

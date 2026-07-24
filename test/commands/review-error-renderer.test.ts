@@ -1,9 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { renderReviewError } from "../../src/commands/review-error-renderer";
 import {
-  ConfigFileInvalidError,
+  ConfigFileDecodeError,
   ConfigFileReadError,
-  UnsupportedReviewSelectionError,
 } from "../../src/config/config-service";
 import { ReviewEngineFailure } from "../../src/engines/review-engine";
 import {
@@ -18,7 +17,10 @@ import {
   GitUnmergedPathsError,
   GitWorkingTreeUnavailableError,
 } from "../../src/git/git-service";
-import { ReviewTimeoutError } from "../../src/use-cases/run-review";
+import {
+  ReviewSelectionUnsupportedError,
+  ReviewTimeoutError,
+} from "../../src/use-cases/run-review";
 
 describe("renderReviewError", () => {
   test.each([
@@ -30,14 +32,14 @@ describe("renderReviewError", () => {
       "Unable to read config file reviewstuff.config.json.",
     ],
     [
-      new ConfigFileInvalidError({
+      new ConfigFileDecodeError({
         path: "reviewstuff.config.json",
         cause: undefined,
       }),
       "Invalid config file reviewstuff.config.json: Configuration does not match the supported schema.",
     ],
     [
-      new UnsupportedReviewSelectionError({
+      new ReviewSelectionUnsupportedError({
         engine: "openai",
         provider: "openai",
         model: "gpt-example",
@@ -50,7 +52,7 @@ describe("renderReviewError", () => {
 
   test("preserves invalid config causes without rendering them", () => {
     const cause = new Error("rejected-sensitive-value");
-    const error = new ConfigFileInvalidError({
+    const error = new ConfigFileDecodeError({
       path: "reviewstuff.config.json",
       cause,
     });

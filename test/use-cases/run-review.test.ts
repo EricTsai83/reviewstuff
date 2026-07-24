@@ -4,7 +4,6 @@ import * as Layer from "effect/Layer";
 import {
   ConfigService,
   resolveReviewConfig,
-  UnsupportedReviewSelectionError,
 } from "../../src/config/config-service";
 import {
   layer as fakeReviewEngine,
@@ -15,6 +14,7 @@ import { GitService } from "../../src/git/git-service";
 import type { ReviewRequestV1 } from "../../src/review/review-request";
 import { fallbackReviewRequestEstimator } from "../../src/review/review-budget";
 import {
+  ReviewSelectionUnsupportedError,
   ReviewTimeoutError,
   runReview,
 } from "../../src/use-cases/run-review";
@@ -68,7 +68,7 @@ test("runReview rejects selections that cannot execute yet", async () => {
   );
 
   expect(error).toEqual(
-    new UnsupportedReviewSelectionError({
+    new ReviewSelectionUnsupportedError({
       engine: "openai",
       provider: "openai",
       model: "gpt-example",

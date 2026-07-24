@@ -469,17 +469,17 @@
               <tr>
                 <td>內容驗證</td>
                 <td>JSON 欄位錯誤、型別錯誤、不符合 Schema</td>
-                <td><code>ConfigFileInvalidError</code></td>
+                <td><code>ConfigFileDecodeError</code></td>
               </tr>
             </tbody>
           </table>
         </div>
-        <p><code>ConfigFileInvalidError</code> 處理的是第二種情況：檔案已經讀到了，但內容不能被程式接受。它會把底層 Schema error 包裝成應用程式看得懂的錯誤。</p>
+        <p><code>ConfigFileDecodeError</code> 處理的是第二種情況：檔案已經讀到了，但內容不能被程式接受。它會把底層 Schema error 包裝成應用程式看得懂的錯誤。</p>
 
         <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="t">Schema</span><span class="o">.</span><span class="p">decodeUnknownEffect</span><span class="o">(</span><span class="t">ConfigSchema</span><span class="o">)</span><span class="o">(</span>contents<span class="o">)</span><span class="o">.</span><span class="p">pipe</span><span class="o">(</span>
   <span class="t">Effect</span><span class="o">.</span><span class="p">mapError</span><span class="o">(</span>
     <span class="o">(</span>cause<span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span>
-      <span class="k">new</span> <span class="f">ConfigFileInvalidError</span><span class="o">(</span><span class="o">{</span>
+      <span class="k">new</span> <span class="f">ConfigFileDecodeError</span><span class="o">(</span><span class="o">{</span>
         path<span class="o">:</span> <span class="s">"reviewstuff.config.json"</span><span class="o">,</span>
         cause<span class="o">,</span>
       <span class="o">}</span><span class="o">)</span><span class="o">,</span>
@@ -552,10 +552,10 @@ error<span class="o">.</span><span class="p">cause</span> <span class="c">// ori
 
       <section id="problem">
         <h2>三、需求衝突：最直覺的寫法會把 cause 一起序列化</h2>
-        <p>如果沿用上一節的預設模型，<code>ConfigFileInvalidError</code> 也可以寫成空 class body：</p>
+        <p>如果沿用上一節的預設模型，<code>ConfigFileDecodeError</code> 也可以寫成空 class body：</p>
 
-        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">class</span> <span class="t">ConfigFileInvalidError</span> <span class="k">extends</span> <span class="t">Data</span><span class="o">.</span><span class="p">TaggedError</span><span class="o">(</span>
-  <span class="s">"ConfigFileInvalidError"</span><span class="o">,</span>
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">class</span> <span class="t">ConfigFileDecodeError</span> <span class="k">extends</span> <span class="t">Data</span><span class="o">.</span><span class="p">TaggedError</span><span class="o">(</span>
+  <span class="s">"ConfigFileDecodeError"</span><span class="o">,</span>
 <span class="o">)</span><span class="o">&lt;</span><span class="o">{</span>
   readonly path<span class="o">:</span> string
   readonly cause<span class="o">:</span> unknown
@@ -563,7 +563,7 @@ error<span class="o">.</span><span class="p">cause</span> <span class="c">// ori
 
         <p>這在型別與錯誤處理上都能運作，而且 <code>error.cause</code> 可以正常讀取。問題是 <code>Data.TaggedError</code> 也會把交給預設 constructor 的 <code>cause</code> 納入 <code>toJSON()</code>。</p>
 
-        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">const</span> error <span class="o">=</span> <span class="k">new</span> <span class="f">ConfigFileInvalidError</span><span class="o">(</span><span class="o">{</span>
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">const</span> error <span class="o">=</span> <span class="k">new</span> <span class="f">ConfigFileDecodeError</span><span class="o">(</span><span class="o">{</span>
   path<span class="o">:</span> <span class="s">"reviewstuff.config.json"</span><span class="o">,</span>
   cause<span class="o">:</span> <span class="o">{</span>
     rejectedValue<span class="o">:</span> <span class="s">"sk-secret-value"</span><span class="o">,</span>
@@ -574,7 +574,7 @@ error<span class="o">.</span><span class="p">cause</span> <span class="c">// ori
 <span class="c">// 可能包含：</span>
 <span class="c">// {"path":"reviewstuff.config.json",</span>
 <span class="c">//  "cause":{"rejectedValue":"sk-secret-value"},</span>
-<span class="c">//  "_tag":"ConfigFileInvalidError"}</span></code></pre>
+<span class="c">//  "_tag":"ConfigFileDecodeError"}</span></code></pre>
 
         <p>Schema 驗證錯誤常常需要指出「哪一個值不合法」，所以原始 <code>cause</code> 可能保留被拒絕的設定內容。如果設定檔意外包含 API key、token 或密碼，把整個 error 寫進結構化 log 時，就可能把敏感值一起送出去。</p>
 
@@ -630,8 +630,8 @@ error<span class="o">.</span><span class="p">cause</span> <span class="c">// ori
 
         <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">const</span> configFileInvalidCauses <span class="o">=</span> <span class="k">new</span> <span class="t">WeakMap</span><span class="o">&lt;</span>object<span class="o">,</span> unknown<span class="o">&gt;</span><span class="o">(</span><span class="o">)</span>
 
-<span class="k">export</span> <span class="k">class</span> <span class="t">ConfigFileInvalidError</span> <span class="k">extends</span> <span class="t">Data</span><span class="o">.</span><span class="p">TaggedError</span><span class="o">(</span>
-  <span class="s">"ConfigFileInvalidError"</span><span class="o">,</span>
+<span class="k">export</span> <span class="k">class</span> <span class="t">ConfigFileDecodeError</span> <span class="k">extends</span> <span class="t">Data</span><span class="o">.</span><span class="p">TaggedError</span><span class="o">(</span>
+  <span class="s">"ConfigFileDecodeError"</span><span class="o">,</span>
 <span class="o">)</span><span class="o">&lt;</span><span class="o">{</span>
   readonly path<span class="o">:</span> string
 <span class="o">}</span><span class="o">&gt;</span> <span class="o">{</span>
@@ -719,7 +719,7 @@ configFileInvalidCauses<span class="o">.</span><span class="p">get</span><span c
 <span class="c">// 類似：</span>
 <span class="c">// {"path":"config.json",</span>
 <span class="c">//  "cause":{"secret":"sk-123"},</span>
-<span class="c">//  "_tag":"ConfigFileInvalidError"}</span></code></pre>
+<span class="c">//  "_tag":"ConfigFileDecodeError"}</span></code></pre>
 
           <p>特殊版本只把 <code>path</code> 交給父類別：</p>
 
@@ -735,7 +735,7 @@ configFileInvalidCauses<span class="o">.</span><span class="p">set</span><span c
 <span class="t">JSON</span><span class="o">.</span><span class="p">stringify</span><span class="o">(</span>error<span class="o">)</span>
 <span class="c">// 類似：</span>
 <span class="c">// {"path":"config.json",</span>
-<span class="c">//  "_tag":"ConfigFileInvalidError"}</span></code></pre>
+<span class="c">//  "_tag":"ConfigFileDecodeError"}</span></code></pre>
 
           <p><code>cause</code> 的 getter 位於 class prototype，真正的值又放在物件外面的 <code>WeakMap</code>。它既不是傳給父類別的原始參數，也不是 error instance 上可列舉的普通資料欄位，因此 Effect 的預設 <code>toJSON()</code> 不會把它帶入結果。</p>
 
@@ -841,7 +841,7 @@ error instance B ──對應──&gt; schema cause B</code></pre>
 
       <section class="closing">
         <h2>回到主軸：這段程式真正做了什麼？</h2>
-        <p><code>ConfigFileInvalidError</code> 沒有刪除原始 <code>cause</code>，而是把它從「TaggedError 預設管理、預設序列化的資料」移到「由 getter 查詢的外部 WeakMap」。因此，程式仍能使用 <code>error.cause</code> 進行診斷，一般 <code>JSON.stringify(error)</code> 卻只會看到適合公開的 <code>path</code> 與錯誤標籤。</p>
+        <p><code>ConfigFileDecodeError</code> 沒有刪除原始 <code>cause</code>，而是把它從「TaggedError 預設管理、預設序列化的資料」移到「由 getter 查詢的外部 WeakMap」。因此，程式仍能使用 <code>error.cause</code> 進行診斷，一般 <code>JSON.stringify(error)</code> 卻只會看到適合公開的 <code>path</code> 與錯誤標籤。</p>
         <p>constructor、<code>WeakMap.set</code> 與 getter 並不是三個零散技巧；它們共同完成同一件事：把公開讀取介面與預設序列化資料分開管理。</p>
       </section>
       <p><a href="./effect-learning-path.html">返回 Effect 4 學習路徑</a></p>

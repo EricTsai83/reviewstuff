@@ -5,7 +5,6 @@ import {
   ConfigService,
   type ReviewConfigOverrides,
   type ResolvedReviewConfig,
-  UnsupportedReviewSelectionError,
 } from "../config/config-service";
 import type { ReviewFindingV1 } from "../domain/finding";
 import {
@@ -43,9 +42,18 @@ export class ReviewTimeoutError extends Data.TaggedError(
   readonly timeoutMilliseconds: number;
 }> {}
 
+export class ReviewSelectionUnsupportedError extends Data.TaggedError(
+  "ReviewSelectionUnsupportedError",
+)<{
+  readonly engine: string;
+  readonly provider: string;
+  readonly model: string;
+}> {}
+
 export type RunReviewError =
   | GitError
   | ConfigError
+  | ReviewSelectionUnsupportedError
   | ReviewEngineError
   | ReviewTimeoutError;
 
@@ -56,13 +64,13 @@ export interface RunReviewInput {
 
 const ensureSupportedFakeSelection = (
   config: ResolvedReviewConfig,
-): Effect.Effect<void, UnsupportedReviewSelectionError> =>
+): Effect.Effect<void, ReviewSelectionUnsupportedError> =>
   config.engine === "fake" &&
     config.provider === "fake" &&
     config.model === "fake-reviewer-v1"
     ? Effect.void
     : Effect.fail(
-        new UnsupportedReviewSelectionError({
+        new ReviewSelectionUnsupportedError({
           engine: config.engine,
           provider: config.provider,
           model: config.model,

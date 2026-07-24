@@ -385,12 +385,12 @@
 
       <section id="starting-point">
         <h2>先看完整宣告：三種語法疊在一起</h2>
-        <p>以下宣告建立一個名為 <code>UnsupportedReviewSelectionError</code> 的錯誤 class。錯誤能攜帶所選的引擎、供應商與模型，並有固定的 <code>_tag</code>，方便 Effect 依錯誤種類處理。</p>
+        <p>以下宣告建立一個名為 <code>ReviewSelectionUnsupportedError</code> 的錯誤 class。錯誤能攜帶所選的引擎、供應商與模型，並有固定的 <code>_tag</code>，方便 Effect 依錯誤種類處理。</p>
 
         <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">import</span> <span class="o">{</span> <span class="t">Data</span> <span class="o">}</span> <span class="k">from</span> <span class="s">"effect"</span>
 
-<span class="k">export</span> <span class="k">class</span> <span class="t">UnsupportedReviewSelectionError</span> <span class="k">extends</span> <span class="t">Data</span><span class="o">.</span><span class="p">TaggedError</span><span class="o">(</span>
-  <span class="s">"UnsupportedReviewSelectionError"</span><span class="o">,</span>
+<span class="k">export</span> <span class="k">class</span> <span class="t">ReviewSelectionUnsupportedError</span> <span class="k">extends</span> <span class="t">Data</span><span class="o">.</span><span class="p">TaggedError</span><span class="o">(</span>
+  <span class="s">"ReviewSelectionUnsupportedError"</span><span class="o">,</span>
 <span class="o">)</span><span class="o">&lt;</span><span class="o">{</span>
   readonly engine<span class="o">:</span> string
   readonly provider<span class="o">:</span> string
@@ -399,7 +399,7 @@
 
         <p>建立實例時，預設介面是「傳入一個物件」，而不是依序傳入三個字串：</p>
 
-        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">const</span> error <span class="o">=</span> <span class="k">new</span> <span class="f">UnsupportedReviewSelectionError</span><span class="o">(</span><span class="o">{</span>
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">const</span> error <span class="o">=</span> <span class="k">new</span> <span class="f">ReviewSelectionUnsupportedError</span><span class="o">(</span><span class="o">{</span>
   engine<span class="o">:</span> <span class="s">"codex"</span><span class="o">,</span>
   provider<span class="o">:</span> <span class="s">"openai"</span><span class="o">,</span>
   model<span class="o">:</span> <span class="s">"gpt-5"</span><span class="o">,</span>
@@ -410,7 +410,7 @@
         <pre class="language-typescript"><span class="label">TypeScript</span><code>error<span class="o">.</span><span class="p">engine</span>   <span class="c">// "codex"</span>
 error<span class="o">.</span><span class="p">provider</span> <span class="c">// "openai"</span>
 error<span class="o">.</span><span class="p">model</span>    <span class="c">// "gpt-5"</span>
-error<span class="o">.</span><span class="p">_tag</span>     <span class="c">// "UnsupportedReviewSelectionError"</span></code></pre>
+error<span class="o">.</span><span class="p">_tag</span>     <span class="c">// "ReviewSelectionUnsupportedError"</span></code></pre>
       </section>
 
       <section id="three-layers">
@@ -456,7 +456,7 @@ error<span class="o">.</span><span class="p">_tag</span>     <span class="c">// 
         </div>
 
         <h3>第一層：tag 決定「這是哪一種錯誤」</h3>
-        <p><code>Data.TaggedError("UnsupportedReviewSelectionError")</code> 產生一個可被繼承的基底 class。每個實例都會有固定的 <code>_tag</code>；呼叫者不需要，也不應在 payload 中重複提供它。</p>
+        <p><code>Data.TaggedError("ReviewSelectionUnsupportedError")</code> 產生一個可被繼承的基底 class。每個實例都會有固定的 <code>_tag</code>；呼叫者不需要，也不應在 payload 中重複提供它。</p>
 
         <h3>第二層：泛型決定「錯誤攜帶什麼資料」</h3>
         <p>泛型物件中的三個欄位都沒有問號，因此全部必填。<code>readonly</code> 則表示 TypeScript 不允許一般程式碼在建立後重新指定它們。</p>
@@ -481,13 +481,13 @@ error<span class="o">.</span><span class="p">_tag</span>     <span class="c">// 
   readonly model<span class="o">:</span> string
 <span class="o">}</span>
 
-<span class="k">export</span> <span class="k">class</span> <span class="t">UnsupportedReviewSelectionError</span>
-  <span class="k">extends</span> <span class="t">Data</span><span class="o">.</span><span class="p">TaggedError</span><span class="o">(</span><span class="s">"UnsupportedReviewSelectionError"</span><span class="o">)</span><span class="o">&lt;</span><span class="t">ReviewSelectionFields</span><span class="o">&gt;</span> <span class="o">{</span><span class="o">}</span></code></pre>
+<span class="k">export</span> <span class="k">class</span> <span class="t">ReviewSelectionUnsupportedError</span>
+  <span class="k">extends</span> <span class="t">Data</span><span class="o">.</span><span class="p">TaggedError</span><span class="o">(</span><span class="s">"ReviewSelectionUnsupportedError"</span><span class="o">)</span><span class="o">&lt;</span><span class="t">ReviewSelectionFields</span><span class="o">&gt;</span> <span class="o">{</span><span class="o">}</span></code></pre>
 
         <p>若只討論一般 payload 呼叫方式，可以把它理解成下面這個明寫版本：</p>
 
-        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">export</span> <span class="k">class</span> <span class="t">UnsupportedReviewSelectionError</span>
-  <span class="k">extends</span> <span class="t">Data</span><span class="o">.</span><span class="p">TaggedError</span><span class="o">(</span><span class="s">"UnsupportedReviewSelectionError"</span><span class="o">)</span><span class="o">&lt;</span><span class="t">ReviewSelectionFields</span><span class="o">&gt;</span> <span class="o">{</span>
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">export</span> <span class="k">class</span> <span class="t">ReviewSelectionUnsupportedError</span>
+  <span class="k">extends</span> <span class="t">Data</span><span class="o">.</span><span class="p">TaggedError</span><span class="o">(</span><span class="s">"ReviewSelectionUnsupportedError"</span><span class="o">)</span><span class="o">&lt;</span><span class="t">ReviewSelectionFields</span><span class="o">&gt;</span> <span class="o">{</span>
   <span class="f">constructor</span><span class="o">(</span>fields<span class="o">:</span> <span class="t">ReviewSelectionFields</span><span class="o">)</span> <span class="o">{</span>
     <span class="f">super</span><span class="o">(</span>fields<span class="o">)</span>
   <span class="o">}</span>
@@ -495,7 +495,7 @@ error<span class="o">.</span><span class="p">_tag</span>     <span class="c">// 
 
         <p>兩者都用同一個物件建立，而且父類別收到相同資料：</p>
 
-        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">new</span> <span class="f">UnsupportedReviewSelectionError</span><span class="o">(</span><span class="o">{</span>
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">new</span> <span class="f">ReviewSelectionUnsupportedError</span><span class="o">(</span><span class="o">{</span>
   engine<span class="o">:</span> <span class="s">"codex"</span><span class="o">,</span>
   provider<span class="o">:</span> <span class="s">"openai"</span><span class="o">,</span>
   model<span class="o">:</span> <span class="s">"gpt-5"</span><span class="o">,</span>
@@ -511,8 +511,8 @@ error<span class="o">.</span><span class="p">_tag</span>     <span class="c">// 
         <h2>為什麼三個 positional arguments 不完全等價</h2>
         <p>以下自訂 constructor 最終可以建立出內容相同的錯誤，但它改變了公開 API：</p>
 
-        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">export</span> <span class="k">class</span> <span class="t">UnsupportedReviewSelectionError</span> <span class="k">extends</span> <span class="t">Data</span><span class="o">.</span><span class="p">TaggedError</span><span class="o">(</span>
-  <span class="s">"UnsupportedReviewSelectionError"</span><span class="o">,</span>
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">export</span> <span class="k">class</span> <span class="t">ReviewSelectionUnsupportedError</span> <span class="k">extends</span> <span class="t">Data</span><span class="o">.</span><span class="p">TaggedError</span><span class="o">(</span>
+  <span class="s">"ReviewSelectionUnsupportedError"</span><span class="o">,</span>
 <span class="o">)</span><span class="o">&lt;</span><span class="o">{</span>
   readonly engine<span class="o">:</span> string
   readonly provider<span class="o">:</span> string
@@ -530,14 +530,14 @@ error<span class="o">.</span><span class="p">_tag</span>     <span class="c">// 
         <p>呼叫方式從一個具名物件變成三個位置參數：</p>
 
         <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="c">// 空 class 或 constructor(fields)</span>
-<span class="k">new</span> <span class="f">UnsupportedReviewSelectionError</span><span class="o">(</span><span class="o">{</span>
+<span class="k">new</span> <span class="f">ReviewSelectionUnsupportedError</span><span class="o">(</span><span class="o">{</span>
   engine<span class="o">:</span> <span class="s">"codex"</span><span class="o">,</span>
   provider<span class="o">:</span> <span class="s">"openai"</span><span class="o">,</span>
   model<span class="o">:</span> <span class="s">"gpt-5"</span><span class="o">,</span>
 <span class="o">}</span><span class="o">)</span>
 
 <span class="c">// 自訂三個 positional arguments</span>
-<span class="k">new</span> <span class="f">UnsupportedReviewSelectionError</span><span class="o">(</span><span class="s">"codex"</span><span class="o">,</span> <span class="s">"openai"</span><span class="o">,</span> <span class="s">"gpt-5"</span><span class="o">)</span></code></pre>
+<span class="k">new</span> <span class="f">ReviewSelectionUnsupportedError</span><span class="o">(</span><span class="s">"codex"</span><span class="o">,</span> <span class="s">"openai"</span><span class="o">,</span> <span class="s">"gpt-5"</span><span class="o">)</span></code></pre>
 
         <div class="table-wrap">
           <table>
@@ -594,8 +594,8 @@ error<span class="o">.</span><span class="p">_tag</span>     <span class="c">// 
   readonly model<span class="o">:</span> string
 <span class="o">}</span>
 
-<span class="k">export</span> <span class="k">class</span> <span class="t">UnsupportedReviewSelectionError</span>
-  <span class="k">extends</span> <span class="t">Data</span><span class="o">.</span><span class="p">TaggedError</span><span class="o">(</span><span class="s">"UnsupportedReviewSelectionError"</span><span class="o">)</span><span class="o">&lt;</span><span class="t">ReviewSelectionFields</span><span class="o">&gt;</span> <span class="o">{</span>
+<span class="k">export</span> <span class="k">class</span> <span class="t">ReviewSelectionUnsupportedError</span>
+  <span class="k">extends</span> <span class="t">Data</span><span class="o">.</span><span class="p">TaggedError</span><span class="o">(</span><span class="s">"ReviewSelectionUnsupportedError"</span><span class="o">)</span><span class="o">&lt;</span><span class="t">ReviewSelectionFields</span><span class="o">&gt;</span> <span class="o">{</span>
   <span class="f">constructor</span><span class="o">(</span>engine<span class="o">:</span> string<span class="o">,</span> model<span class="o">:</span> string<span class="o">)</span> <span class="o">{</span>
     <span class="f">super</span><span class="o">(</span><span class="o">{</span>
       engine<span class="o">,</span>
@@ -607,7 +607,7 @@ error<span class="o">.</span><span class="p">_tag</span>     <span class="c">// 
 
         <p>呼叫者只傳兩個值，但 <code>super()</code> 仍收到三個完整欄位：</p>
 
-        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">const</span> error <span class="o">=</span> <span class="k">new</span> <span class="f">UnsupportedReviewSelectionError</span><span class="o">(</span><span class="s">"codex"</span><span class="o">,</span> <span class="s">"gpt-5"</span><span class="o">)</span>
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">const</span> error <span class="o">=</span> <span class="k">new</span> <span class="f">ReviewSelectionUnsupportedError</span><span class="o">(</span><span class="s">"codex"</span><span class="o">,</span> <span class="s">"gpt-5"</span><span class="o">)</span>
 
 error<span class="o">.</span><span class="p">provider</span> <span class="c">// "openai"</span></code></pre>
 
@@ -626,8 +626,8 @@ error<span class="o">.</span><span class="p">provider</span> <span class="c">// 
   readonly provider<span class="o">?</span><span class="o">:</span> string
 <span class="o">}</span>
 
-<span class="k">export</span> <span class="k">class</span> <span class="t">UnsupportedReviewSelectionError</span>
-  <span class="k">extends</span> <span class="t">Data</span><span class="o">.</span><span class="p">TaggedError</span><span class="o">(</span><span class="s">"UnsupportedReviewSelectionError"</span><span class="o">)</span><span class="o">&lt;</span><span class="t">ReviewSelectionFields</span><span class="o">&gt;</span> <span class="o">{</span>
+<span class="k">export</span> <span class="k">class</span> <span class="t">ReviewSelectionUnsupportedError</span>
+  <span class="k">extends</span> <span class="t">Data</span><span class="o">.</span><span class="p">TaggedError</span><span class="o">(</span><span class="s">"ReviewSelectionUnsupportedError"</span><span class="o">)</span><span class="o">&lt;</span><span class="t">ReviewSelectionFields</span><span class="o">&gt;</span> <span class="o">{</span>
   <span class="f">constructor</span><span class="o">(</span>input<span class="o">:</span> <span class="t">ReviewSelectionInput</span><span class="o">)</span> <span class="o">{</span>
     <span class="f">super</span><span class="o">(</span><span class="o">{</span>
       engine<span class="o">:</span> input<span class="o">.</span><span class="p">engine</span><span class="o">,</span>
@@ -642,8 +642,8 @@ error<span class="o">.</span><span class="p">provider</span> <span class="c">// 
         <h3>情境三：payload 本身就是選填</h3>
         <p>如果領域意義允許錯誤實例根本沒有 provider，可以直接把欄位宣告成 optional：</p>
 
-        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">export</span> <span class="k">class</span> <span class="t">UnsupportedReviewSelectionError</span> <span class="k">extends</span> <span class="t">Data</span><span class="o">.</span><span class="p">TaggedError</span><span class="o">(</span>
-  <span class="s">"UnsupportedReviewSelectionError"</span><span class="o">,</span>
+        <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">export</span> <span class="k">class</span> <span class="t">ReviewSelectionUnsupportedError</span> <span class="k">extends</span> <span class="t">Data</span><span class="o">.</span><span class="p">TaggedError</span><span class="o">(</span>
+  <span class="s">"ReviewSelectionUnsupportedError"</span><span class="o">,</span>
 <span class="o">)</span><span class="o">&lt;</span><span class="o">{</span>
   readonly engine<span class="o">:</span> string
   readonly provider<span class="o">?</span><span class="o">:</span> string
@@ -723,7 +723,7 @@ error<span class="o">.</span><span class="p">provider</span> <span class="c">// 
         <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">import</span> <span class="o">{</span> <span class="t">Effect</span> <span class="o">}</span> <span class="k">from</span> <span class="s">"effect"</span>
 
 <span class="k">const</span> failure <span class="o">=</span> <span class="t">Effect</span><span class="o">.</span><span class="p">fail</span><span class="o">(</span>
-  <span class="k">new</span> <span class="f">UnsupportedReviewSelectionError</span><span class="o">(</span><span class="o">{</span>
+  <span class="k">new</span> <span class="f">ReviewSelectionUnsupportedError</span><span class="o">(</span><span class="o">{</span>
     engine<span class="o">:</span> <span class="s">"codex"</span><span class="o">,</span>
     provider<span class="o">:</span> <span class="s">"openai"</span><span class="o">,</span>
     model<span class="o">:</span> <span class="s">"unsupported-model"</span><span class="o">,</span>
@@ -733,7 +733,7 @@ error<span class="o">.</span><span class="p">provider</span> <span class="c">// 
         <p>固定的 <code>_tag</code> 讓下游可以只恢復這一種錯誤，handler 內也能直接取得 payload：</p>
 
         <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">const</span> recovered <span class="o">=</span> failure<span class="o">.</span><span class="p">pipe</span><span class="o">(</span>
-  <span class="t">Effect</span><span class="o">.</span><span class="p">catchTag</span><span class="o">(</span><span class="s">"UnsupportedReviewSelectionError"</span><span class="o">,</span> <span class="o">(</span>error<span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span>
+  <span class="t">Effect</span><span class="o">.</span><span class="p">catchTag</span><span class="o">(</span><span class="s">"ReviewSelectionUnsupportedError"</span><span class="o">,</span> <span class="o">(</span>error<span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span>
     <span class="t">Effect</span><span class="o">.</span><span class="p">succeed</span><span class="o">(</span>
       <span class="s">`不支援 ${error.provider}/${error.model}`</span><span class="o">,</span>
     <span class="o">)</span><span class="o">,</span>

@@ -58,9 +58,9 @@ export const renderReviewError = (error: RunReviewError): string =>
   Match.valueTags(error, {
     ConfigFileReadError: (configError) =>
       `Unable to read config file ${escapeTerminalText(configError.path)}.`,
-    ConfigFileInvalidError: (configError) =>
+    ConfigFileDecodeError: (configError) =>
       `Invalid config file ${escapeTerminalText(configError.path)}: Configuration does not match the supported schema.`,
-    UnsupportedReviewSelectionError: (selectionError) =>
+    ReviewSelectionUnsupportedError: (selectionError) =>
       `Unsupported review selection: engine=${escapeTerminalText(selectionError.engine)}, provider=${escapeTerminalText(selectionError.provider)}, model=${escapeTerminalText(selectionError.model)}. This build supports engine=fake, provider=fake, model=fake-reviewer-v1.`,
     ReviewTimeoutError: (timeoutError) =>
       `Review timed out after ${Duration.format(Duration.millis(timeoutError.timeoutMilliseconds))}.`,

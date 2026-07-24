@@ -288,7 +288,7 @@ describe("reviewstuff binary", () => {
       "Invalid config file reviewstuff.config.json",
     );
     expect(result.stderr).not.toContain(rejectedValue);
-    expect(result.stderr).not.toContain("ConfigFileInvalidError");
+    expect(result.stderr).not.toContain("ConfigFileDecodeError");
     expect(result.stderr).not.toContain("at runReview");
   });
 

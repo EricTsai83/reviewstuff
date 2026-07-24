@@ -1,11 +1,40 @@
 import { describe, expect, test } from "bun:test";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as PlatformError from "effect/PlatformError";
 import * as Schema from "effect/Schema";
 import {
+  ConfigFileDecodeError,
+  ConfigFileReadError,
+  make,
   reviewPresets,
   resolveReviewConfig,
 } from "../../src/config/config-service";
 import { ReviewstuffConfigJsonSchema } from "../../src/config/schema";
+
+const loadConfigWith = (
+  readFileString: FileSystem.FileSystem["readFileString"],
+) =>
+  Effect.gen(function* () {
+    const configService = yield* make.pipe(
+      Effect.provideService(
+        FileSystem.FileSystem,
+        FileSystem.makeNoop({ readFileString }),
+      ),
+    );
+
+    return yield* configService.load();
+  });
+
+const fileSystemError = (
+  tag: PlatformError.SystemErrorTag,
+): PlatformError.PlatformError =>
+  PlatformError.systemError({
+    _tag: tag,
+    module: "FileSystem",
+    method: "readFileString",
+    pathOrDescriptor: "reviewstuff.config.json",
+  });
 
 const decodeConfig = (contents: string) =>
   Schema.decodeUnknownEffect(ReviewstuffConfigJsonSchema)(contents, {
@@ -85,6 +114,42 @@ describe("config schema", () => {
 });
 
 describe("review config resolution", () => {
+  test("uses defaults when the config file does not exist", async () => {
+    const config = await loadConfigWith(() =>
+      Effect.fail(fileSystemError("NotFound"))
+    ).pipe(Effect.runPromise);
+
+    expect(config).toEqual({
+      ...reviewPresets.standard,
+      preset: "standard",
+    });
+  });
+
+  test("maps config file read failures precisely", async () => {
+    const cause = fileSystemError("PermissionDenied");
+    const error = await loadConfigWith(() => Effect.fail(cause)).pipe(
+      Effect.flip,
+      Effect.runPromise,
+    );
+
+    expect(error).toEqual(
+      new ConfigFileReadError({
+        path: "reviewstuff.config.json",
+        cause,
+      }),
+    );
+  });
+
+  test("maps invalid config contents to a decode failure", async () => {
+    const error = await loadConfigWith(() => Effect.succeed("{}")).pipe(
+      Effect.flip,
+      Effect.runPromise,
+    );
+
+    expect(error).toBeInstanceOf(ConfigFileDecodeError);
+    expect(error.path).toBe("reviewstuff.config.json");
+  });
+
   test("uses the standard preset when no config exists", () => {
     expect(resolveReviewConfig(undefined)).toEqual({
       ...reviewPresets.standard,
