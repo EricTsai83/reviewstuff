@@ -269,13 +269,14 @@ describe("reviewstuff binary", () => {
     expect(report.schemaVersion).toBe(4);
   });
 
-  test("invalid config is rendered as a usage error without a stack trace", async () => {
+  test("invalid config does not expose rejected values or a stack trace", async () => {
     const cwd = await makeRepository();
+    const rejectedValue = "sk-secret-value";
     await Bun.write(
       `${cwd}/reviewstuff.config.json`,
       JSON.stringify({
         schemaVersion: 1,
-        review: { preset: "thorough" },
+        review: { apiKey: rejectedValue },
       }),
     );
 
@@ -286,6 +287,7 @@ describe("reviewstuff binary", () => {
     expect(result.stderr).toContain(
       "Invalid config file reviewstuff.config.json",
     );
+    expect(result.stderr).not.toContain(rejectedValue);
     expect(result.stderr).not.toContain("ConfigFileInvalidError");
     expect(result.stderr).not.toContain("at runReview");
   });

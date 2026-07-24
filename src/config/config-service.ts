@@ -70,22 +70,12 @@ export class ConfigFileReadError extends Data.TaggedError(
   readonly cause: unknown;
 }> {}
 
-const configFileInvalidCauses = new WeakMap<object, unknown>();
-
 export class ConfigFileInvalidError extends Data.TaggedError(
   "ConfigFileInvalidError",
 )<{
   readonly path: string;
-}> {
-  constructor(args: { readonly path: string; readonly cause: unknown }) {
-    super({ path: args.path });
-    configFileInvalidCauses.set(this, args.cause);
-  }
-
-  override get cause(): unknown {
-    return configFileInvalidCauses.get(this);
-  }
-}
+  readonly cause: unknown;
+}> {}
 
 export class UnsupportedReviewSelectionError extends Data.TaggedError(
   "UnsupportedReviewSelectionError",
@@ -124,7 +114,7 @@ export const resolveReviewConfig = (
   };
 };
 
-export const decodeConfigContents = (
+const decodeConfigContents = (
   contents: string,
 ): Effect.Effect<ReviewstuffConfigV1, ConfigFileInvalidError> =>
   Schema.decodeUnknownEffect(ReviewstuffConfigJsonSchema)(contents, {

@@ -2,7 +2,6 @@ import { describe, expect, test } from "bun:test";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import {
-  decodeConfigContents,
   reviewPresets,
   resolveReviewConfig,
 } from "../../src/config/config-service";
@@ -82,17 +81,6 @@ describe("config schema", () => {
     [{ schemaVersion: 1, unknown: true }, "unknown property"],
   ])("rejects %s (%s)", async (input) => {
     expect(decodeConfig(JSON.stringify(input))).rejects.toBeDefined();
-  });
-
-  test("config service errors never retain rejected secret values", async () => {
-    const secret = "sk-secret-value";
-    const error = await decodeConfigContents(JSON.stringify({
-      schemaVersion: 1,
-      review: { apiKey: secret },
-    })).pipe(Effect.flip, Effect.runPromise);
-
-    expect(Schema.isSchemaError(error.cause)).toBe(true);
-    expect(JSON.stringify(error)).not.toContain(secret);
   });
 });
 

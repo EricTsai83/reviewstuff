@@ -48,6 +48,19 @@ describe("renderReviewError", () => {
     expect(renderReviewError(error)).toBe(message);
   });
 
+  test("preserves invalid config causes without rendering them", () => {
+    const cause = new Error("rejected-sensitive-value");
+    const error = new ConfigFileInvalidError({
+      path: "reviewstuff.config.json",
+      cause,
+    });
+
+    expect(error.cause).toBe(cause);
+    expect(renderReviewError(error)).toBe(
+      "Invalid config file reviewstuff.config.json: Configuration does not match the supported schema.",
+    );
+  });
+
   test("renders review timeout failures", () => {
     expect(
       renderReviewError(
