@@ -1,0 +1,1058 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta
+    name="description"
+    content="設定檔出現 V1、V2 等多個版本時，如何用 runtime schema、normalization boundary 與 resolved config 設計可維護的 TypeScript 程式。"
+  >
+  <title>設定檔有多個版本時，程式碼應該怎麼設計？</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --clay: #d97757;
+      --slate: #141413;
+      --ivory: #faf9f5;
+      --oat: #e3dacc;
+      --white: #ffffff;
+      --gray-100: #f0eee6;
+      --gray-300: #d1cfc5;
+      --gray-500: #87867f;
+      --gray-700: #3d3d3a;
+      --space-sm: 8px;
+      --space-md: 12px;
+      --space-lg: 16px;
+      --space-xl: 24px;
+      --space-2xl: 32px;
+      --space-3xl: 48px;
+      --radius-sm: 4px;
+      --radius-md: 8px;
+      --content-width: 68ch;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      margin: 0;
+      background: var(--ivory);
+      color: var(--slate);
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 16px;
+      font-weight: 430;
+      line-height: 1.55;
+      letter-spacing: 0;
+    }
+
+    main {
+      width: 100%;
+      max-width: var(--content-width);
+      margin: 0 auto;
+      padding: var(--space-3xl) var(--space-xl);
+    }
+
+    h1,
+    h2,
+    h3 {
+      line-height: 1.25;
+      text-wrap: balance;
+    }
+
+    h1 {
+      margin: 0;
+      max-width: none;
+      font-size: 1.8rem;
+      line-height: 1.18;
+      overflow-wrap: normal;
+    }
+
+    h2 {
+      margin: var(--space-3xl) 0 var(--space-lg);
+      font-size: 1.22rem;
+      line-height: 1.25;
+    }
+
+    h3 {
+      margin: var(--space-2xl) 0 var(--space-md);
+      font-size: 1rem;
+      line-height: 1.35;
+    }
+
+    p,
+    ul,
+    ol {
+      max-width: var(--content-width);
+      margin: 0 0 var(--space-lg);
+    }
+
+    ul,
+    ol {
+      padding-left: 1.4rem;
+    }
+
+    li {
+      margin: 6px 0;
+    }
+
+    a {
+      color: var(--clay);
+      text-underline-offset: 3px;
+    }
+
+    code {
+      overflow-wrap: anywhere;
+      border: 1px solid var(--oat);
+      border-radius: var(--radius-sm);
+      background: var(--gray-100);
+      padding: 0.08em 0.3em;
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+      font-size: 0.9em;
+    }
+
+    .deck {
+      max-width: var(--content-width);
+      margin: var(--space-lg) 0 0;
+      color: var(--gray-700);
+      font-size: 1.04rem;
+      line-height: 1.62;
+    }
+
+    nav {
+      margin: var(--space-2xl) 0 var(--space-3xl);
+      padding: var(--space-lg) var(--space-xl);
+      border: 1px solid var(--oat);
+      border-radius: var(--radius-md);
+      background: var(--white);
+    }
+
+    nav strong {
+      display: block;
+      margin-bottom: 8px;
+    }
+
+    nav ol {
+      margin-bottom: 0;
+      columns: 2;
+      column-gap: 32px;
+    }
+
+    .callout {
+      max-width: var(--content-width);
+      margin: var(--space-2xl) 0;
+      padding: var(--space-lg) var(--space-xl);
+      border: 1px solid var(--oat);
+      border-left: 4px solid var(--clay);
+      border-radius: var(--radius-md);
+      background: var(--gray-100);
+    }
+
+    .callout strong {
+      display: block;
+      margin-bottom: 6px;
+    }
+
+    .callout p:last-child {
+      margin-bottom: 0;
+    }
+
+    .table-wrap {
+      width: 100%;
+      margin: var(--space-xl) 0;
+      overflow-x: auto;
+      border: 1px solid var(--oat);
+      border-radius: var(--radius-md);
+      background: var(--white);
+    }
+
+    table {
+      width: 100%;
+      min-width: 640px;
+      border-collapse: collapse;
+      font-size: 0.92rem;
+    }
+
+    th,
+    td {
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--oat);
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th {
+      background: var(--gray-100);
+      color: var(--gray-700);
+      font-size: 0.84rem;
+    }
+
+    tr:last-child td {
+      border-bottom: 0;
+    }
+
+    pre {
+      position: relative;
+      width: 100%;
+      margin: var(--space-lg) 0 var(--space-xl);
+      overflow: hidden;
+      border: 1px solid #26241f;
+      border-radius: var(--radius-md);
+      background: #11110f;
+      color: #d8d4ca;
+    }
+
+    pre code {
+      display: block;
+      overflow-x: auto;
+      border: 0;
+      border-radius: 0;
+      background: transparent;
+      padding: 18px 64px 18px 22px;
+      color: inherit;
+      white-space: pre;
+      overflow-wrap: normal;
+      font-size: 0.875rem;
+      font-weight: 400;
+      line-height: 1.62;
+      scrollbar-width: none;
+    }
+
+    pre code::-webkit-scrollbar {
+      width: 0;
+      height: 0;
+    }
+
+    pre .label {
+      display: none;
+    }
+
+    .copy-code {
+      position: absolute;
+      top: 9px;
+      right: 9px;
+      z-index: 1;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 30px;
+      height: 30px;
+      padding: 0;
+      border: 1px solid rgba(250, 249, 245, 0.14);
+      border-radius: var(--radius-sm);
+      background: rgba(250, 249, 245, 0.06);
+      color: rgba(250, 249, 245, 0.72);
+      cursor: pointer;
+    }
+
+    .copy-code:hover,
+    .copy-code:focus-visible {
+      border-color: rgba(250, 249, 245, 0.28);
+      outline: none;
+      background: rgba(250, 249, 245, 0.12);
+      color: var(--ivory);
+    }
+
+    .copy-code.copied {
+      border-color: rgba(143, 184, 106, 0.42);
+      background: rgba(143, 184, 106, 0.14);
+      color: #b8d99a;
+    }
+
+    .copy-code svg {
+      width: 13px;
+      height: 13px;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 1.8;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      pointer-events: none;
+    }
+
+    .code-scrollbar {
+      position: absolute;
+      right: 0;
+      bottom: 0;
+      left: 0;
+      height: 3px;
+      border-radius: 999px;
+      background: rgba(250, 249, 245, 0.1);
+      cursor: pointer;
+    }
+
+    .code-scrollbar.hidden {
+      display: none;
+    }
+
+    .code-scrollbar-thumb {
+      height: 100%;
+      border-radius: inherit;
+      background: rgba(255, 148, 110, 0.82);
+      transform: translateX(0);
+      cursor: grab;
+    }
+
+    .code-scrollbar-thumb:active {
+      cursor: grabbing;
+    }
+
+    pre code .k {
+      color: #ff946e;
+      font-weight: 400;
+    }
+
+    pre code .s {
+      color: #8fb86a;
+    }
+
+    pre code .n,
+    pre code .p {
+      color: #d8d4ca;
+    }
+
+    pre code .c {
+      color: #858177;
+      font-style: italic;
+    }
+
+    pre code .f,
+    pre code .t {
+      color: #cfc6a2;
+      font-weight: 400;
+    }
+
+    pre code .o {
+      color: #ff946e;
+    }
+
+    .flow-figure {
+      margin: var(--space-xl) 0;
+      padding: var(--space-lg);
+      border: 1px solid var(--oat);
+      border-radius: var(--radius-md);
+      background: var(--white);
+    }
+
+    .flow-figure svg {
+      display: block;
+      width: 100%;
+      max-width: 440px;
+      height: auto;
+      margin: 0 auto;
+    }
+
+    .flow-figure figcaption {
+      margin-top: var(--space-md);
+      color: var(--gray-700);
+      font-size: 0.9rem;
+    }
+
+    .decision-list {
+      padding-left: 1.25rem;
+    }
+
+    .decision-list li {
+      margin-bottom: 10px;
+    }
+
+    .closing {
+      margin-top: var(--space-3xl);
+      padding-top: var(--space-xl);
+      border-top: 1px solid var(--oat);
+    }
+
+    @media (max-width: 640px) {
+      body {
+        font-size: 15px;
+      }
+
+      h1 {
+        font-size: 1.65rem;
+      }
+
+      main {
+        padding: var(--space-xl);
+      }
+
+      nav ol {
+        columns: 1;
+      }
+
+      .flow-figure {
+        padding: 12px;
+      }
+
+      pre code {
+        font-size: 0.8125rem;
+        line-height: 1.5;
+      }
+
+      p code,
+      li code,
+      td code {
+        font-size: 0.9em;
+      }
+
+      table,
+      .deck {
+        font-size: 0.875rem;
+      }
+    }
+
+    @media print {
+      body {
+        background: var(--white);
+      }
+
+      main {
+        max-width: none;
+        padding: var(--space-xl);
+      }
+
+      .copy-code,
+      .code-scrollbar {
+        display: none;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>設定檔有多個版本時，程式碼應該怎麼設計？</h1>
+    <p class="deck">
+      當設定檔從 V1 演進到 V2，真正的設計問題不是「要不要多宣告一個 TypeScript type」，
+      而是如何讓舊格式可以被讀取，同時讓核心程式永遠只處理一套目前的資料模型。
+      本文整理一個適合 TypeScript CLI 與服務程式的通用 pattern，並以 ReviewStuff 的設定架構說明如何落地。
+    </p>
+
+    <nav aria-label="文章目錄">
+      <strong>閱讀路徑</strong>
+      <ol>
+        <li><a href="#problem">多版本設定真正造成的問題</a></li>
+        <li><a href="#model">推薦的五階段設計</a></li>
+        <li><a href="#schemas">各版本 schema 如何組織</a></li>
+        <li><a href="#migration">如何避免 migration 失控</a></li>
+        <li><a href="#versioning">何時才應該建立 V2</a></li>
+        <li><a href="#reviewstuff">套用到 ReviewStuff</a></li>
+      </ol>
+    </nav>
+
+    <section id="problem">
+      <h2>實務問題：同一個程式必須讀取兩種設定格式</h2>
+      <p>
+        假設一個 code review CLI 已經發布過 V1 設定。後來團隊重新整理欄位語意，
+        推出不相容的 V2；既有 repositories 不會在新版本發布當天全部更新，因此 CLI
+        必須在一段時間內同時讀取兩種格式。
+      </p>
+
+      <pre><span class="label">Config V1</span><code>{
+  "schemaVersion": 1,
+  "review": {
+    "preset": "quick",
+    "timeoutMs": 120000
+  }
+}</code></pre>
+
+      <pre><span class="label">Config V2</span><code>{
+  "schemaVersion": 2,
+  "review": {
+    "workload": "light",
+    "timeoutMs": 120000
+  }
+}</code></pre>
+
+      <p>
+        這時確實需要記錄兩個外部格式，但不代表整個應用程式都應該接受
+        <code>ConfigV1 | ConfigV2</code>。如果 union 一路流進 review pipeline，每個模組都會開始判斷版本：
+      </p>
+
+      <pre class="language-typescript"><span class="label">應避免的版本擴散</span><code><span class="k">function</span> <span class="f">runReview</span><span class="o">(</span>config<span class="o">:</span> <span class="t">ConfigV1</span> <span class="o">|</span> <span class="t">ConfigV2</span><span class="o">)</span> <span class="o">{</span>
+  <span class="k">const</span> workload <span class="o">=</span>
+    config<span class="o">.</span><span class="p">schemaVersion</span> <span class="o">=</span><span class="o">=</span><span class="o">=</span> <span class="n">1</span>
+      <span class="o">?</span> <span class="f">mapPreset</span><span class="o">(</span>config<span class="o">.</span><span class="p">review</span><span class="o">.</span><span class="p">preset</span><span class="o">)</span>
+      <span class="o">:</span> config<span class="o">.</span><span class="p">review</span><span class="o">.</span><span class="p">workload</span><span class="o">;</span>
+
+  <span class="c">// provider、budget、renderer 之後也會重複判斷版本</span>
+<span class="o">}</span></code></pre>
+
+      <p>
+        這種設計把「如何讀取歷史資料」變成每個業務模組的責任。版本越多，
+        conditional、optional field 與錯誤分支就越容易擴散。
+      </p>
+
+      <div class="callout">
+        <strong>核心原則：版本屬於輸入邊界，不屬於業務邏輯</strong>
+        <p>
+          V1、V2 型別用來精確描述外部歷史格式；核心程式只接收一個已轉換完成的 current model。
+          因此「有兩個版本型別」是合理的，但它們的可見範圍應該很小。
+        </p>
+      </div>
+    </section>
+
+    <section id="model">
+      <h2>推薦的 design pattern：五個階段，各自只有一種責任</h2>
+      <p>
+        可維護的版本化設定流程，可以拆成五個階段。最重要的分界是：
+        schema 負責判斷「外部資料是否合法」，normalizer 負責判斷「舊語意如何轉成現在的語意」，
+        resolver 則負責補齊執行時需要的值。
+      </p>
+
+      <figure class="flow-figure">
+        <svg role="img" aria-labelledby="config-flow-title config-flow-desc" viewBox="0 0 360 574">
+          <title id="config-flow-title">多版本設定檔從外部輸入到核心程式的五階段流程</title>
+          <desc id="config-flow-desc">未知 JSON 先由各版本 schema 解碼，再正規化成目前設定，接著套用預設值與命令列覆寫，最後交給核心程式。</desc>
+          <defs>
+            <marker id="config-flow-arrowhead" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="#d97757"></path>
+            </marker>
+          </defs>
+          <g>
+            <rect x="20" y="18" width="320" height="72" rx="8" fill="#ffffff" stroke="#e3dacc" stroke-width="1.5"></rect>
+            <text x="180" y="48" text-anchor="middle" fill="#141413" font-size="15" font-weight="700">unknown JSON</text>
+            <text x="180" y="71" text-anchor="middle" fill="#3d3d3a" font-size="12">尚未信任的檔案內容</text>
+          </g>
+          <path d="M 180 98 V 124" stroke="#d97757" stroke-width="2" fill="none" marker-end="url(#config-flow-arrowhead)"></path>
+          <g>
+            <rect x="20" y="132" width="320" height="72" rx="8" fill="#ffffff" stroke="#e3dacc" stroke-width="1.5"></rect>
+            <text x="180" y="162" text-anchor="middle" fill="#141413" font-size="15" font-weight="700">SupportedConfigSchema</text>
+            <text x="180" y="185" text-anchor="middle" fill="#3d3d3a" font-size="12">辨識並驗證 V1、V2 等受支援格式</text>
+          </g>
+          <path d="M 180 212 V 238" stroke="#d97757" stroke-width="2" fill="none" marker-end="url(#config-flow-arrowhead)"></path>
+          <g>
+            <rect x="20" y="246" width="320" height="72" rx="8" fill="#ffffff" stroke="#e3dacc" stroke-width="1.5"></rect>
+            <text x="180" y="276" text-anchor="middle" fill="#141413" font-size="15" font-weight="700">normalizeConfig()</text>
+            <text x="180" y="299" text-anchor="middle" fill="#3d3d3a" font-size="12">每個舊版本轉成 CurrentConfig</text>
+          </g>
+          <path d="M 180 326 V 352" stroke="#d97757" stroke-width="2" fill="none" marker-end="url(#config-flow-arrowhead)"></path>
+          <g>
+            <rect x="10" y="360" width="340" height="92" rx="8" fill="#f0eee6" stroke="#d97757" stroke-width="1.5"></rect>
+            <text x="180" y="390" text-anchor="middle" fill="#141413" font-size="15" font-weight="700">resolveConfig()</text>
+            <text x="180" y="414" text-anchor="middle" fill="#3d3d3a" font-size="12">CLI override ＞ config ＞ default</text>
+            <text x="180" y="436" text-anchor="middle" fill="#3d3d3a" font-size="12">產生完整的 ResolvedConfig</text>
+          </g>
+          <path d="M 180 460 V 486" stroke="#d97757" stroke-width="2" fill="none" marker-end="url(#config-flow-arrowhead)"></path>
+          <g>
+            <rect x="20" y="494" width="320" height="62" rx="8" fill="#ffffff" stroke="#e3dacc" stroke-width="1.5"></rect>
+            <text x="180" y="520" text-anchor="middle" fill="#141413" font-size="15" font-weight="700">核心程式</text>
+            <text x="180" y="542" text-anchor="middle" fill="#3d3d3a" font-size="12">只依賴目前、完整的執行模型</text>
+          </g>
+        </svg>
+        <figcaption>
+          歷史版本只存在於 decode 與 normalization boundary。跨過這條邊界後，
+          其他模組不再知道原始檔案是 V1 還是 V2。
+        </figcaption>
+      </figure>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>階段</th>
+              <th>典型型別</th>
+              <th>責任</th>
+              <th>不應負責</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>外部輸入</td>
+              <td><code>unknown</code></td>
+              <td>保存剛讀入的 JSON／YAML</td>
+              <td>假設資料可信</td>
+            </tr>
+            <tr>
+              <td>版本 schema</td>
+              <td><code>ConfigV1Raw</code>、<code>ConfigV2Raw</code></td>
+              <td>驗證各版本的真實 shape</td>
+              <td>套用業務 defaults</td>
+            </tr>
+            <tr>
+              <td>正規化</td>
+              <td><code>CurrentConfig</code></td>
+              <td>消除歷史欄位與語意差異</td>
+              <td>讓版本 union 繼續向內流動</td>
+            </tr>
+            <tr>
+              <td>解析設定</td>
+              <td><code>ResolvedConfig</code></td>
+              <td>合併 config、CLI 與 defaults</td>
+              <td>再次處理 V1/V2</td>
+            </tr>
+            <tr>
+              <td>核心程式</td>
+              <td>domain types</td>
+              <td>執行功能</td>
+              <td>理解設定檔歷史</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="schemas">
+      <h2>程式碼設計：每個外部版本有自己的 runtime schema</h2>
+      <p>
+        TypeScript type 在編譯後會消失，因此它不能單獨辨識檔案版本。若 V1 與 V2
+        必須可靠共存，版本資訊應該存在於資料裡，並由 runtime schema 驗證為 literal。
+      </p>
+
+      <pre class="language-typescript"><span class="label">config-schema.ts</span><code><span class="k">const</span> <span class="t">ConfigV1Schema</span> <span class="o">=</span> <span class="t">Schema</span><span class="o">.</span><span class="p">Struct</span><span class="o">(</span><span class="o">{</span>
+  schemaVersion<span class="o">:</span> <span class="t">Schema</span><span class="o">.</span><span class="p">Literal</span><span class="o">(</span><span class="n">1</span><span class="o">)</span><span class="o">,</span>
+  review<span class="o">:</span> <span class="t">Schema</span><span class="o">.</span><span class="p">Struct</span><span class="o">(</span><span class="o">{</span>
+    preset<span class="o">:</span> <span class="t">Schema</span><span class="o">.</span><span class="p">Literals</span><span class="o">(</span><span class="o">[</span><span class="s">"quick"</span><span class="o">,</span> <span class="s">"standard"</span><span class="o">]</span><span class="o">)</span><span class="o">,</span>
+    timeoutMs<span class="o">:</span> <span class="t">Schema</span><span class="o">.</span><span class="p">optionalKey</span><span class="o">(</span><span class="t">PositiveIntegerSchema</span><span class="o">)</span><span class="o">,</span>
+  <span class="o">}</span><span class="o">)</span><span class="o">,</span>
+<span class="o">}</span><span class="o">)</span><span class="o">;</span>
+
+<span class="k">const</span> <span class="t">ConfigV2Schema</span> <span class="o">=</span> <span class="t">Schema</span><span class="o">.</span><span class="p">Struct</span><span class="o">(</span><span class="o">{</span>
+  schemaVersion<span class="o">:</span> <span class="t">Schema</span><span class="o">.</span><span class="p">Literal</span><span class="o">(</span><span class="n">2</span><span class="o">)</span><span class="o">,</span>
+  review<span class="o">:</span> <span class="t">Schema</span><span class="o">.</span><span class="p">Struct</span><span class="o">(</span><span class="o">{</span>
+    workload<span class="o">:</span> <span class="t">Schema</span><span class="o">.</span><span class="p">Literals</span><span class="o">(</span><span class="o">[</span><span class="s">"light"</span><span class="o">,</span> <span class="s">"standard"</span><span class="o">]</span><span class="o">)</span><span class="o">,</span>
+    timeoutMs<span class="o">:</span> <span class="t">Schema</span><span class="o">.</span><span class="p">optionalKey</span><span class="o">(</span><span class="t">PositiveIntegerSchema</span><span class="o">)</span><span class="o">,</span>
+  <span class="o">}</span><span class="o">)</span><span class="o">,</span>
+<span class="o">}</span><span class="o">)</span><span class="o">;</span>
+
+<span class="k">const</span> <span class="t">SupportedConfigSchema</span> <span class="o">=</span> <span class="t">Schema</span><span class="o">.</span><span class="p">Union</span><span class="o">(</span><span class="o">[</span>
+  <span class="t">ConfigV1Schema</span><span class="o">,</span>
+  <span class="t">ConfigV2Schema</span><span class="o">,</span>
+<span class="o">]</span><span class="o">)</span><span class="o">;</span>
+
+<span class="k">type</span> <span class="t">ConfigV1Raw</span> <span class="o">=</span> typeof <span class="t">ConfigV1Schema</span><span class="o">.</span><span class="p">Type</span><span class="o">;</span>
+<span class="k">type</span> <span class="t">ConfigV2Raw</span> <span class="o">=</span> typeof <span class="t">ConfigV2Schema</span><span class="o">.</span><span class="p">Type</span><span class="o">;</span>
+<span class="k">type</span> <span class="t">SupportedConfig</span> <span class="o">=</span> typeof <span class="t">SupportedConfigSchema</span><span class="o">.</span><span class="p">Type</span><span class="o">;</span></code></pre>
+
+      <p>
+        這三個 type 都有明確用途：前兩個描述歷史格式，第三個只供 decoder 與 normalizer
+        之間使用。不要把 <code>SupportedConfig</code> 當成全域 domain type。
+      </p>
+
+      <h3>先嚴格解碼，再做版本轉換</h3>
+      <p>
+        載入設定時應從 <code>unknown</code> 開始。嚴格拒絕未知欄位，可以避免拼字錯誤被忽略後
+        悄悄使用 default；schema error 也應保留欄位路徑與預期值。
+      </p>
+
+      <pre class="language-typescript"><span class="label">config-loader.ts</span><code><span class="k">const</span> decodeSupportedConfig <span class="o">=</span> <span class="o">(</span>
+  input<span class="o">:</span> unknown<span class="o">,</span>
+<span class="o">)</span><span class="o">:</span> <span class="t">Effect</span><span class="o">.</span><span class="p">Effect</span><span class="o">&lt;</span><span class="t">SupportedConfig</span><span class="o">,</span> <span class="t">ConfigDecodeError</span><span class="o">&gt;</span> <span class="o">=</span><span class="o">&gt;</span>
+  <span class="t">Schema</span><span class="o">.</span><span class="p">decodeUnknownEffect</span><span class="o">(</span><span class="t">SupportedConfigSchema</span><span class="o">)</span><span class="o">(</span>input<span class="o">,</span> <span class="o">{</span>
+    onExcessProperty<span class="o">:</span> <span class="s">"error"</span><span class="o">,</span>
+  <span class="o">}</span><span class="o">)</span><span class="o">.</span><span class="p">pipe</span><span class="o">(</span>
+    <span class="t">Effect</span><span class="o">.</span><span class="p">mapError</span><span class="o">(</span>
+      <span class="o">(</span>cause<span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span> <span class="k">new</span> <span class="f">ConfigDecodeError</span><span class="o">(</span><span class="o">{</span> cause <span class="o">}</span><span class="o">)</span><span class="o">,</span>
+    <span class="o">)</span><span class="o">,</span>
+  <span class="o">)</span><span class="o">;</span></code></pre>
+
+      <h3>每個版本分開轉成 current model</h3>
+      <p>
+        Current model 不需要 <code>schemaVersion</code>，因為它已經跨過版本邊界。
+        對人類編輯的設定而言，它通常仍是 partial；defaults 會留到 resolver 才套用。
+      </p>
+
+      <pre class="language-typescript"><span class="label">config-normalizer.ts</span><code>interface <span class="t">CurrentConfig</span> <span class="o">{</span>
+  readonly review<span class="o">?</span><span class="o">:</span> <span class="o">{</span>
+    readonly workload<span class="o">?</span><span class="o">:</span> <span class="s">"light"</span> <span class="o">|</span> <span class="s">"standard"</span><span class="o">;</span>
+    readonly timeoutMs<span class="o">?</span><span class="o">:</span> number<span class="o">;</span>
+  <span class="o">}</span><span class="o">;</span>
+<span class="o">}</span>
+
+<span class="k">const</span> normalizeV1 <span class="o">=</span> <span class="o">(</span>
+  config<span class="o">:</span> <span class="t">ConfigV1Raw</span><span class="o">,</span>
+<span class="o">)</span><span class="o">:</span> <span class="t">CurrentConfig</span> <span class="o">=</span><span class="o">&gt;</span> <span class="o">(</span><span class="o">{</span>
+  review<span class="o">:</span> <span class="o">{</span>
+    workload<span class="o">:</span>
+      config<span class="o">.</span><span class="p">review</span><span class="o">.</span><span class="p">preset</span> <span class="o">=</span><span class="o">=</span><span class="o">=</span> <span class="s">"quick"</span>
+        <span class="o">?</span> <span class="s">"light"</span>
+        <span class="o">:</span> <span class="s">"standard"</span><span class="o">,</span>
+    timeoutMs<span class="o">:</span> config<span class="o">.</span><span class="p">review</span><span class="o">.</span><span class="p">timeoutMs</span><span class="o">,</span>
+  <span class="o">}</span><span class="o">,</span>
+<span class="o">}</span><span class="o">)</span><span class="o">;</span>
+
+<span class="k">const</span> normalizeV2 <span class="o">=</span> <span class="o">(</span>
+  config<span class="o">:</span> <span class="t">ConfigV2Raw</span><span class="o">,</span>
+<span class="o">)</span><span class="o">:</span> <span class="t">CurrentConfig</span> <span class="o">=</span><span class="o">&gt;</span> <span class="o">(</span><span class="o">{</span>
+  review<span class="o">:</span> config<span class="o">.</span><span class="p">review</span><span class="o">,</span>
+<span class="o">}</span><span class="o">)</span><span class="o">;</span></code></pre>
+
+      <p>
+        每個 adapter 只知道一個輸入版本與一個輸出模型，因此容易閱讀、測試與刪除。
+        不應使用 type assertion 把舊資料「假裝」成新資料；欄位與語意的轉換必須明確寫出來。
+      </p>
+
+      <h3>Current config 與 resolved config 仍然要分開</h3>
+      <p>
+        Normalization 只消除版本差異，不應順便決定 CLI precedence 或所有 defaults。
+        Resolver 再把 canonical、但仍可省略欄位的 current config，轉成核心程式需要的完整模型：
+      </p>
+
+      <pre class="language-typescript"><span class="label">config-resolver.ts</span><code>interface <span class="t">ResolvedConfig</span> <span class="o">{</span>
+  readonly workload<span class="o">:</span> <span class="s">"light"</span> <span class="o">|</span> <span class="s">"standard"</span><span class="o">;</span>
+  readonly timeoutMs<span class="o">:</span> number<span class="o">;</span>
+<span class="o">}</span>
+
+<span class="k">const</span> resolveConfig <span class="o">=</span> <span class="o">(</span>
+  config<span class="o">:</span> <span class="t">CurrentConfig</span><span class="o">,</span>
+  overrides<span class="o">:</span> <span class="t">ConfigOverrides</span> <span class="o">=</span> <span class="o">{</span><span class="o">}</span><span class="o">,</span>
+<span class="o">)</span><span class="o">:</span> <span class="t">ResolvedConfig</span> <span class="o">=</span><span class="o">&gt;</span> <span class="o">(</span><span class="o">{</span>
+  workload<span class="o">:</span>
+    overrides<span class="o">.</span><span class="p">workload</span> <span class="o">?</span><span class="o">?</span>
+    config<span class="o">.</span><span class="p">review</span><span class="o">?</span><span class="o">.</span><span class="p">workload</span> <span class="o">?</span><span class="o">?</span>
+    <span class="s">"standard"</span><span class="o">,</span>
+  timeoutMs<span class="o">:</span>
+    overrides<span class="o">.</span><span class="p">timeoutMs</span> <span class="o">?</span><span class="o">?</span>
+    config<span class="o">.</span><span class="p">review</span><span class="o">?</span><span class="o">.</span><span class="p">timeoutMs</span> <span class="o">?</span><span class="o">?</span>
+    <span class="n">120_000</span><span class="o">,</span>
+<span class="o">}</span><span class="o">)</span><span class="o">;</span></code></pre>
+
+      <p>
+        這樣版本轉換與執行設定 resolution 可以各自改變、各自測試。
+        核心 use case 的參數只需要 <code>ResolvedConfig</code>。
+      </p>
+    </section>
+
+    <section id="migration">
+      <h2><code>migrateToCurrent()</code> 會不會越來越長？</h2>
+      <p>
+        會不會失控，取決於它是「容納所有轉換細節的巨型函式」，還是「只負責分派的薄邊界」。
+        推薦讓 dispatcher 保持簡短，實際轉換放在各版本 adapter：
+      </p>
+
+      <pre class="language-typescript"><span class="label">薄 dispatcher</span><code><span class="k">const</span> normalizeConfig <span class="o">=</span> <span class="o">(</span>
+  config<span class="o">:</span> <span class="t">SupportedConfig</span><span class="o">,</span>
+<span class="o">)</span><span class="o">:</span> <span class="t">CurrentConfig</span> <span class="o">=</span><span class="o">&gt;</span> <span class="o">{</span>
+  <span class="k">switch</span> <span class="o">(</span>config<span class="o">.</span><span class="p">schemaVersion</span><span class="o">)</span> <span class="o">{</span>
+    <span class="k">case</span> <span class="n">1</span><span class="o">:</span>
+      <span class="k">return</span> <span class="f">normalizeV1</span><span class="o">(</span>config<span class="o">)</span><span class="o">;</span>
+    <span class="k">case</span> <span class="n">2</span><span class="o">:</span>
+      <span class="k">return</span> <span class="f">normalizeV2</span><span class="o">(</span>config<span class="o">)</span><span class="o">;</span>
+  <span class="o">}</span>
+<span class="o">}</span><span class="o">;</span></code></pre>
+
+      <p>
+        新增 V3 時，dispatcher 只增加一個 case；複雜度留在獨立的
+        <code>normalizeV3()</code>。當停止支援 V1，就一起移除 V1 schema、adapter、fixture
+        與 case。函式長度反映的是「目前承諾支援幾個版本」，而不是所有歷史永遠累積。
+      </p>
+
+      <h3>少量設定版本：各版本直接轉成 current</h3>
+      <p>
+        CLI config 通常版本少、資料量小，而且只在啟動時讀取。這時
+        <code>V1 → Current</code>、<code>V2 → Current</code> 的 direct adapter 最容易理解，
+        也是本文建議的預設做法。
+      </p>
+
+      <h3>大量持久版本：使用相鄰 migration chain</h3>
+      <p>
+        若資料不可丟失、版本很多，而且必須把已儲存的資料真正升級，例如 database row
+        或長期保存的 session，才適合把 migration 拆成 <code>V1 → V2</code>、
+        <code>V2 → V3</code>。每一步都保留輸入／輸出 schema 與 fixture，runner 只負責依序執行。
+      </p>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>策略</th>
+              <th>適合情況</th>
+              <th>優點</th>
+              <th>代價</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>每個版本直接 normalize 到 current</td>
+              <td>少量 legacy config、CLI、匯入格式</td>
+              <td>路徑短，核心只有一個 current model</td>
+              <td>current 大改時可能要更新多個 adapter</td>
+            </tr>
+            <tr>
+              <td>相鄰 migration chain</td>
+              <td>database、不可丟失的持久資料、版本很多</td>
+              <td>每一步差異小，可逐版稽核</td>
+              <td>需要 runner、版本 registry 與更多 fixtures</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="callout">
+        <strong>支援版本必須有期限</strong>
+        <p>
+          最佳實踐不是永遠保存所有 schema。每個版本應有 support window、deprecation
+          訊息與移除條件；否則任何 migration 架構最終都會被永久相容承諾拖垮。
+        </p>
+      </div>
+    </section>
+
+    <section id="versioning">
+      <h2>不是每次設定變更都需要建立新版本</h2>
+      <p>
+        <code>schemaVersion</code> 解決的是「多個不相容格式必須被可靠區分並同時支援」。
+        若沒有這個問題，新增 V2 只會增加 schema、migration、fixture 與文件成本。
+      </p>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>變更情境</th>
+              <th>優先策略</th>
+              <th>通常需要 V2 嗎？</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>新增可省略欄位</td>
+              <td>optional field + resolver default</td>
+              <td>不需要</td>
+            </tr>
+            <tr>
+              <td>尚未發布的欄位改名</td>
+              <td>直接更新 current schema</td>
+              <td>不需要</td>
+            </tr>
+            <tr>
+              <td>已發布的簡單欄位改名</td>
+              <td>短期接受 deprecated alias，在 boundary 統一</td>
+              <td>通常不需要</td>
+            </tr>
+            <tr>
+              <td>多個不相容 shape 必須長期共存</td>
+              <td>literal version + per-version schema</td>
+              <td>需要</td>
+            </tr>
+            <tr>
+              <td>可重建 cache 格式改變</td>
+              <td>辨識舊格式後失效並重建</td>
+              <td>可版本化，但通常不 migration</td>
+            </tr>
+            <tr>
+              <td>公開 report、session 或交換格式</td>
+              <td>明確版本、support policy 與 fixtures</td>
+              <td>通常需要</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p>
+        判斷時先問三件事：舊資料是否真的存在、是否不能丟棄，以及新舊格式是否必須同時被不同程式版本讀寫。
+        只有答案足以形成相容承諾時，才值得把版本寫進 runtime data。
+      </p>
+    </section>
+
+    <section id="reviewstuff">
+      <h2>套用到 ReviewStuff：同一個 codebase 可以有兩種策略</h2>
+      <p>
+        ReviewStuff 是一個 code review CLI。它目前的使用者設定檔採用兩層模型：
+        Effect Schema 解碼出允許省略欄位的 <code>ReviewstuffConfig</code>，config service
+        再合併預設值與 CLI overrides，產生完整的 <code>ResolvedReviewConfig</code>。
+      </p>
+
+      <pre class="language-typescript"><span class="label">ReviewStuff 現有邊界</span><code><span class="k">export</span> <span class="k">type</span> <span class="t">ReviewstuffConfig</span> <span class="o">=</span>
+  typeof <span class="t">ReviewstuffConfigSchema</span><span class="o">.</span><span class="p">Type</span><span class="o">;</span>
+
+<span class="k">export</span> interface <span class="t">ResolvedReviewConfig</span> <span class="o">{</span>
+  readonly preset<span class="o">:</span> <span class="t">ReviewPresetName</span><span class="o">;</span>
+  readonly engine<span class="o">:</span> string<span class="o">;</span>
+  readonly provider<span class="o">:</span> string<span class="o">;</span>
+  readonly model<span class="o">:</span> string<span class="o">;</span>
+  readonly timeoutMs<span class="o">:</span> number<span class="o">;</span>
+  readonly concurrency<span class="o">:</span> number<span class="o">;</span>
+  readonly requestBudget<span class="o">:</span> <span class="t">ReviewRequestBudgetConfig</span><span class="o">;</span>
+<span class="o">}</span></code></pre>
+
+      <p>
+        這兩個型別不是重複：第一個描述「使用者可以寫什麼」，第二個描述「程式執行時一定有什麼」。
+        它們記錄的是責任邊界，不是 schema 版本。
+      </p>
+
+      <h3>為什麼目前的使用者 config 不需要 V1/V2</h3>
+      <p>
+        後續規劃會把尚未對外發布的 <code>preset</code> 改成 <code>workload</code>。
+        因為沒有需要相容的真實舊設定，所以直接更新 current schema 即可；
+        預先建立 <code>ReviewstuffConfigV1</code>、<code>schemaVersion</code> 與 migration
+        並沒有保護任何使用者，只會建立永久維護面積。
+      </p>
+
+      <h3>為什麼 report 與 session 可以保留版本</h3>
+      <p>
+        Report、session 是程式產生、保存並可能被其他版本讀取的 machine contract。
+        它們的舊資料真實存在，也可能需要精確重播或 migration，因此目前的
+        <code>ReviewReportV2</code>、<code>ReviewReportV3</code>、<code>ReviewReportV4</code>
+        都有 literal <code>schemaVersion</code>、獨立 decoder 與相鄰 migration：
+      </p>
+
+      <pre class="language-typescript"><span class="label">簡化自 ReviewStuff report decoder</span><code><span class="k">const</span> decodeReviewReport <span class="o">=</span> <span class="o">(</span>
+  input<span class="o">:</span> unknown<span class="o">,</span>
+<span class="o">)</span><span class="o">:</span> <span class="t">ReviewReportV4</span> <span class="o">=</span><span class="o">&gt;</span> <span class="o">{</span>
+  <span class="k">const</span> version <span class="o">=</span> <span class="f">readSchemaVersion</span><span class="o">(</span>input<span class="o">)</span><span class="o">;</span>
+
+  <span class="k">if</span> <span class="o">(</span>version <span class="o">=</span><span class="o">=</span><span class="o">=</span> <span class="n">4</span><span class="o">)</span> <span class="o">{</span>
+    <span class="k">return</span> <span class="f">decodeReviewReportV4</span><span class="o">(</span>input<span class="o">)</span><span class="o">;</span>
+  <span class="o">}</span>
+
+  <span class="k">if</span> <span class="o">(</span>version <span class="o">=</span><span class="o">=</span><span class="o">=</span> <span class="n">3</span><span class="o">)</span> <span class="o">{</span>
+    <span class="k">return</span> <span class="f">migrateV3ToV4</span><span class="o">(</span>
+      <span class="f">decodeReviewReportV3</span><span class="o">(</span>input<span class="o">)</span><span class="o">,</span>
+    <span class="o">)</span><span class="o">;</span>
+  <span class="o">}</span>
+
+  <span class="k">if</span> <span class="o">(</span>version <span class="o">=</span><span class="o">=</span><span class="o">=</span> <span class="n">2</span><span class="o">)</span> <span class="o">{</span>
+    <span class="k">return</span> <span class="f">migrateV3ToV4</span><span class="o">(</span>
+      <span class="f">migrateV2ToV3</span><span class="o">(</span>
+        <span class="f">decodeReviewReportV2</span><span class="o">(</span>input<span class="o">)</span><span class="o">,</span>
+      <span class="o">)</span><span class="o">,</span>
+    <span class="o">)</span><span class="o">;</span>
+  <span class="o">}</span>
+
+  <span class="k">throw</span> <span class="k">new</span> <span class="f">UnsupportedSchemaVersionError</span><span class="o">(</span><span class="o">{</span> version <span class="o">}</span><span class="o">)</span><span class="o">;</span>
+<span class="o">}</span><span class="o">;</span></code></pre>
+
+      <p>
+        這裡使用 migration chain 是合理的，因為 report 是不可假設能重建的持久資料。
+        設定檔與 report 都是 JSON，卻有不同的生命週期與相容責任。
+      </p>
+    </section>
+
+    <section id="testing">
+      <h2>測試應固定每一條邊界，而不是只測 current happy path</h2>
+
+      <ul>
+        <li>每個受支援版本都有至少一份真實 fixture，並能通過自己的 runtime schema。</li>
+        <li>未知版本、未知欄位、錯誤 enum 與錯誤型別會明確失敗。</li>
+        <li>每個 <code>normalizeVn()</code> 都產生相同語意的 <code>CurrentConfig</code>。</li>
+        <li>核心 service 與 use case 的參數不包含 legacy type 或版本 union。</li>
+        <li>resolver 固定 CLI override ＞ config ＞ default 的 precedence。</li>
+        <li>migration error 顯示版本與欄位路徑，但不洩漏 secrets 或完整 rejected payload。</li>
+        <li>停止支援某版本時，同步移除 schema、adapter、fixture、文件與 dispatcher case。</li>
+      </ul>
+    </section>
+
+    <section class="closing">
+      <h2>最佳實踐不是「永遠版本化」，而是限制版本的影響範圍</h2>
+      <p>
+        當多個設定版本真的需要共存時，為每個外部版本建立 runtime schema 與精確 type，
+        在單一 normalization boundary 轉成 current config，再由 resolver 產生完整的 runtime model。
+        核心程式永遠不應知道資料原本來自 V1、V2 還是之後的版本。
+      </p>
+      <p>
+        版本少時，讓每個 legacy schema 直接 normalize 到 current；版本多且資料不可丟失時，
+        才採用相鄰 migration chain。搭配明確的 support window，這個 pattern
+        可以保留向後相容能力，同時避免版本判斷與 migration 複雜度滲入整個 codebase。
+      </p>
+    </section>
+  </main>
+
+  <script>
+    (() => {
+      const copyIcon = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="11" height="11" rx="2"></rect><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"></path></svg>';
+      const checkIcon = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"></path></svg>';
+
+      const copyText = async (text) => {
+        if (navigator.clipboard?.writeText) {
+          try {
+            await navigator.clipboard.writeText(text);
+            return;
+          } catch {
+            // Local file previews may deny clipboard permission; use the fallback below.
+          }
+        }
+
+        const textarea = document.createElement("textarea");
+        textarea.value = text;
+        textarea.style.position = "fixed";
+        textarea.style.opacity = "0";
+        document.body.append(textarea);
+        textarea.select();
+        document.execCommand("copy");
+        textarea.remove();
+      };
+
+      document.querySelectorAll("pre").forEach((pre) => {
+        const code = pre.querySelector("code");
+        if (!code) return;
+
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "copy-code";
+        button.setAttribute("aria-label", "複製程式碼");
+        button.innerHTML = copyIcon;
+        button.addEventListener("click", async () => {
+          try {
+            await copyText(code.textContent ?? "");
+            button.classList.add("copied");
+            button.setAttribute("aria-label", "已複製");
+            button.innerHTML = checkIcon;
+            window.setTimeout(() => {
+              button.classList.remove("copied");
+              button.setAttribute("aria-label", "複製程式碼");
+              button.innerHTML = copyIcon;
+            }, 1400);
+          } catch {
+            button.setAttribute("aria-label", "複製失敗");
+          }
+        });
+        pre.append(button);
+
+        const scrollbar = document.createElement("div");
+        scrollbar.className = "code-scrollbar";
+        const thumb = document.createElement("div");
+        thumb.className = "code-scrollbar-thumb";
+        scrollbar.append(thumb);
+        pre.append(scrollbar);
+
+        const syncScrollbar = () => {
+          const visibleRatio = Math.min(1, code.clientWidth / code.scrollWidth);
+          const available = scrollbar.clientWidth * (1 - visibleRatio);
+          const maxScroll = code.scrollWidth - code.clientWidth;
+          const position = maxScroll === 0 ? 0 : (code.scrollLeft / maxScroll) * available;
+          thumb.style.width = `${visibleRatio * 100}%`;
+          thumb.style.transform = `translateX(${position}px)`;
+          scrollbar.classList.toggle("hidden", visibleRatio === 1);
+        };
+
+        code.addEventListener("scroll", syncScrollbar, { passive: true });
+        scrollbar.addEventListener("click", (event) => {
+          if (event.target === thumb) return;
+          const rect = scrollbar.getBoundingClientRect();
+          const ratio = (event.clientX - rect.left) / rect.width;
+          code.scrollLeft = ratio * (code.scrollWidth - code.clientWidth);
+        });
+
+        thumb.addEventListener("pointerdown", (event) => {
+          const startX = event.clientX;
+          const startScroll = code.scrollLeft;
+          const available = scrollbar.clientWidth - thumb.clientWidth;
+          const maxScroll = code.scrollWidth - code.clientWidth;
+          thumb.setPointerCapture(event.pointerId);
+
+          const move = (moveEvent) => {
+            if (available <= 0) return;
+            code.scrollLeft = startScroll + ((moveEvent.clientX - startX) / available) * maxScroll;
+          };
+          const stop = () => {
+            thumb.removeEventListener("pointermove", move);
+            thumb.removeEventListener("pointerup", stop);
+            thumb.removeEventListener("pointercancel", stop);
+          };
+
+          thumb.addEventListener("pointermove", move);
+          thumb.addEventListener("pointerup", stop);
+          thumb.addEventListener("pointercancel", stop);
+        });
+
+        if (typeof ResizeObserver === "function") {
+          new ResizeObserver(syncScrollbar).observe(code);
+        }
+        syncScrollbar();
+      });
+    })();
+  </script>
+</body>
+</html>
