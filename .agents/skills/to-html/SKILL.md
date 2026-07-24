@@ -1,126 +1,103 @@
 ---
 name: to-html
-description: Convert the current conversation context into a polished, independently readable knowledge article as a standalone HTML file saved under this project's docs folder.
+description: Convert the current conversation or supplied context into a polished, independently readable knowledge article as a standalone HTML file saved under the project's documentation tree.
 ---
 
 # To HTML
 
-Turn the durable knowledge in the current context into an independently readable knowledge article delivered as a standalone `.html` file.
+Create a self-contained HTML knowledge article from durable ideas in the current context. Preserve the user's primary language.
 
 ## Workflow
 
-1. Extract explanations, examples, tradeoffs, caveats, code, commands, links, and next steps worth rereading. Omit tool logs, acknowledgements, and irrelevant back-and-forth.
-2. Identify the background, terminology, system context, and connective explanations a new reader needs. Supply them in the article instead of relying on the conversation, repository, another document, or unstated prior knowledge.
-3. Treat the conversation as source material, not as the outline. Organize the article around the subject and preserve the user's primary language unless asked otherwise.
-4. If the article teaches or explains a subject, choose a useful learning path and article elements by following `Article Composition` below.
-5. Choose the format:
-   - Use a clean prose article by default.
-   - Read `HTML-ARTICLE-DESIGN-PATTERNS.md` when a comparison, plan, report, code review, design sheet, diagram, table, or small interactive tool would communicate the material better.
-   - Read `HTML-SVG-FLOW-DIAGRAMS.md` when a workflow, decision, state transition, boundary, or relationship needs a figure. Follow that reference for authoring, rendering, responsive behavior, and visual QA.
-6. Choose the output directory by following `Documentation Placement` below. Then write a complete standalone HTML document there, using a concise topic filename such as `effect-cli-command-guide.html`.
-7. After the first complete draft, read `IMPROVE-HTML-ARTICLE.md` and apply one revision pass directly to the file.
-8. Read `DESIGN-SYSTEM.md` and apply it as the final visual-system pass unless the user requested a different design system or no design-system pass.
-9. Run `bun .agents/skills/to-html/scripts/highlight-code-blocks.mjs <html-file>`.
-10. Run `bun .agents/skills/to-html/scripts/validate-html.mjs <html-file>` and fix every reported issue.
-11. Verify the final file, then report its relative path and a short summary. State any visual-QA limitation when figures could not be rendered and inspected.
+1. Identify the reader, the durable subject, and what the reader should understand afterward.
+2. Extract useful explanations, examples, tradeoffs, caveats, code, links, and decisions. Omit conversation history, acknowledgements, tool logs, and one-time task details.
+3. For an explanatory article, follow `General Design-Pattern Method` below.
+4. Supply all background and terminology required by a reader who has not seen the conversation or repository.
+5. Choose a clean prose article by default. Read:
+   - `HTML-ARTICLE-DESIGN-PATTERNS.md` when a comparison, plan, report, code map, diagram, table, or small tool would communicate better.
+   - `HTML-SVG-FLOW-DIAGRAMS.md` when a workflow, boundary, decision, state, or relationship needs a figure.
+6. Select the destination using `Documentation Placement`, then write one complete standalone `.html` file.
+7. After the first complete draft, read `IMPROVE-HTML-ARTICLE.md` and revise the file.
+8. Read `DESIGN-SYSTEM.md` and apply it unless the user requested another visual system.
+9. Run:
+
+   ```sh
+   bun .agents/skills/to-html/scripts/highlight-code-blocks.mjs <html-file>
+   bun .agents/skills/to-html/scripts/validate-html.mjs <html-file>
+   ```
+
+10. Fix every validation issue and inspect the rendered page at desktop and mobile widths. Report the file path, a short summary, and any visual-QA limitation.
+
+## General Design-Pattern Method
+
+Use this method for articles that explain architecture, engineering choices, workflows, or best practices. Do not force it onto incident reports, code reviews, status reports, or other inherently specific documents.
+
+1. **Find the reusable question.** Rewrite the immediate scenario as the broader problem a future reader will face.
+2. **Teach the mental model first.** Explain responsibilities, boundaries, invariants, and information flow before repository-specific implementation details.
+3. **Use one running example.** Let a concrete scenario make the pattern observable, but do not let an incidental feature become the article's subject.
+4. **Show the mechanics.** Use focused code, a diagram, or a table only when it materially explains how the pattern works.
+5. **State the best practice with scope.** Explain why it is the default, which tradeoffs it creates, and when an alternative is better.
+6. **Return to the real codebase when useful.** Apply the general model to the current implementation as evidence or a worked example, not as unstated prerequisite knowledge.
+7. **End with transferable decisions.** Give criteria, tests, or a concise synthesis the reader can reuse in another codebase.
+
+A strong explanatory sequence is usually:
+
+`practical problem → general model → implementation mechanics → alternatives and decision rules → codebase application`
+
+Treat this as a reasoning order, not a mandatory section template. Prefer the smallest structure that teaches the subject clearly.
+
+## Independent Readability
+
+The article must stand alone:
+
+- Introduce the subject, motivation, essential terms, and necessary system context.
+- Treat the conversation as source material, not as the outline.
+- Write an article, not a transcript, Q&A log, or notes dump.
+- Prefer durable concepts and decision methods over implementation history.
+- Explain every example where it appears; do not rely on inaccessible tickets, plans, or code.
+- If repository-specific material is useful, briefly explain what the system does and why the excerpt matters.
+- Verify external or repository facts needed for accuracy before writing.
+- Keep citations supplemental; the central reasoning must remain understandable without opening them.
 
 ## Documentation Placement
 
-Choose the article's location from the project's documentation hierarchy instead of assuming every file belongs directly under `./docs`.
+1. Honor an explicit output path.
+2. Otherwise inspect project guidance, the documentation root, its index, neighboring files, and classification rules.
+3. Classify by the concept the reader intends to learn, not by incidental technologies or example names.
+4. Prefer the deepest existing directory that clearly fits. Create a category only when the topic is reusable and no existing category fits.
+5. Do not overwrite an unrelated file. Use best judgment unless multiple materially different destinations remain equally plausible.
 
-1. Honor an explicit output path from the user first.
-2. Otherwise, locate the project's canonical documentation root. Prefer project guidance such as `AGENTS.md`, a documentation README/index, or an established `docs`/`Documents` tree. Fall back to `./docs`, creating it only when no documentation root exists.
-3. Inspect the root's existing directories, README/index files, neighboring filenames, and stated classification rules before choosing a destination.
-4. Classify the article by its durable purpose and the concept a reader intends to learn, not by incidental examples or keywords. For example, an Effect error tutorial demonstrated with TypeScript belongs in an Effect learning folder when that matches the documented taxonomy.
-5. Prefer the deepest existing directory whose documented scope clearly matches the article, while respecting any stated depth limit. Do not create redundant nesting or a new category when an existing category is a good semantic fit.
-6. When several directories are plausible, resolve the choice in this order: documented classification rules, article purpose, neighboring document precedent, then the least surprising existing category.
-7. Create a new subdirectory only when the topic is clearly reusable, no existing directory fits, and the new category follows the project's current naming and hierarchy conventions. Otherwise place the article at the nearest appropriate existing level.
-8. Check for filename collisions before writing. Do not overwrite an unrelated document; choose a more specific filename unless the user explicitly requested an update.
+## Content and Structure
 
-Use best judgment and continue without asking when the hierarchy supplies enough evidence. Ask only when multiple materially different destinations remain equally plausible after inspection.
-
-## Independent Readability — Hard Requirement
-
-Every generated HTML file must work as a self-contained knowledge-transfer article for a reader encountering the subject for the first time.
-
-- Require no access to the source conversation, repository, earlier article, ticket, pull request, or undocumented team context.
-- Introduce the subject, why it matters, essential terms, and the minimum background needed before presenting conclusions or advanced details.
-- When the subject is codebase-specific, explain the relevant purpose, components, behavior, and constraints inside the article. Never assume the reader already knows what the code does.
-- Make examples and excerpts understandable where they appear. State what they demonstrate and define unfamiliar identifiers or surrounding assumptions.
-- Replace references such as “as discussed above,” “this code,” “our setup,” or “the previous implementation” when their meaning depends on information outside the article.
-- Keep links and citations supplemental. The article's central explanation and reasoning must remain understandable without opening them.
-- Prefer teaching the reusable idea, mental model, or decision method over merely recording a one-time implementation history.
-
-If the available context cannot support an accurate independent explanation, research or inspect the necessary source material before writing. Do not publish an article that leaves required background implicit.
-
-## Content Rules
-
-- Write an article, not a transcript, Q&A log, or notes dump. Do not mention its conversational origin unless explicitly requested.
-- Make knowledge transfer the primary purpose. The document must teach a coherent subject, not merely preserve what happened during a task.
-- Center every section on durable knowledge. Remove material that only preserves thread history.
-- Start with the `<h1>` topic title. Do not put an eyebrow/kicker, badge row, metadata strip, decorative label, or hero treatment above it, even when the default design-system pass is skipped.
-- Keep technical articles prose-first; do not use marketing-style hero, split media/text, or decorative section-card layouts.
-- Do not make the current repository or its code the subject, cite it, or infer content from it unless the user explicitly asks for that.
-- For general learning articles, prefer small pedagogical examples over repository-specific code.
-- Add outside context or research only when needed for accuracy or standalone completeness, and verify it before inclusion.
-- Explain rationale, boundaries, and tradeoffs when they affect how the reader should understand or apply the subject.
-- Do not add a TL;DR, “one thing to remember,” key-fact card, or summary callout by default. A short deck usually provides enough orientation; add a separate summary only when it contributes information the deck and conclusion do not already provide.
-- Do not add a “next exercise,” practice task, or homework section unless the user explicitly requests one.
-
-## Article Composition
-
-Treat article structure as a palette, not a template or checklist. Select only the elements that help the specific subject, reader, and learning outcome. Do not include an element merely because it appears in this list, and do not force every article into the same sequence.
-
-First identify the reader's likely starting point and what they should understand or be able to do afterward. Then compose the article from any useful combination of these elements:
-
-| Element | What it can provide | Use it when |
-| --- | --- | --- |
-| Topic title | A direct statement of the article's subject | Always provide one semantic `<h1>` for the document |
-| Short deck | Topic, relevance, scope, or expected outcome in one short paragraph | The title alone does not orient a first-time reader |
-| Reading path or TOC | Links to major sections and a preview of the learning path | The article is long, has several distinct sections, or benefits from non-linear reading |
-| Foundation section | Background, terminology, assumptions, or the problem being solved | Later material depends on concepts the reader may not know |
-| Mental model | A reusable way to reason about the subject | The topic becomes easier when readers can predict behavior rather than memorize facts |
-| Running or guided example | A concrete example that gains detail across sections | Continuity helps connect abstract ideas to behavior |
-| Code block or command | Exact syntax, implementation, configuration, or observable behavior | The code itself materially advances understanding |
-| Figure or diagram | Flow, state, hierarchy, boundary, ownership, or relationships | Spatial structure is harder to understand from prose alone |
-| Table | Compact comparison, mapping, responsibility split, or decision criteria | Repeated fields or options are easier to scan side by side |
-| Callout | A warning, caveat, exception, or unusually important constraint | The information needs emphasis at the point where it becomes relevant |
-| Checklist or decision rules | Practical checks readers can apply independently | The article should support action or repeated decisions |
-| Glossary | Short definitions for several domain terms | Terminology density would otherwise interrupt the main explanation |
-| Closing synthesis | A durable takeaway or final integration of the article's ideas | It adds value beyond repeating the introduction |
-| Sources or references | Attribution and optional paths for deeper reading | The article relies on external research, standards, or documentation |
-
-Use placement as guidance rather than a rigid order:
-
-- Put a short deck directly after the title when one is useful. Do not repeat it with an automatic summary card.
-- Put a reading path after the opening and before the main body when the article needs one.
-- Introduce a concept before showing a figure, table, code block, or decision that depends on it.
-- Give code and commands a purpose before the block and explain the important behavior afterward.
-- Place diagrams after the prose that introduces the relationship and before detailed explanation that relies on the figure.
-- Place callouts beside the relevant material, not automatically at the top of the article or at the end of every section.
-- Keep sources near supported claims or in a concise reference section when the article uses outside material.
-
-For educational content, order selected concepts by prerequisite. Foundation, mental model, guided example, mechanics, tradeoffs, application, and practical checks are possible stages, not mandatory sections. Merge fragmented questions into coherent concepts and add the connective explanation needed by someone who never saw the source conversation.
-
-Before delivery, confirm that every included element earns its place, the headings express a coherent progression, and the article is understandable without the source conversation or access to the codebase.
+- Start with one direct `<h1>` and, when useful, one short deck. Do not add an eyebrow, badge row, hero, or automatic TL;DR.
+- Keep technical articles prose-first. Avoid marketing layouts and decorative section cards.
+- Introduce concepts before code, tables, or figures that depend on them.
+- Use one coherent running example instead of several disconnected examples.
+- Include rationale, tradeoffs, exceptions, and decision criteria when they affect the recommendation.
+- Use callouts only for a genuine warning, constraint, caveat, or exception.
+- Do not add exercises or homework unless requested.
+- Include only elements that directly teach, demonstrate, contrast, or support the article's subject.
 
 ## HTML Requirements
 
-- Keep the document self-contained with inline CSS, inline SVG when useful, and only small local JavaScript when interaction adds value.
-- Do not rely on remote fonts, external images, CDNs, runtime Mermaid, browser-side syntax highlighting, or other remote runtime dependencies.
-- Use semantic HTML rather than prose Markdown artifacts. Inline code belongs in `<code>`; lists, emphasis, and headings must use their corresponding HTML elements.
-- Use `<pre><code>` for code blocks, preserve indentation and multiline syntax, and escape `&`, `<`, and `>` correctly. When identifying a language for the bundled highlighter, use this exact structure: `<pre><span class="label">TypeScript</span><code>...</code></pre>` (replace `TypeScript` with the appropriate language).
-- Use visuals only when they clarify the content. Prefer inline SVG over ASCII art and follow `HTML-SVG-FLOW-DIAGRAMS.md` for diagram-specific requirements.
-- For any figure with separate desktop and mobile variants—not only flow diagrams—make the variants mutually exclusive. Hide one by default, swap them in the media query, and make those visibility selectors at least as specific as the base figure/SVG display rule so both variants can never render at the same viewport width.
+- Keep the document self-contained with semantic HTML, inline CSS, optional inline SVG, and only small local JavaScript.
+- Do not use remote fonts, external images, CDNs, frameworks, runtime Mermaid, or browser-side syntax highlighting.
+- Escape `&`, `<`, and `>` inside code. For highlighted blocks use exactly:
+
+  ```html
+  <pre><span class="label">TypeScript</span><code>...</code></pre>
+  ```
+
+- Prefer inline SVG over ASCII diagrams and follow `HTML-SVG-FLOW-DIAGRAMS.md`.
+- If a figure has desktop and mobile variants, make them mutually exclusive with selectors at least as specific as the base SVG rule.
 
 ## Final Check
 
-- The file exists in the selected project documentation subtree and is a complete standalone HTML document.
-- The destination follows the project's documented hierarchy and classification rules, when present.
-- The original language is preserved.
-- A first-time reader without the conversation, codebase, or other prior information can follow the article from beginning to end.
-- The article supplies all essential background and functions primarily as knowledge transfer rather than task history.
-- No remote runtime dependency or prose Markdown artifact remains.
-- Code blocks preserve escaping, indentation, and static highlighting markup.
-- Any spatial figure has passed rendered visual QA at desktop and mobile widths as required by `HTML-SVG-FLOW-DIAGRAMS.md`, or the delivery notes the verification limitation.
-- The validator reports no issues.
+- The file is a complete standalone HTML document in the correct documentation subtree.
+- A first-time reader can follow it without the conversation or repository.
+- The title and article center the durable subject rather than an incidental example.
+- Code, links, figures, tables, and claims are accurate and necessary.
+- Code blocks preserve indentation, escaping, and static highlighting.
+- The page has no remote runtime dependency or unintended horizontal overflow.
+- Every figure is visually readable on desktop and mobile.
+- The validator passes with no issues.

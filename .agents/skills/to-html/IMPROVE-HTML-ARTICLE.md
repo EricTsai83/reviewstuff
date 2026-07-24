@@ -14,6 +14,7 @@ When called from `to-html`, edit the file directly without asking for confirmati
 
 1. Check the structure.
    - Make sure concepts appear before ideas that depend on them.
+   - For explanatory articles, verify the title and main thread teach the reusable problem; a feature or repository scenario should demonstrate the pattern, not replace it.
    - Prefer one running example.
    - Remove duplicate, stale, or low-value sections.
    - Check every example, command, code block, table, and callout against the article's stated topic. If an element does not directly explain, demonstrate, contrast, or support the core topic, remove it or replace it with a topic-specific example.
