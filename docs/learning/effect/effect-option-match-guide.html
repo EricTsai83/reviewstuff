@@ -1,0 +1,507 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="理解 Effect Option.match 如何處理 Some 與 None、何時適合使用，以及它與 map、getOrElse 的差異。">
+  <title>Effect Option.match：一次處理有值與無值</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --clay: #d97757;
+      --slate: #141413;
+      --ivory: #faf9f5;
+      --oat: #e3dacc;
+      --white: #ffffff;
+      --gray-100: #f0eee6;
+      --gray-300: #d1cfc5;
+      --gray-500: #87867f;
+      --gray-700: #3d3d3a;
+      --warning: #c78e3f;
+      --space-sm: 8px;
+      --space-md: 12px;
+      --space-lg: 16px;
+      --space-xl: 24px;
+      --space-2xl: 32px;
+      --space-3xl: 48px;
+      --radius-sm: 4px;
+      --radius-md: 8px;
+      --content-width: 68ch;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      background: var(--ivory);
+      color: var(--slate);
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 16px;
+      font-weight: 430;
+      line-height: 1.55;
+      letter-spacing: 0;
+    }
+
+    main {
+      max-width: var(--content-width);
+      margin: 0 auto;
+      padding: var(--space-3xl) var(--space-xl);
+    }
+
+    article {
+      background: transparent;
+      border: 0;
+      border-radius: 0;
+      box-shadow: none;
+      padding: 0;
+    }
+
+    h1, h2, h3 {
+      text-wrap: balance;
+    }
+
+    h1 {
+      max-width: none;
+      margin: 0 0 var(--space-lg);
+      font-size: 1.8rem;
+      line-height: 1.18;
+      overflow-wrap: normal;
+    }
+
+    h2 {
+      margin: var(--space-3xl) 0 var(--space-md);
+      font-size: 1.22rem;
+      line-height: 1.25;
+    }
+
+    h3 {
+      margin: var(--space-2xl) 0 var(--space-sm);
+      font-size: 1rem;
+      line-height: 1.35;
+    }
+
+    p, ul, ol {
+      max-width: var(--content-width);
+      margin: 0 0 var(--space-lg);
+    }
+
+    .deck {
+      margin: 0;
+      color: var(--gray-700);
+      font-size: 1.05rem;
+      line-height: 1.6;
+    }
+
+    .meta {
+      margin-top: var(--space-md);
+      color: var(--gray-500);
+      font-size: 0.8125rem;
+    }
+
+    code {
+      border: 1px solid var(--oat);
+      border-radius: var(--radius-sm);
+      background: var(--gray-100);
+      padding: 0.08em 0.28em;
+      color: var(--slate);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.9em;
+      overflow-wrap: anywhere;
+    }
+
+    pre {
+      position: relative;
+      width: 100%;
+      max-width: var(--content-width);
+      margin: var(--space-lg) 0 var(--space-xl);
+      border: 1px solid #26241f;
+      border-radius: var(--radius-md);
+      background: #11110f;
+      color: #d8d4ca;
+      overflow: hidden;
+    }
+
+    pre code {
+      display: block;
+      border: 0;
+      background: transparent;
+      padding: 18px 64px 18px 22px;
+      color: inherit;
+      overflow-x: auto;
+      white-space: pre;
+      font-size: 0.875rem;
+      font-weight: 400;
+      line-height: 1.62;
+      overflow-wrap: normal;
+      scrollbar-width: none;
+      tab-size: 2;
+    }
+
+    pre code::-webkit-scrollbar { width: 0; height: 0; }
+    pre .label { display: none; }
+
+    pre code .k { color: #ff946e; font-weight: 400; }
+    pre code .s { color: #8fb86a; }
+    pre code .n,
+    pre code .p { color: #d8d4ca; }
+    pre code .c { color: #858177; font-style: italic; }
+    pre code .f,
+    pre code .t { color: #cfc6a2; font-weight: 400; }
+    pre code .o { color: #ff946e; }
+
+    .copy-code {
+      position: absolute;
+      top: 9px;
+      right: 9px;
+      z-index: 1;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 30px;
+      height: 30px;
+      padding: 0;
+      border: 1px solid rgb(250 249 245 / 14%);
+      border-radius: var(--radius-sm);
+      background: rgb(250 249 245 / 6%);
+      color: rgb(250 249 245 / 72%);
+      cursor: pointer;
+    }
+
+    .copy-code:hover,
+    .copy-code:focus-visible {
+      border-color: rgb(250 249 245 / 28%);
+      background: rgb(250 249 245 / 12%);
+      color: var(--ivory);
+      outline: none;
+    }
+
+    .copy-code.copied {
+      border-color: rgb(143 184 106 / 42%);
+      background: rgb(143 184 106 / 14%);
+      color: #b8d99a;
+    }
+
+    .copy-code svg {
+      width: 13px;
+      height: 13px;
+      stroke: currentColor;
+      stroke-width: 1.8;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      fill: none;
+      pointer-events: none;
+    }
+
+    .code-scrollbar {
+      position: absolute;
+      right: 0;
+      bottom: 0;
+      left: 0;
+      height: 3px;
+      border-radius: 999px;
+      background: rgb(250 249 245 / 10%);
+      cursor: pointer;
+    }
+
+    .code-scrollbar.hidden { display: none; }
+
+    .code-scrollbar-thumb {
+      height: 100%;
+      border-radius: inherit;
+      background: rgb(255 148 110 / 82%);
+      transform: translateX(0);
+      cursor: grab;
+    }
+
+    .code-scrollbar-thumb:active { cursor: grabbing; }
+
+    table {
+      width: 100%;
+      max-width: var(--content-width);
+      margin: var(--space-lg) 0 var(--space-xl);
+      border-collapse: collapse;
+      border: 1px solid var(--oat);
+      font-size: 0.9rem;
+    }
+
+    th, td {
+      border: 1px solid var(--oat);
+      padding: 10px 12px;
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th {
+      background: var(--gray-100);
+      color: var(--gray-700);
+      font-size: 0.82rem;
+    }
+
+    .callout {
+      max-width: var(--content-width);
+      margin: var(--space-xl) 0;
+      border: 1px solid var(--oat);
+      border-left: 4px solid var(--clay);
+      border-radius: var(--radius-md);
+      background: var(--gray-100);
+      padding: var(--space-lg);
+    }
+
+    .callout.warning {
+      border-left-color: var(--warning);
+    }
+
+    .callout p { margin: var(--space-sm) 0 0; }
+
+    a {
+      color: var(--clay);
+      text-decoration-thickness: 1px;
+      text-underline-offset: 0.18em;
+    }
+
+    @media (max-width: 640px) {
+      body { font-size: 15px; }
+      h1 { font-size: 1.65rem; }
+      main { padding: var(--space-xl); }
+      pre code { font-size: 0.8125rem; line-height: 1.5; }
+      p code,
+      li code,
+      td code { font-size: 0.9em; }
+      table {
+        display: block;
+        overflow-x: auto;
+        font-size: 0.875rem;
+      }
+      .deck { font-size: 0.9375rem; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <article>
+      <h1>Effect <code>Option.match</code>：一次處理有值與無值</h1>
+      <p class="deck"><code>Option.match</code> 接收一個 <code>Option&lt;A&gt;</code>，分別處理 <code>Some</code> 與 <code>None</code>，最後產生一個普通值。當兩種情況需要不同邏輯時，它是最直接、完整的出口。</p>
+      <p class="meta"><strong>版本基準：</strong><code>effect@4.0.0-beta.98</code></p>
+
+      <h2>先理解 Option 表達什麼</h2>
+      <p>在 Effect 裡，<code>Option&lt;A&gt;</code> 表示「可能存在一個 <code>A</code>」。它只有兩種狀態：</p>
+      <table>
+        <thead>
+          <tr>
+            <th>狀態</th>
+            <th>意義</th>
+            <th><code>Option.match</code> 執行的分支</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>Some(value)</code></td>
+            <td>有值</td>
+            <td><code>onSome(value)</code></td>
+          </tr>
+          <tr>
+            <td><code>None</code></td>
+            <td>沒有值</td>
+            <td><code>onNone()</code></td>
+          </tr>
+        </tbody>
+      </table>
+      <p><code>Option.match</code> 的工作，就是確認目前是哪一種狀態，執行對應函式，再把該函式的結果回傳。它不會同時執行兩個分支。</p>
+
+      <h2>一個完整例子</h2>
+      <p>假設系統找到的顯示名稱是 <code>Option&lt;string&gt;</code>。畫面最終需要普通字串，所以有值時顯示名稱，沒有值時顯示訪客文案：</p>
+      <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">import</span> <span class="o">{</span> <span class="t">Option</span> <span class="o">}</span> <span class="k">from</span> <span class="s">"effect"</span>
+
+<span class="k">const</span> displayName <span class="o">=</span> <span class="t">Option</span><span class="o">.</span><span class="p">some</span><span class="o">(</span><span class="s">"Eric"</span><span class="o">)</span>
+
+<span class="k">const</span> greeting <span class="o">=</span> <span class="t">Option</span><span class="o">.</span><span class="p">match</span><span class="o">(</span>displayName<span class="o">,</span> <span class="o">{</span>
+  onNone<span class="o">:</span> <span class="o">(</span><span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span> <span class="s">"歡迎，訪客"</span><span class="o">,</span>
+  onSome<span class="o">:</span> <span class="o">(</span>name<span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span> <span class="s">`歡迎，${name}`</span><span class="o">,</span>
+<span class="o">}</span><span class="o">)</span>
+
+console<span class="o">.</span><span class="p">log</span><span class="o">(</span>greeting<span class="o">)</span> <span class="c">// "歡迎，Eric"</span></code></pre>
+      <p>如果把輸入換成 <code>Option.none()</code>，結果就會是 <code>"歡迎，訪客"</code>。</p>
+
+      <h2>把它想成一個有回傳值的 if / else</h2>
+      <p>下面兩段程式的核心語意相同：</p>
+      <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">const</span> greeting <span class="o">=</span> <span class="t">Option</span><span class="o">.</span><span class="p">match</span><span class="o">(</span>displayName<span class="o">,</span> <span class="o">{</span>
+  onNone<span class="o">:</span> <span class="o">(</span><span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span> <span class="s">"歡迎，訪客"</span><span class="o">,</span>
+  onSome<span class="o">:</span> <span class="o">(</span>name<span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span> <span class="s">`歡迎，${name}`</span><span class="o">,</span>
+<span class="o">}</span><span class="o">)</span></code></pre>
+      <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">const</span> greeting <span class="o">=</span> <span class="t">Option</span><span class="o">.</span><span class="p">isNone</span><span class="o">(</span>displayName<span class="o">)</span>
+  <span class="o">?</span> <span class="s">"歡迎，訪客"</span>
+  <span class="o">:</span> <span class="s">`歡迎，${displayName.value}`</span></code></pre>
+      <p><code>match</code> 的好處不是它能做到 <code>if / else</code> 做不到的事，而是它把兩個分支放在同一個表達式裡，並讓 Effect 的型別定義負責傳遞 <code>Some</code> 裡的值。</p>
+
+      <h2>也能放進 pipe</h2>
+      <p><code>Option.match</code> 支援 Effect 常見的 dual API，因此既能採用前面的 data-first 寫法，也能採用 data-last 的 <code>pipe</code> 寫法：</p>
+      <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">const</span> greeting <span class="o">=</span> displayName<span class="o">.</span><span class="p">pipe</span><span class="o">(</span>
+  <span class="t">Option</span><span class="o">.</span><span class="p">match</span><span class="o">(</span><span class="o">{</span>
+    onNone<span class="o">:</span> <span class="o">(</span><span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span> <span class="s">"歡迎，訪客"</span><span class="o">,</span>
+    onSome<span class="o">:</span> <span class="o">(</span>name<span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span> <span class="s">`歡迎，${name}`</span><span class="o">,</span>
+  <span class="o">}</span><span class="o">)</span><span class="o">,</span>
+<span class="o">)</span></code></pre>
+      <p>兩種寫法沒有語意差異；選擇與周圍程式碼最一致的形式即可。</p>
+
+      <h2>回傳型別由兩個 callback 決定</h2>
+      <p><code>Option.match</code> 不保證回傳字串，也不會自動回傳另一個 <code>Option</code>。它的結果就是 <code>onNone</code> 或 <code>onSome</code> 的結果。</p>
+      <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">const</span> result <span class="o">=</span> <span class="t">Option</span><span class="o">.</span><span class="p">match</span><span class="o">(</span><span class="t">Option</span><span class="o">.</span><span class="p">some</span><span class="o">(</span><span class="n">3</span><span class="o">)</span><span class="o">,</span> <span class="o">{</span>
+  onNone<span class="o">:</span> <span class="o">(</span><span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span> <span class="s">"missing"</span><span class="o">,</span>
+  onSome<span class="o">:</span> <span class="o">(</span>value<span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span> value <span class="o">*</span> <span class="n">2</span><span class="o">,</span>
+<span class="o">}</span><span class="o">)</span>
+
+<span class="c">// result 的型別是 string | number</span>
+<span class="c">// runtime 結果是 6</span></code></pre>
+      <p>兩個分支可以回傳不同型別，此時 TypeScript 會推導為 union。不過在應用程式邊界，讓兩個分支回傳相同種類的結果通常更容易使用。</p>
+
+      <div class="callout">
+        <strong><code>onNone</code> 是 lazy 的</strong>
+        <p><code>onNone</code> 接受函式而不是現成值。只有輸入真的是 <code>None</code> 時，這個函式才會被呼叫；昂貴的 fallback 計算不會在 <code>Some</code> 情況下白做。</p>
+      </div>
+
+      <h2>與 map、getOrElse 怎麼選</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>需求</th>
+            <th>較直接的 API</th>
+            <th>結果</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>只轉換現有值，沒有值就維持沒有值</td>
+            <td><code>Option.map</code></td>
+            <td>仍是 <code>Option</code></td>
+          </tr>
+          <tr>
+            <td>有值就取值，沒有值只需要一個預設值</td>
+            <td><code>Option.getOrElse</code></td>
+            <td>普通值</td>
+          </tr>
+          <tr>
+            <td><code>Some</code> 與 <code>None</code> 各有一套處理邏輯</td>
+            <td><code>Option.match</code></td>
+            <td>普通值或 callback 指定的型別</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>只需要 fallback 時，不必使用 match</h3>
+      <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">const</span> name <span class="o">=</span> displayName<span class="o">.</span><span class="p">pipe</span><span class="o">(</span>
+  <span class="t">Option</span><span class="o">.</span><span class="p">getOrElse</span><span class="o">(</span><span class="o">(</span><span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span> <span class="s">"訪客"</span><span class="o">)</span><span class="o">,</span>
+<span class="o">)</span></code></pre>
+      <p>這比「<code>onSome</code> 原樣回傳、<code>onNone</code> 給預設值」的 <code>match</code> 更直接。</p>
+
+      <h3>還要繼續做 Option 運算時，不要太早 match</h3>
+      <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="k">const</span> normalizedName <span class="o">=</span> displayName<span class="o">.</span><span class="p">pipe</span><span class="o">(</span>
+  <span class="t">Option</span><span class="o">.</span><span class="p">map</span><span class="o">(</span><span class="o">(</span>name<span class="o">)</span> <span class="o">=</span><span class="o">&gt;</span> name<span class="o">.</span><span class="p">trim</span><span class="o">(</span><span class="o">)</span><span class="o">.</span><span class="p">toUpperCase</span><span class="o">(</span><span class="o">)</span><span class="o">)</span><span class="o">,</span>
+<span class="o">)</span></code></pre>
+      <p>這裡保留 <code>Option</code> 比立刻轉成普通值更有用。通常等到 UI、日誌或其他必須產出具體結果的邊界，再用 <code>match</code> 收尾。</p>
+
+      <div class="callout warning">
+        <strong>不要和 <code>Match</code> 模組混淆</strong>
+        <p><code>Option.match</code> 固定處理 <code>Option</code> 的 <code>Some</code>／<code>None</code>。Effect 的 <code>Match</code> 模組則是更通用的 pattern matching 工具，可處理 tagged union、結構化 pattern 與完整性檢查。名稱相近，但用途與抽象層次不同。</p>
+      </div>
+
+      <h2>一句話決策</h2>
+      <p>當你需要從 <code>Option</code> 走出來，而且「有值」與「沒有值」各自需要明確邏輯，就使用 <code>Option.match</code>；若只是轉換值或提供預設值，優先考慮更窄、更能表達意圖的 <code>Option.map</code> 或 <code>Option.getOrElse</code>。</p>
+    </article>
+  </main>
+  <script>
+    (() => {
+      const copyIcon = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="11" height="11" rx="2"></rect><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"></path></svg>'
+      const checkIcon = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"></path></svg>'
+
+      const copyText = async (text) => {
+        if (navigator.clipboard?.writeText) {
+          await navigator.clipboard.writeText(text)
+          return
+        }
+
+        const textarea = document.createElement("textarea")
+        textarea.value = text
+        textarea.style.position = "fixed"
+        textarea.style.opacity = "0"
+        document.body.append(textarea)
+        textarea.select()
+        document.execCommand("copy")
+        textarea.remove()
+      }
+
+      document.querySelectorAll("pre").forEach((pre) => {
+        const code = pre.querySelector("code")
+        if (!code) return
+
+        const button = document.createElement("button")
+        button.className = "copy-code"
+        button.type = "button"
+        button.setAttribute("aria-label", "複製程式碼")
+        button.innerHTML = copyIcon
+        button.addEventListener("click", async () => {
+          await copyText(code.textContent ?? "")
+          button.classList.add("copied")
+          button.innerHTML = checkIcon
+          window.setTimeout(() => {
+            button.classList.remove("copied")
+            button.innerHTML = copyIcon
+          }, 1400)
+        })
+        pre.append(button)
+
+        const track = document.createElement("div")
+        const thumb = document.createElement("div")
+        track.className = "code-scrollbar"
+        thumb.className = "code-scrollbar-thumb"
+        track.append(thumb)
+        pre.append(track)
+
+        const updateScrollbar = () => {
+          const maxScroll = code.scrollWidth - code.clientWidth
+          if (maxScroll <= 0) {
+            track.classList.add("hidden")
+            return
+          }
+
+          track.classList.remove("hidden")
+          const thumbWidth = Math.max(32, track.clientWidth * code.clientWidth / code.scrollWidth)
+          const maxThumbX = track.clientWidth - thumbWidth
+          thumb.style.width = `${thumbWidth}px`
+          thumb.style.transform = `translateX(${maxThumbX * code.scrollLeft / maxScroll}px)`
+        }
+
+        code.addEventListener("scroll", updateScrollbar, { passive: true })
+        window.addEventListener("resize", updateScrollbar)
+
+        track.addEventListener("pointerdown", (event) => {
+          const bounds = track.getBoundingClientRect()
+          const ratio = Math.max(0, Math.min(1, (event.clientX - bounds.left) / bounds.width))
+          code.scrollLeft = ratio * (code.scrollWidth - code.clientWidth)
+        })
+
+        thumb.addEventListener("pointerdown", (event) => {
+          event.stopPropagation()
+          thumb.setPointerCapture(event.pointerId)
+          const startX = event.clientX
+          const startScroll = code.scrollLeft
+          const move = (moveEvent) => {
+            const maxScroll = code.scrollWidth - code.clientWidth
+            const maxThumbX = track.clientWidth - thumb.clientWidth
+            if (maxThumbX > 0) {
+              code.scrollLeft = startScroll + (moveEvent.clientX - startX) * maxScroll / maxThumbX
+            }
+          }
+          const finish = () => {
+            thumb.removeEventListener("pointermove", move)
+            thumb.removeEventListener("pointerup", finish)
+          }
+          thumb.addEventListener("pointermove", move)
+          thumb.addEventListener("pointerup", finish)
+        })
+
+        updateScrollbar()
+      })
+    })()
+  </script>
+</body>
+</html>
