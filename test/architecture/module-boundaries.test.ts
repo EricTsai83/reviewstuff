@@ -32,7 +32,7 @@ const allowedInternalDependencies: Readonly<
     "shared",
   ]),
   git: new Set(["domain", "git", "platform", "shared"]),
-  output: new Set(["domain", "output", "shared"]),
+  output: new Set(["domain", "output", "review", "shared"]),
   platform: new Set(["platform", "shared"]),
   review: new Set(["domain", "review", "shared"]),
   shared: new Set(["shared"]),

@@ -38,6 +38,14 @@ reason/count metadata. This is a best-effort safeguard for obvious secrets, not
 a guarantee that arbitrary sensitive data cannot leave the machine; review
 diffs and configuration before enabling a cloud transport.
 
+Use `reviewstuff review --dry-run-request` to inspect the normalized request
+without invoking the selected engine or writing a review session. Add `--json`
+to emit only that `ReviewRequestV1` JSON document, which makes it suitable for
+machine inspection. The preview is the exact redacted, budget-selected request
+passed to `ReviewEngine`; request-budget token counts are estimates, and a
+provider adapter may add a provider-specific envelope that is outside this
+normalized-request preview.
+
 ## Development
 
 ```bash

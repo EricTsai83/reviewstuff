@@ -171,6 +171,26 @@ const makeRepository = async (): Promise<string> => {
   return cwd;
 };
 
+const listRepositoryEntries = async (
+  repository: string,
+): Promise<ReadonlyArray<string>> => {
+  const entries: Array<string> = [];
+
+  for await (
+    const entry of new Bun.Glob("**/*").scan({
+      cwd: repository,
+      dot: true,
+      onlyFiles: false,
+    })
+  ) {
+    if (entry !== ".git" && !entry.startsWith(".git/")) {
+      entries.push(entry);
+    }
+  }
+
+  return entries.sort();
+};
+
 describe("reviewstuff binary", () => {
   test("--version prints the package version", async () => {
     expect((await runCli(["--version"])).trim()).toBe(
@@ -589,6 +609,56 @@ describe("reviewstuff binary", () => {
       "large-staged.txt",
       "large-unstaged.txt",
     ]);
+  });
+});
+
+describe("request preview", () => {
+  test("--dry-run-request --json emits one redacted request and writes nothing", async () => {
+    const repository = await makeRepository();
+    const apiKey = "sk-proj-C1l2I3p4R5e6V7i8E9w0A1b2";
+    const sourcePath = `${repository}/preview.ts`;
+    const source = `export const token = "${apiKey}";\n`;
+    await Bun.write(sourcePath, source);
+    const entriesBefore = await listRepositoryEntries(repository);
+
+    const result = await runSourceCliProcess(
+      ["review", "--dry-run-request", "--json"],
+      { cwd: repository },
+    );
+    const request = JSON.parse(result.stdout) as {
+      schemaVersion: number;
+      context: {
+        files: ReadonlyArray<{ path: string; patch: string }>;
+      };
+    };
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stderr).toBe("");
+    expect(request.schemaVersion).toBe(1);
+    expect(request.context.files.map((file) => file.path)).toEqual([
+      "preview.ts",
+    ]);
+    expect(request.context.files[0]?.patch).toContain("[REDACTED:api-key]");
+    expect(result.stdout).not.toContain(apiKey);
+    expect(await listRepositoryEntries(repository)).toEqual(entriesBefore);
+    expect(await Bun.file(sourcePath).text()).toBe(source);
+  });
+
+  test("--dry-run-request uses the normal failure exit policy", async () => {
+    const repository = await makeRepository();
+    await Bun.write(
+      `${repository}/.reviewstuff.yaml`,
+      "review:\n  engine: unsupported\n",
+    );
+
+    const result = await runSourceCliProcess(
+      ["review", "--dry-run-request", "--json"],
+      { cwd: repository },
+    );
+
+    expect(result.exitCode).toBe(1);
+    expect(result.stdout).toBe("");
+    expect(result.stderr).toContain("Unsupported review selection");
   });
 });
 

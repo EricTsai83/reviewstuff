@@ -8,13 +8,23 @@ import {
   renderTerminalReport,
 } from "../output/report-renderer";
 import {
+  renderJsonRequestPreview,
+  renderTerminalRequestPreview,
+} from "../output/request-preview-renderer";
+import {
+  previewReviewRequest,
   type ReviewConfigOverrides,
   runReview,
 } from "../use-cases/run-review";
 import { renderReviewError } from "./review-error-renderer";
 
 const jsonFlag = Flag.boolean("json").pipe(
-  Flag.withDescription("Render the versioned report as JSON."),
+  Flag.withDescription("Render command output as JSON."),
+);
+const dryRunRequestFlag = Flag.boolean("dry-run-request").pipe(
+  Flag.withDescription(
+    "Preview the exact normalized request without invoking the review engine.",
+  ),
 );
 const stagedFlag = Flag.boolean("staged").pipe(
   Flag.withDescription("Review only changes staged in the index."),
@@ -97,6 +107,7 @@ const collectCliConfigOverrides = (
 export const reviewCommand = Command.make("review", {
   concurrency: concurrencyFlag,
   dir: directoryFlag,
+  dryRunRequest: dryRunRequestFlag,
   engine: engineFlag,
   json: jsonFlag,
   model: modelFlag,
@@ -107,19 +118,34 @@ export const reviewCommand = Command.make("review", {
   timeoutMs: timeoutFlag,
 }).pipe(
   Command.withDescription("Review local Git changes."),
-  Command.withHandler((cliOptions) =>
-    runReview({
+  Command.withHandler((cliOptions) => {
+    const input = {
       scope: cliOptions.staged ? stagedScope : workingTreeScope,
       ...(Option.isSome(cliOptions.dir) && {
         repositoryPath: cliOptions.dir.value,
       }),
       configOverrides: collectCliConfigOverrides(cliOptions),
-    }).pipe(
-      Effect.flatMap((report) =>
-        Console.log(
+    } as const;
+    const output = cliOptions.dryRunRequest
+      ? previewReviewRequest(input).pipe(
+        Effect.map((request) =>
+          cliOptions.json
+            ? renderJsonRequestPreview(request)
+            : renderTerminalRequestPreview(request)
+        ),
+      )
+      : runReview(input).pipe(
+        Effect.map((report) =>
           cliOptions.json
             ? renderJsonReport(report)
-            : renderTerminalReport(report),
+            : renderTerminalReport(report)
+        ),
+      );
+
+    return output.pipe(
+      Effect.flatMap((rendered) =>
+        Console.log(
+          rendered,
         ),
       ),
       Effect.matchEffect({
@@ -127,6 +153,6 @@ export const reviewCommand = Command.make("review", {
           reportCommandFailure(renderReviewError(error)),
         onSuccess: () => Effect.void,
       }),
-    ),
-  ),
+    );
+  }),
 );

@@ -39,7 +39,10 @@ import {
   selectReviewHunks,
 } from "../review/review-budget";
 import { redactReviewRequestV1 } from "../review/review-redaction";
-import { buildReviewRequestV1 } from "../review/review-request";
+import {
+  buildReviewRequestV1,
+  type ReviewRequestV1,
+} from "../review/review-request";
 
 export type { ReviewConfigOverrides } from "../config/config-service";
 
@@ -77,6 +80,8 @@ export interface RunReviewInput {
   readonly repositoryPath?: string;
   readonly configOverrides?: ReviewConfigOverrides;
 }
+
+export type PreviewReviewRequestResult = ReviewRequestV1;
 
 const ensureSupportedFakeSelection = (
   config: ResolvedReviewConfig,
@@ -210,13 +215,27 @@ const buildReviewReport = (
   });
 };
 
-export const runReview = ({
-  scope,
-  repositoryPath,
-  configOverrides = {},
-}: RunReviewInput): Effect.Effect<
-  ReviewReportV5,
-  RunReviewError,
+interface PreparedReview {
+  readonly config: ResolvedReviewConfig;
+  readonly diff: GitDiff;
+  readonly engine: ReviewEngine["Service"];
+  readonly privacy: ReviewAllowedPrivacyDecision;
+  readonly request: ReviewRequestV1;
+  readonly selection: ReviewSelectionV1;
+}
+
+const withPreparedReview = <Success, Error>(
+  {
+    scope,
+    repositoryPath,
+    configOverrides = {},
+  }: RunReviewInput,
+  effect: (
+    prepared: PreparedReview,
+  ) => Effect.Effect<Success, Error>,
+): Effect.Effect<
+  Success,
+  RunReviewError | Error,
   GitService | ConfigService | ReviewEngine
 > =>
   Effect.gen(function* () {
@@ -248,16 +267,15 @@ export const runReview = ({
           files: selection.files,
         }),
       );
-      const findings = selection.files.length > 0
-        ? yield* engine.review(request, { concurrency: config.concurrency })
-        : [];
-      return buildReviewReport(
-        scope,
+
+      return yield* effect({
+        config,
         diff,
-        selection,
-        findings,
+        engine,
         privacy,
-      );
+        request,
+        selection,
+      });
     }).pipe(
       Effect.timeoutOrElse({
         duration: config.timeoutMs,
@@ -270,3 +288,43 @@ export const runReview = ({
       }),
     );
   });
+
+export const previewReviewRequest = (
+  input: RunReviewInput,
+): Effect.Effect<
+  PreviewReviewRequestResult,
+  RunReviewError,
+  GitService | ConfigService | ReviewEngine
+> =>
+  withPreparedReview(input, ({ request }) => Effect.succeed(request));
+
+export const runReview = (
+  input: RunReviewInput,
+): Effect.Effect<
+  ReviewReportV5,
+  RunReviewError,
+  GitService | ConfigService | ReviewEngine
+> =>
+  withPreparedReview(
+    input,
+    Effect.fn(function* ({
+      config,
+      diff,
+      engine,
+      privacy,
+      request,
+      selection,
+    }) {
+      const findings = selection.files.length > 0
+        ? yield* engine.review(request, { concurrency: config.concurrency })
+        : [];
+
+      return buildReviewReport(
+        input.scope,
+        diff,
+        selection,
+        findings,
+        privacy,
+      );
+    }),
+  );

@@ -15,6 +15,7 @@ import type { ReviewRequestV1 } from "../../src/review/review-request";
 import { fallbackReviewRequestEstimator } from "../../src/review/review-budget";
 import {
   decideReviewPrivacy,
+  previewReviewRequest,
   ReviewCloudPrivacyError,
   ReviewSelectionUnsupportedError,
   ReviewTimeoutError,
@@ -326,6 +327,71 @@ test("runReview builds the normalized request before invoking the engine", async
       model: "fake-reviewer-v1",
     },
   });
+});
+
+test("preview returns the exact redacted request without invoking the engine", async () => {
+  const apiKey = "sk-proj-P1r2E3v4I5e6W7k8E9y0A1b2";
+  const git = makeGit({
+    readDiff: () =>
+      Effect.succeed({
+        files: [
+          gitTextFile(
+            `src/${apiKey}.ts`,
+            "working-tree",
+            `@@ -0,0 +1 @@\n+const token = "${apiKey}";\n`,
+          ),
+        ],
+      }),
+  });
+  let engineCalls = 0;
+  const received: Array<ReviewRequestV1> = [];
+  const engine = Layer.succeed(ReviewEngine, {
+    transport: "local",
+    review: (request) =>
+      Effect.sync(() => {
+        engineCalls += 1;
+        received.push(request);
+        return [];
+      }),
+  });
+  const provided = Layer.mergeAll(git, config, engine);
+
+  const preview = await previewReviewRequest({
+    scope: "working-tree",
+  }).pipe(
+    Effect.provide(provided),
+    Effect.runPromise,
+  );
+
+  expect(engineCalls).toBe(0);
+  expect(JSON.stringify(preview)).not.toContain(apiKey);
+  expect(JSON.stringify(preview)).toContain("[REDACTED:api-key]");
+
+  await runReview({ scope: "working-tree" }).pipe(
+    Effect.provide(provided),
+    Effect.runPromise,
+  );
+
+  expect(engineCalls).toBe(1);
+  expect(received).toEqual([preview]);
+});
+
+test("preview applies the resolved timeout to request preparation", async () => {
+  const git = makeGit({
+    readDiff: () => Effect.never,
+  });
+
+  const error = await previewReviewRequest({
+    scope: "working-tree",
+    configOverrides: { timeoutMs: 1 },
+  }).pipe(
+    Effect.provide(git),
+    Effect.provide(services),
+    Effect.flip,
+    Effect.runPromise,
+  );
+
+  expect(error).toEqual(new ReviewTimeoutError({ timeoutMilliseconds: 1 }));
 });
 
 test("runReview gives the engine only redacted repository data", async () => {
