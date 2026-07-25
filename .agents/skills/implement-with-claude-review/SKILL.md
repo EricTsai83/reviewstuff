@@ -35,12 +35,13 @@ Include the requirements, implementation scope, changed files or diff, checks, a
 
 ### Wait Limit
 
-Wait up to 30 minutes for each Claude review invocation. Treat this as a hard per-invocation limit:
+Use a cumulative 30-minute wait budget for all Claude review invocations in the workflow, including a final pass after fixes:
 
-- Record the invocation start time and do not declare a timeout merely because Claude has not produced intermediate output.
+- Record how long each Claude invocation runs. A later pass may use only the wait budget left by earlier passes.
+- Do not declare a timeout merely because Claude has not produced intermediate output.
 - Poll or wait in intervals no longer than 60 seconds, and give the user a concise status update at least every 60 seconds while the review is still running.
-- At 30 minutes, terminate the invocation if it has not completed and classify it as a timeout even if it appears to be making progress.
-- Do not retry a timed-out invocation; timeout is not a clearly correctable invocation error. Proceed directly to the fallback below.
+- When the cumulative wait reaches 30 minutes, terminate any running Claude invocation and do not start another one, even if a pass appears to be making progress.
+- Do not retry after exhausting the wait budget; timeout is not a clearly correctable invocation error. Use the fallback below for any required review pass.
 
 ## Claude Failure Fallback
 
