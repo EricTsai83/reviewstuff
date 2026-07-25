@@ -19,12 +19,90 @@ export class ReviewEngineFailure extends Data.TaggedError(
   readonly cause: unknown;
 }> {}
 
-export type ReviewEngineError = ReviewEngineFailure;
+export class ReviewEngineAuthenticationError extends Data.TaggedError(
+  "ReviewEngineAuthenticationError",
+)<{
+  readonly provider: string;
+  readonly statusCode?: number;
+}> {}
+
+export class ReviewEngineConfigurationError extends Data.TaggedError(
+  "ReviewEngineConfigurationError",
+)<{
+  readonly engine: string;
+  readonly field: string;
+  readonly message: string;
+}> {}
+
+export class ReviewEngineTransportError extends Data.TaggedError(
+  "ReviewEngineTransportError",
+)<{
+  readonly provider: string;
+  readonly statusCode?: number;
+  readonly cause: unknown;
+}> {}
+
+export class ReviewEngineTimeoutError extends Data.TaggedError(
+  "ReviewEngineTimeoutError",
+)<{
+  readonly provider: string;
+  readonly timeoutMilliseconds: number;
+}> {}
+
+export class ReviewEngineRefusalError extends Data.TaggedError(
+  "ReviewEngineRefusalError",
+)<{
+  readonly provider: string;
+}> {}
+
+export type ReviewEngineIncompleteReason =
+  | "max_output_tokens"
+  | "content_filter"
+  | "unknown";
+
+export class ReviewEngineIncompleteError extends Data.TaggedError(
+  "ReviewEngineIncompleteError",
+)<{
+  readonly provider: string;
+  readonly reason: ReviewEngineIncompleteReason;
+}> {}
+
+export class ReviewEngineEmptyOutputError extends Data.TaggedError(
+  "ReviewEngineEmptyOutputError",
+)<{
+  readonly provider: string;
+}> {}
+
+export type ReviewEngineInvalidOutputStage =
+  | "response"
+  | "message"
+  | "findings";
+
+export class ReviewEngineInvalidOutputError extends Data.TaggedError(
+  "ReviewEngineInvalidOutputError",
+)<{
+  readonly provider: string;
+  readonly stage: ReviewEngineInvalidOutputStage;
+  readonly cause: unknown;
+}> {}
+
+export type ReviewEngineError =
+  | ReviewEngineFailure
+  | ReviewEngineAuthenticationError
+  | ReviewEngineConfigurationError
+  | ReviewEngineTransportError
+  | ReviewEngineTimeoutError
+  | ReviewEngineRefusalError
+  | ReviewEngineIncompleteError
+  | ReviewEngineEmptyOutputError
+  | ReviewEngineInvalidOutputError;
 
 /** Local execution knobs resolved from config; deliberately kept out of the
  * serialized request contract so budgeting measures only reviewable data. */
 export interface ReviewEngineExecution {
   readonly concurrency: number;
+  readonly timeoutMilliseconds: number;
+  readonly maxOutputTokens: number;
 }
 
 export class ReviewEngine extends Context.Service<

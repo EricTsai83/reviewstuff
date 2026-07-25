@@ -33,6 +33,15 @@ claude -p "<focused review prompt>" \
 
 Include the requirements, implementation scope, changed files or diff, checks, and pre-existing changes to ignore. Require severity, file/line, failure mode, and fix direction. Exclude formatting, naming, subjective style, and unrelated improvements. Treat findings as evidence, not authority.
 
+### Wait Limit
+
+Wait up to 30 minutes for each Claude review invocation. Treat this as a hard per-invocation limit:
+
+- Record the invocation start time and do not declare a timeout merely because Claude has not produced intermediate output.
+- Poll or wait in intervals no longer than 60 seconds, and give the user a concise status update at least every 60 seconds while the review is still running.
+- At 30 minutes, terminate the invocation if it has not completed and classify it as a timeout even if it appears to be making progress.
+- Do not retry a timed-out invocation; timeout is not a clearly correctable invocation error. Proceed directly to the fallback below.
+
 ## Claude Failure Fallback
 
 If Claude returns no usable review—because of access, quota, policy, authentication, timeout, tooling, context, or malformed output—retry once only when the invocation is clearly correctable; otherwise use independent Codex review:

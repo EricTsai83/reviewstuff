@@ -1,0 +1,21 @@
+{
+  "id": "resp_completed",
+  "object": "response",
+  "status": "completed",
+  "incomplete_details": null,
+  "output": [
+    {
+      "id": "msg_completed",
+      "type": "message",
+      "status": "completed",
+      "role": "assistant",
+      "content": [
+        {
+          "type": "output_text",
+          "text": "{\"findings\":[{\"id\":\"finding-1\",\"ruleId\":\"unchecked-result\",\"severity\":\"high\",\"category\":\"correctness\",\"confidence\":0.95,\"message\":\"The error result is ignored.\",\"file\":\"src/example.ts\",\"line\":4}]}",
+          "annotations": []
+        }
+      ]
+    }
+  ]
+}

@@ -109,6 +109,24 @@ export const renderReviewError = (error: RunReviewError): string =>
       `Review timed out after ${Duration.format(Duration.millis(timeoutError.timeoutMilliseconds))}.`,
     ReviewEngineFailure: (engineError) =>
       `Review engine failed: ${escapeTerminalText(engineError.message)}`,
+    ReviewEngineAuthenticationError: (engineError) =>
+      `Review engine authentication failed for provider ${escapeTerminalText(engineError.provider)}.`,
+    ReviewEngineConfigurationError: (engineError) =>
+      `Invalid ${escapeTerminalText(engineError.engine)} configuration at ${escapeTerminalText(engineError.field)}: ${escapeTerminalText(engineError.message)}`,
+    ReviewEngineTransportError: (engineError) =>
+      engineError.statusCode === undefined
+        ? `Review engine transport failed for provider ${escapeTerminalText(engineError.provider)}.`
+        : `Review engine transport failed for provider ${escapeTerminalText(engineError.provider)} with HTTP status ${engineError.statusCode}.`,
+    ReviewEngineTimeoutError: (engineError) =>
+      `Review engine request to ${escapeTerminalText(engineError.provider)} timed out after ${Duration.format(Duration.millis(engineError.timeoutMilliseconds))}.`,
+    ReviewEngineRefusalError: (engineError) =>
+      `Review engine provider ${escapeTerminalText(engineError.provider)} refused the request.`,
+    ReviewEngineIncompleteError: (engineError) =>
+      `Review engine provider ${escapeTerminalText(engineError.provider)} returned an incomplete response (${escapeTerminalText(engineError.reason)}).`,
+    ReviewEngineEmptyOutputError: (engineError) =>
+      `Review engine provider ${escapeTerminalText(engineError.provider)} returned no review output.`,
+    ReviewEngineInvalidOutputError: (engineError) =>
+      `Review engine provider ${escapeTerminalText(engineError.provider)} returned invalid ${escapeTerminalText(engineError.stage)} output.`,
     GitNotRepositoryError: (repositoryError) =>
       `Not a git repository (or any parent directory); detection exited with code ${repositoryError.exitCode}.`,
     GitRepositoryPathNotFoundError: (repositoryError) =>

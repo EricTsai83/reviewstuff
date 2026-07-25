@@ -25,7 +25,13 @@ const buildRequest = (
 
 const review = (request: ReviewRequestV1, concurrency = 1) =>
   ReviewEngine.pipe(
-    Effect.flatMap((engine) => engine.review(request, { concurrency })),
+    Effect.flatMap((engine) =>
+      engine.review(request, {
+        concurrency,
+        timeoutMilliseconds: 30_000,
+        maxOutputTokens: 16_384,
+      })
+    ),
     Effect.provide(layer),
     Effect.runPromise,
   );
@@ -87,7 +93,11 @@ test("fake ReviewEngine maps invalid generated findings to a typed failure", asy
             patch: "+// REVIEWSTUFF_FAKE_FINDING missing-hunk",
           },
         ]),
-        { concurrency: 1 },
+        {
+          concurrency: 1,
+          timeoutMilliseconds: 30_000,
+          maxOutputTokens: 16_384,
+        },
       ),
     ),
     Effect.provide(layer),

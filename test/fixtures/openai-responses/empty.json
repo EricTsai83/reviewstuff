@@ -1,0 +1,21 @@
+{
+  "id": "resp_empty",
+  "object": "response",
+  "status": "completed",
+  "incomplete_details": null,
+  "output": [
+    {
+      "id": "msg_empty",
+      "type": "message",
+      "status": "completed",
+      "role": "assistant",
+      "content": [
+        {
+          "type": "output_text",
+          "text": "  \n\t",
+          "annotations": []
+        }
+      ]
+    }
+  ]
+}

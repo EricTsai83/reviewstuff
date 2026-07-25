@@ -8,6 +8,7 @@ import {
 import {
   layer as fakeReviewEngine,
   ReviewEngine,
+  type ReviewEngineExecution,
   ReviewEngineFailure,
 } from "../../src/engines/review-engine";
 import { GitService } from "../../src/git/git-service";
@@ -293,11 +294,13 @@ test("runReview builds the normalized request before invoking the engine", async
     readDiff: () => Effect.succeed({ files: [file] }),
   });
   let received: ReviewRequestV1 | undefined;
+  let receivedExecution: ReviewEngineExecution | undefined;
   const engine = Layer.succeed(ReviewEngine, {
     transport: "local",
-    review: (request) =>
+    review: (request, execution) =>
       Effect.sync(() => {
         received = request;
+        receivedExecution = execution;
         return [];
       }),
   });
@@ -326,6 +329,11 @@ test("runReview builds the normalized request before invoking the engine", async
     options: {
       model: "fake-reviewer-v1",
     },
+  });
+  expect(receivedExecution).toEqual({
+    concurrency: 1,
+    timeoutMilliseconds: 30_000,
+    maxOutputTokens: 16_384,
   });
 });
 

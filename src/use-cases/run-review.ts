@@ -316,7 +316,11 @@ export const runReview = (
       selection,
     }) {
       const findings = selection.files.length > 0
-        ? yield* engine.review(request, { concurrency: config.concurrency })
+        ? yield* engine.review(request, {
+          concurrency: config.concurrency,
+          timeoutMilliseconds: config.timeoutMs,
+          maxOutputTokens: config.requestBudget.outputReserveTokens,
+        })
         : [];
 
       return buildReviewReport(

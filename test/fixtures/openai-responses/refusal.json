@@ -1,0 +1,20 @@
+{
+  "id": "resp_refusal",
+  "object": "response",
+  "status": "completed",
+  "incomplete_details": null,
+  "output": [
+    {
+      "id": "msg_refusal",
+      "type": "message",
+      "status": "completed",
+      "role": "assistant",
+      "content": [
+        {
+          "type": "refusal",
+          "refusal": "I cannot review this request."
+        }
+      ]
+    }
+  ]
+}

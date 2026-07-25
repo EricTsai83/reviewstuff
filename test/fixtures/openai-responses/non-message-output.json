@@ -1,0 +1,13 @@
+{
+  "id": "resp_non_message",
+  "object": "response",
+  "status": "completed",
+  "incomplete_details": null,
+  "output": [
+    {
+      "id": "rs_reasoning",
+      "type": "reasoning",
+      "summary": []
+    }
+  ]
+}
