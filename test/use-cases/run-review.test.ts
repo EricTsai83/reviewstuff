@@ -19,10 +19,19 @@ import {
   runReview,
 } from "../../src/use-cases/run-review";
 
+const repository = { root: "/repo" };
 const config = Layer.succeed(ConfigService, {
-  load: (overrides) => Effect.succeed(resolveReviewConfig(undefined, overrides)),
+  load: (_repository, overrides) =>
+    Effect.succeed(resolveReviewConfig(undefined, overrides)),
 });
 const services = Layer.merge(config, fakeReviewEngine);
+const makeGit = (
+  service: Pick<GitService["Service"], "readDiff">,
+) =>
+  Layer.succeed(GitService, {
+    resolveRepository: () => Effect.succeed(repository),
+    ...service,
+  });
 const gitTextFile = (
   path: string,
   source: "staged" | "working-tree" | "untracked",
@@ -48,8 +57,47 @@ const gitTextFile = (
   };
 };
 
-test("runReview rejects selections that cannot execute yet", async () => {
+test("runReview resolves the repository once and shares its context", async () => {
+  const selectedRepository = { root: "/selected/repo" };
+  let resolvedPath: string | undefined;
+  let configRepository: typeof selectedRepository | undefined;
+  let diffRepository: typeof selectedRepository | undefined;
   const git = Layer.succeed(GitService, {
+    resolveRepository: (candidatePath) =>
+      Effect.sync(() => {
+        resolvedPath = candidatePath;
+        return selectedRepository;
+      }),
+    readDiff: (receivedRepository) =>
+      Effect.sync(() => {
+        diffRepository = receivedRepository;
+        return { files: [] };
+      }),
+  });
+  const selectedConfig = Layer.succeed(ConfigService, {
+    load: (receivedRepository, overrides) =>
+      Effect.sync(() => {
+        configRepository = receivedRepository;
+        return resolveReviewConfig(undefined, overrides);
+      }),
+  });
+
+  await runReview({
+    scope: "working-tree",
+    repositoryPath: "../selected",
+  }).pipe(
+    Effect.provide(git),
+    Effect.provide(Layer.merge(selectedConfig, fakeReviewEngine)),
+    Effect.runPromise,
+  );
+
+  expect(resolvedPath).toBe("../selected");
+  expect(configRepository).toBe(selectedRepository);
+  expect(diffRepository).toBe(selectedRepository);
+});
+
+test("runReview rejects selections that cannot execute yet", async () => {
+  const git = makeGit({
     readDiff: () => Effect.die("unsupported selections must fail before Git"),
   });
 
@@ -77,7 +125,7 @@ test("runReview rejects selections that cannot execute yet", async () => {
 });
 
 test("runReview applies the resolved timeout to Git diff work", async () => {
-  const git = Layer.succeed(GitService, {
+  const git = makeGit({
     readDiff: () => Effect.never,
   });
 
@@ -95,7 +143,7 @@ test("runReview applies the resolved timeout to Git diff work", async () => {
 });
 
 test("runReview applies the same resolved timeout to engine work", async () => {
-  const git = Layer.succeed(GitService, {
+  const git = makeGit({
     readDiff: () =>
       Effect.succeed({
         files: [
@@ -136,7 +184,7 @@ test("runReview builds the normalized request before invoking the engine", async
     requestFile.source,
     requestFile.patch,
   );
-  const git = Layer.succeed(GitService, {
+  const git = makeGit({
     readDiff: () => Effect.succeed({ files: [file] }),
   });
   let received: ReviewRequestV1 | undefined;
@@ -176,7 +224,7 @@ test("runReview builds the normalized request before invoking the engine", async
 });
 
 test("runReview produces deterministic findings from added marker lines", async () => {
-  const git = Layer.succeed(GitService, {
+  const git = makeGit({
     readDiff: () =>
       Effect.succeed({
         files: [
@@ -248,7 +296,7 @@ test("finding IDs do not change when the same patch is staged", async () => {
   const review = (source: "staged" | "working-tree") =>
     runReview({ scope: "working-tree" }).pipe(
       Effect.provide(
-        Layer.succeed(GitService, {
+        makeGit({
           readDiff: () =>
             Effect.succeed({
               files: [
@@ -272,7 +320,7 @@ test("finding IDs do not change when the same patch is staged", async () => {
 test("runReview reports deterministic incomplete coverage", async () => {
   const report = await runReview({ scope: "working-tree" }).pipe(
     Effect.provide(
-      Layer.succeed(GitService, {
+      makeGit({
         readDiff: () =>
           Effect.succeed({
             files: [
@@ -336,7 +384,7 @@ test("runReview sends only budget-selected hunks and reports the same coverage",
     { ...partial.hunks[0]!, patch: smallHunk },
     { ...partial.hunks[0]!, header: hugeHunk.split("\n", 1)[0]!, patch: hugeHunk },
   ];
-  const git = Layer.succeed(GitService, {
+  const git = makeGit({
     readDiff: () =>
       Effect.succeed({
         files: [
@@ -440,7 +488,7 @@ test("runReview skips the engine when no hunk fits the request budget", async ()
     },
   }).pipe(
     Effect.provide(
-      Layer.succeed(GitService, {
+      makeGit({
         readDiff: () =>
           Effect.succeed({
             files: [gitTextFile("oversized.ts", "staged", hugeHunk)],
@@ -485,7 +533,7 @@ test("runReview sends metadata-only files to the engine", async () => {
 
   const report = await runReview({ scope: "working-tree" }).pipe(
     Effect.provide(
-      Layer.succeed(GitService, {
+      makeGit({
         readDiff: () => Effect.succeed({ files: [metadataOnly] }),
       }),
     ),
@@ -524,7 +572,7 @@ test("runReview propagates typed engine failures", async () => {
     message: "Injected engine failure.",
     cause: undefined,
   });
-  const git = Layer.succeed(GitService, {
+  const git = makeGit({
     readDiff: () =>
       Effect.succeed({
         files: [

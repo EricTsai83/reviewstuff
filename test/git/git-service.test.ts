@@ -8,6 +8,7 @@ import {
   GitExecutionError,
   GitInvalidOutputError,
   GitNotRepositoryError,
+  GitRepositoryPathNotFoundError,
   GitService,
   GitUnmergedPathsError,
   GitWorkingTreeUnavailableError,
@@ -65,7 +66,20 @@ const readDiff = (
   scope: "staged" | "working-tree",
 ) =>
   GitService.pipe(
-    Effect.flatMap((git) => git.readDiff(scope)),
+    Effect.flatMap((git) =>
+      git.resolveRepository().pipe(
+        Effect.flatMap((repository) => git.readDiff(repository, scope)),
+      )
+    ),
+    Effect.provide(provideGit(runner)),
+  );
+
+const resolveRepository = (
+  runner: Service,
+  candidatePath?: string,
+) =>
+  GitService.pipe(
+    Effect.flatMap((git) => git.resolveRepository(candidatePath)),
     Effect.provide(provideGit(runner)),
   );
 
@@ -103,6 +117,75 @@ const expectRepositoryPrelude = (
 };
 
 describe("GitService orchestration", () => {
+  test("resolves an explicit candidate to its canonical working-tree root", async () => {
+    const fixture = makeGitRunnerFixture();
+    const candidate = "/repo-link/nested";
+    fixture.expectGit(
+      ["-C", candidate, ...detectRepository],
+      gitResult("true\n"),
+    );
+    fixture.expectGit(
+      ["-C", candidate, ...resolveRepositoryRoot],
+      gitResult("/canonical/repo\n"),
+    );
+
+    const repository = await resolveRepository(
+      fixture.runner,
+      candidate,
+    ).pipe(Effect.runPromise);
+
+    expect(repository).toEqual({ root: "/canonical/repo" });
+    expect(fixture.requests.every((request) =>
+      request.workingDirectory === undefined
+    )).toBe(true);
+    fixture.verify();
+  });
+
+  test.each([
+    ["empty", ""],
+    ["relative", "relative/repository\n"],
+  ])("rejects an %s repository root", async (_kind, rootOutput) => {
+    const fixture = makeGitRunnerFixture();
+    fixture.expectGit(detectRepository, gitResult("true\n"));
+    fixture.expectGit(resolveRepositoryRoot, gitResult(rootOutput));
+
+    const error = await resolveRepository(fixture.runner).pipe(
+      Effect.flip,
+      Effect.runPromise,
+    );
+
+    expect(error).toEqual(
+      new GitInvalidOutputError({
+        operation: "resolve repository root",
+        outputBytes: Buffer.byteLength(rootOutput),
+      }),
+    );
+    fixture.verify();
+  });
+
+  test("maps a missing candidate path to a typed error", async () => {
+    const fixture = makeGitRunnerFixture();
+    const candidate = "/missing/repo";
+    fixture.expectGit(
+      ["-C", candidate, ...detectRepository],
+      gitResult(
+        "",
+        128,
+        `fatal: cannot change to '${candidate}': No such file or directory`,
+      ),
+    );
+
+    const error = await resolveRepository(fixture.runner, candidate).pipe(
+      Effect.flip,
+      Effect.runPromise,
+    );
+
+    expect(error).toEqual(
+      new GitRepositoryPathNotFoundError({ path: candidate }),
+    );
+    fixture.verify();
+  });
+
   test("validates repository and forces a stable English locale", async () => {
     const fixture = makeGitRunnerFixture();
     fixture.expectGit(

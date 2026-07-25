@@ -5,7 +5,7 @@ import {
   PositiveIntegerSchema,
 } from "../shared/schema-primitives";
 
-export const reviewConfigFileName = "reviewstuff.config.json";
+export const reviewConfigFileName = ".reviewstuff.yaml";
 
 export const ReviewPresetNameSchema = Schema.Literals(["quick", "standard"]);
 
@@ -28,10 +28,6 @@ export const ReviewConfigSchema = Schema.Struct({
 export const ReviewstuffConfigSchema = Schema.Struct({
   review: Schema.optionalKey(ReviewConfigSchema),
 });
-
-export const ReviewstuffConfigJsonSchema = Schema.fromJsonString(
-  ReviewstuffConfigSchema,
-);
 
 export type ReviewPresetName = typeof ReviewPresetNameSchema.Type;
 export type ReviewRequestBudgetConfig =

@@ -16,7 +16,8 @@
   },
   "dependencies": {
     "@effect/platform-bun": "4.0.0-beta.98",
-    "effect": "4.0.0-beta.98"
+    "effect": "4.0.0-beta.98",
+    "yaml": "2.9.0"
   },
   "devDependencies": {
     "@effect/tsgo": "0.22.0",

@@ -59,6 +59,7 @@ export type RunReviewError =
 
 export interface RunReviewInput {
   readonly scope: ReviewScope;
+  readonly repositoryPath?: string;
   readonly configOverrides?: ReviewConfigOverrides;
 }
 
@@ -169,6 +170,7 @@ const buildReviewReport = (
 
 export const runReview = ({
   scope,
+  repositoryPath,
   configOverrides = {},
 }: RunReviewInput): Effect.Effect<
   ReviewReportV4,
@@ -179,10 +181,11 @@ export const runReview = ({
     const configService = yield* ConfigService;
     const git = yield* GitService;
     const engine = yield* ReviewEngine;
-    const config = yield* configService.load(configOverrides);
+    const repository = yield* git.resolveRepository(repositoryPath);
+    const config = yield* configService.load(repository, configOverrides);
     yield* ensureSupportedFakeSelection(config);
     return yield* Effect.gen(function* () {
-      const diff = yield* git.readDiff(scope);
+      const diff = yield* git.readDiff(repository, scope);
       const reviewableFiles = textFiles(diff);
       const selection = selectReviewHunks({
         files: reviewableFiles.map(({ path, source, fileHeader, hunks }) => ({

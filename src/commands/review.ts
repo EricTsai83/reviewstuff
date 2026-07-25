@@ -35,6 +35,10 @@ const providerFlag = optionalNonEmptyFlag(
   "Override the review provider.",
 );
 const modelFlag = optionalNonEmptyFlag("model", "Override the reviewer model.");
+const directoryFlag = Flag.directory("dir").pipe(
+  Flag.optional,
+  Flag.withDescription("Select the Git working-tree repository."),
+);
 const optionalPositiveIntegerFlag = (name: string, description: string) =>
   Flag.integer(name).pipe(
     Flag.filter((value) => value > 0, () => `${name} must be greater than 0`),
@@ -83,6 +87,7 @@ const collectCliConfigOverrides = (
 
 export const reviewCommand = Command.make("review", {
   concurrency: concurrencyFlag,
+  dir: directoryFlag,
   engine: engineFlag,
   json: jsonFlag,
   model: modelFlag,
@@ -95,6 +100,9 @@ export const reviewCommand = Command.make("review", {
   Command.withHandler((cliOptions) =>
     runReview({
       scope: cliOptions.staged ? stagedScope : workingTreeScope,
+      ...(Option.isSome(cliOptions.dir) && {
+        repositoryPath: cliOptions.dir.value,
+      }),
       configOverrides: collectCliConfigOverrides(cliOptions),
     }).pipe(
       Effect.flatMap((report) =>

@@ -633,9 +633,9 @@
               </tr>
               <tr>
                 <td>Repository configuration author</td>
-                <td>在 <code>reviewstuff.config.json</code> 設定 preset 與執行參數</td>
+                <td>在 repository root 的 <code>.reviewstuff.yaml</code> 設定 preset 與執行參數</td>
                 <td>設定 review preset、selection、timeout、concurrency 與 request budget</td>
-                <td>檔案從 process cwd 讀取，不會先解析 repository root；unknown keys 被拒絕</td>
+                <td>只載入 canonical filename；unknown keys 與 YAML-only features 被拒絕</td>
                 <td><span class="badge verified">Verified</span></td>
               </tr>
               <tr>
@@ -1076,7 +1076,8 @@
           <h4>Dependencies</h4>
           <p>
             Bun filesystem、Effect child-process runtime、local <code>git</code> executable、
-            <code>reviewstuff.config.json</code>（optional）與 fake ReviewEngine。沒有 network、
+            <code>yaml</code> parser、repository-root <code>.reviewstuff.yaml</code>（optional）
+            與 fake ReviewEngine。沒有 network、
             database 或 queue。
           </p>
           <h4>Evidence and confidence</h4>
@@ -1151,30 +1152,35 @@
           </dl>
           <h4>User-visible flow</h4>
           <ol>
-            <li>ConfigService 嘗試從 process cwd 讀 <code>reviewstuff.config.json</code>；not found 視為空設定。</li>
-            <li>JSON 以 strict schema decode；unknown properties、empty strings、non-positive timeout/concurrency 都失敗。</li>
+            <li>GitService 先從 cwd 或 <code>--dir</code> 解析 canonical working-tree root；ConfigService 只讀該 root 的 <code>.reviewstuff.yaml</code>。</li>
+            <li>YAML 1.2 parser 先拒絕 duplicate keys、tags、anchors、aliases、merge keys、multiple documents 與非 JSON-compatible values。</li>
+            <li>parser output 視為 <code>unknown</code>，再由 Effect Schema strict decode；unknown properties、empty strings、non-positive timeout/concurrency 都失敗。</li>
             <li>先選 quick/standard preset defaults，再覆蓋 file values，最後覆蓋 CLI flags。</li>
             <li>目前只有完整的 fake/fake/fake-reviewer-v1 tuple 可進入 Git work；其他 selection 明確失敗。</li>
           </ol>
           <h4>Precedence</h4>
           <p>
-            <code>selected preset defaults → reviewstuff.config.json review object → CLI overrides</code>。
+            <code>selected preset defaults → .reviewstuff.yaml review object → CLI overrides</code>。
             quick 與 standard 的 model/budget 相同，但 quick 是 30s / concurrency 1，standard 是
             120s / concurrency 2。
           </p>
           <h4>Alternative and failure paths</h4>
           <ul>
-            <li>檔案不存在：採 standard defaults。</li>
+            <li>檔案不存在、blank 或 comment-only：採 standard defaults。</li>
             <li>讀檔 permission failure：<code>ConfigFileReadError</code>，exit 1。</li>
-            <li>內容 invalid：<code>ConfigFileDecodeError</code>；user-facing output 不包含原始 rejected value、cause 或 stack。</li>
-            <li>從 nested directory 執行時，Git root 會解析到 repository root，但 config 仍取 nested cwd；這是現行行為。</li>
+            <li>YAML syntax 或 feature rejection：<code>ConfigFileParseError</code>，包含安全的 line/column。</li>
+            <li>typed config invalid：<code>ConfigFileSchemaError</code>，只顯示白名單 field path 與安全 constraint，不包含 rejected value、raw config、cause 或 stack。</li>
+            <li><code>reviewstuff.config.json</code>、<code>.reviewstuff.yml</code> 與其他 aliases 完全不載入。</li>
+            <li>nested cwd 與 <code>--dir</code> 都讓 config 和 reviewed diff 共用同一個 canonical repository context。</li>
           </ul>
           <h4>Evidence and confidence</h4>
           <p>
             <span class="badge verified">Verified</span>
-            <a href="../../src/config/config-service.ts#L92"><code>src/config/config-service.ts:92–160</code></a>；
-            <a href="../../test/config/config-service.test.ts#L108"><code>test/config/config-service.test.ts:108–199</code></a>；
-            <a href="../../test/e2e/cli.e2e.test.ts#L230"><code>test/e2e/cli.e2e.test.ts:230–304</code></a>。
+            <a href="../../src/config/yaml-parser.ts"><code>src/config/yaml-parser.ts</code></a>；
+            <a href="../../src/config/config-service.ts"><code>src/config/config-service.ts</code></a>；
+            <a href="../../test/config/yaml-parser.test.ts"><code>test/config/yaml-parser.test.ts</code></a>；
+            <a href="../../test/config/config-service.test.ts"><code>test/config/config-service.test.ts</code></a>；
+            <a href="../../test/e2e/cli.e2e.test.ts"><code>test/e2e/cli.e2e.test.ts</code></a>。
           </p>
         </article>
 

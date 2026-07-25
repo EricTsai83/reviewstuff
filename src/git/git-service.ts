@@ -1,6 +1,7 @@
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import type { RepositoryContext } from "../domain/repository";
 import type { ReviewScope } from "../domain/scope";
 import * as CommandRunner from "../platform/command-runner";
 import {
@@ -23,6 +24,7 @@ import {
 import {
   GitInvalidOutputError,
   GitNotRepositoryError,
+  GitRepositoryPathNotFoundError,
   GitUnmergedPathsError,
   GitWorkingTreeUnavailableError,
   makeGitCommandError,
@@ -47,6 +49,7 @@ export {
   GitExecutionError,
   GitInvalidOutputError,
   GitNotRepositoryError,
+  GitRepositoryPathNotFoundError,
   type GitProcessPhase,
   GitUnmergedPathsError,
   GitWorkingTreeUnavailableError,
@@ -56,10 +59,17 @@ export class GitService extends Context.Service<
   GitService,
   {
     /**
+     * Validates a candidate path and returns the canonical working-tree root.
+     */
+    readonly resolveRepository: (
+      candidatePath?: string,
+    ) => Effect.Effect<RepositoryContext, GitError>;
+    /**
      * Collects normalized metadata for every selected file and complete text
      * hunks when the file is not binary.
      */
     readonly readDiff: (
+      repository: RepositoryContext,
       scope: ReviewScope,
     ) => Effect.Effect<GitDiff, GitError>;
   }
@@ -74,9 +84,18 @@ const trackedChangeListingArguments = [
   "--",
 ] as const;
 
+const inRepository = (
+  candidatePath: string | undefined,
+  args: ReadonlyArray<string>,
+): ReadonlyArray<string> =>
+  candidatePath === undefined ? args : ["-C", candidatePath, ...args];
+
 const ensureReviewableWorkingTree = Effect.fn(
   "GitService.ensureReviewableWorkingTree",
-)(function* (runner: CommandRunner.Service) {
+)(function* (
+  runner: CommandRunner.Service,
+  candidatePath: string | undefined,
+) {
   const operation = "detect git repository";
 
   // The raw result distinguishes an absent repository from other failures and
@@ -84,15 +103,24 @@ const ensureReviewableWorkingTree = Effect.fn(
   const workingTreeDetection = yield* executeGit(
     runner,
     operation,
-    ["rev-parse", "--is-inside-work-tree"],
+    inRepository(candidatePath, ["rev-parse", "--is-inside-work-tree"]),
     gitMetadataMaxOutputBytes,
   );
 
   if (workingTreeDetection.exitCode !== 0) {
+    const normalizedStderr = workingTreeDetection.stderr.toLowerCase();
     if (
-      !workingTreeDetection.stderr.toLowerCase().includes(
-        "not a git repository",
-      )
+      candidatePath !== undefined &&
+      normalizedStderr.includes("cannot change to") &&
+      normalizedStderr.includes("no such file or directory")
+    ) {
+      return yield* new GitRepositoryPathNotFoundError({
+        path: candidatePath,
+      });
+    }
+
+    if (
+      !normalizedStderr.includes("not a git repository")
     ) {
       return yield* makeGitCommandError(operation, workingTreeDetection);
     }
@@ -121,13 +149,38 @@ const ensureReviewableWorkingTree = Effect.fn(
 
 const resolveRepositoryRoot = (
   runner: CommandRunner.Service,
+  candidatePath: string | undefined,
 ): Effect.Effect<string, GitError> =>
-  requireGitSuccess(runner, "resolve repository root", [
-    "rev-parse",
-    "--show-toplevel",
-  ]).pipe(
-    Effect.map((output) => output.replace(/\r?\n$/, "")),
+  requireGitSuccess(
+    runner,
+    "resolve repository root",
+    inRepository(candidatePath, ["rev-parse", "--show-toplevel"]),
+  ).pipe(
+    Effect.flatMap((output) => {
+      const root = output.replace(/\r?\n$/, "");
+
+      return root.startsWith("/")
+        ? Effect.succeed(root)
+        : Effect.fail(
+          new GitInvalidOutputError({
+            operation: "resolve repository root",
+            outputBytes: Buffer.byteLength(output),
+          }),
+        );
+    }),
   );
+
+const resolveRepository = Effect.fn("GitService.resolveRepository")(
+  function* (
+    runner: CommandRunner.Service,
+    candidatePath: string | undefined,
+  ): Effect.fn.Return<RepositoryContext, GitError> {
+    yield* ensureReviewableWorkingTree(runner, candidatePath);
+    const root = yield* resolveRepositoryRoot(runner, candidatePath);
+
+    return { root };
+  },
+);
 
 type TrackedChangeMode = "staged" | "unstaged";
 
@@ -304,10 +357,10 @@ const collectWorkingTreeDiff = Effect.fn(
 
 const readDiff = Effect.fn("GitService.readDiff")(function* (
   runner: CommandRunner.Service,
+  repository: RepositoryContext,
   scope: ReviewScope,
 ): Effect.fn.Return<GitDiff, GitError> {
-  yield* ensureReviewableWorkingTree(runner);
-  const repositoryRoot = yield* resolveRepositoryRoot(runner);
+  const repositoryRoot = repository.root;
   const stagedChanges = yield* listTrackedChanges(
     runner,
     repositoryRoot,
@@ -333,7 +386,9 @@ export const make = Effect.gen(function* () {
   const runner = yield* CommandRunner.CommandRunner;
 
   return GitService.of({
-    readDiff: (scope) => readDiff(runner, scope),
+    resolveRepository: (candidatePath) =>
+      resolveRepository(runner, candidatePath),
+    readDiff: (repository, scope) => readDiff(runner, repository, scope),
   });
 });
 

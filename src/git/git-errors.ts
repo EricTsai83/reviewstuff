@@ -12,6 +12,12 @@ export class GitNotRepositoryError extends Data.TaggedError(
   readonly stderrLength: number;
 }> {}
 
+export class GitRepositoryPathNotFoundError extends Data.TaggedError(
+  "GitRepositoryPathNotFoundError",
+)<{
+  readonly path: string;
+}> {}
+
 export class GitWorkingTreeUnavailableError extends Data.TaggedError(
   "GitWorkingTreeUnavailableError",
 )<{
@@ -93,6 +99,7 @@ export class GitUnmergedPathsError extends Data.TaggedError(
 
 export type GitError =
   | GitNotRepositoryError
+  | GitRepositoryPathNotFoundError
   | GitWorkingTreeUnavailableError
   | GitCommandError
   | GitExecutionError

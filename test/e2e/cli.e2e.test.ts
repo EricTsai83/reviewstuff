@@ -12,6 +12,11 @@ const binaryPath = Effect.gen(function* () {
 
   return path.join(process.cwd(), "dist", "reviewstuff");
 }).pipe(Effect.provide(BunServices.layer), Effect.runSync);
+const sourceCliPath = Effect.gen(function* () {
+  const path = yield* Path.Path;
+
+  return path.join(process.cwd(), "src", "cli.ts");
+}).pipe(Effect.provide(BunServices.layer), Effect.runSync);
 
 interface CliResult {
   exitCode: number | null;
@@ -39,12 +44,13 @@ function formatFailure(args: ReadonlyArray<string>, result: CliResult): string {
   ].join("\n");
 }
 
-const runCliProcess = (
+const runProcess = (
+  program: string,
   args: ReadonlyArray<string>,
   options: { cwd?: string } = {},
 ): Promise<CliResult> =>
   Effect.gen(function* () {
-    const process = yield* ChildProcess.make(binaryPath, args, {
+    const process = yield* ChildProcess.make(program, args, {
       ...(options.cwd === undefined ? {} : { cwd: options.cwd }),
       stdout: "pipe",
       stderr: "pipe",
@@ -65,6 +71,17 @@ const runCliProcess = (
       stderr,
     };
   }).pipe(Effect.scoped, Effect.provide(BunServices.layer), Effect.runPromise);
+
+const runCliProcess = (
+  args: ReadonlyArray<string>,
+  options: { cwd?: string } = {},
+): Promise<CliResult> => runProcess(binaryPath, args, options);
+
+const runSourceCliProcess = (
+  args: ReadonlyArray<string>,
+  options: { cwd?: string } = {},
+): Promise<CliResult> =>
+  runProcess(process.execPath, [sourceCliPath, ...args], options);
 
 const runCli = (
   args: ReadonlyArray<string>,
@@ -230,17 +247,17 @@ describe("reviewstuff binary", () => {
   test("review accepts config presets and CLI selection overrides", async () => {
     const cwd = await makeRepository();
     await Bun.write(
-      `${cwd}/reviewstuff.config.json`,
-      JSON.stringify({
-        review: {
-          preset: "quick",
-          engine: "configured-engine",
-          provider: "configured-provider",
-          model: "configured-model",
-          timeoutMs: 10_000,
-          concurrency: 1,
-        },
-      }),
+      `${cwd}/.reviewstuff.yaml`,
+      [
+        "review:",
+        "  preset: quick",
+        "  engine: configured-engine",
+        "  provider: configured-provider",
+        "  model: configured-model",
+        "  timeoutMs: 10000",
+        "  concurrency: 1",
+        "",
+      ].join("\n"),
     );
 
     const report = JSON.parse(
@@ -272,21 +289,18 @@ describe("reviewstuff binary", () => {
     const cwd = await makeRepository();
     const rejectedValue = "sk-secret-value";
     await Bun.write(
-      `${cwd}/reviewstuff.config.json`,
-      JSON.stringify({
-        review: { apiKey: rejectedValue },
-      }),
+      `${cwd}/.reviewstuff.yaml`,
+      `review:\n  preset: ${rejectedValue}\n`,
     );
 
     const result = await runCliExpectingFailure(["review"], { cwd });
 
     expect(result.exitCode).toBe(1);
     expect(result.stdout).toBe("");
-    expect(result.stderr).toContain(
-      "Invalid config file reviewstuff.config.json",
-    );
+    expect(result.stderr).toContain("Invalid config file ");
+    expect(result.stderr).toContain(".reviewstuff.yaml at review");
     expect(result.stderr).not.toContain(rejectedValue);
-    expect(result.stderr).not.toContain("ConfigFileDecodeError");
+    expect(result.stderr).not.toContain("ConfigFileSchemaError");
     expect(result.stderr).not.toContain("at runReview");
   });
 
@@ -559,5 +573,216 @@ describe("reviewstuff binary", () => {
       "large-staged.txt",
       "large-unstaged.txt",
     ]);
+  });
+});
+
+describe("repository selection", () => {
+  test("nested cwd resolves root config and root-relative diff paths", async () => {
+    const repository = await makeRepository();
+    const nested = `${repository}/nested/deeper`;
+    await FileSystem.FileSystem.pipe(
+      Effect.flatMap((fs) => fs.makeDirectory(nested, { recursive: true })),
+      Effect.provide(BunServices.layer),
+      Effect.runPromise,
+    );
+    await Bun.write(
+      `${repository}/.reviewstuff.yaml`,
+      [
+        "review:",
+        "  requestBudget:",
+        "    maxTokens: 100",
+        "    fixedRequestOverheadTokens: 0",
+        "    outputReserveTokens: 50",
+        "",
+      ].join("\n"),
+    );
+    await Bun.write(
+      `${repository}/root-change.ts`,
+      "// REVIEWSTUFF_FAKE_FINDING root\n",
+    );
+
+    const result = await runSourceCliProcess(["review", "--json"], {
+      cwd: nested,
+    });
+    const report = JSON.parse(result.stdout) as {
+      budget: { maxTokens: number };
+      coverage: { files: ReadonlyArray<{ path: string }> };
+    };
+
+    expect(result.exitCode).toBe(0);
+    expect(report.budget.maxTokens).toBe(100);
+    expect(report.coverage.files.map((file) => file.path)).toEqual([
+      ".reviewstuff.yaml",
+      "root-change.ts",
+    ]);
+  });
+
+  test("--dir uses config and diff from the same selected repository", async () => {
+    const currentRepository = await makeRepository();
+    const selectedRepository = await makeRepository();
+    await Bun.write(
+      `${currentRepository}/.reviewstuff.yaml`,
+      "review:\n  engine: wrong-repository\n",
+    );
+    await Bun.write(
+      `${selectedRepository}/selected.ts`,
+      "// REVIEWSTUFF_FAKE_FINDING selected\n",
+    );
+
+    const result = await runSourceCliProcess(
+      ["review", "--dir", selectedRepository, "--json"],
+      { cwd: currentRepository },
+    );
+    const report = JSON.parse(result.stdout) as {
+      findings: ReadonlyArray<{ file: string }>;
+    };
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stderr).toBe("");
+    expect(report.findings.map((finding) => finding.file)).toEqual([
+      "selected.ts",
+    ]);
+  });
+
+  test("invalid repository-root YAML fails closed without exposing values", async () => {
+    const repository = await makeRepository();
+    const rejectedValue = "sk-secret-parser-value";
+    await Bun.write(
+      `${repository}/.reviewstuff.yaml`,
+      `review: [${rejectedValue}\n`,
+    );
+
+    const result = await runSourceCliProcess(["review"], { cwd: repository });
+
+    expect(result.exitCode).toBe(1);
+    expect(result.stdout).toBe("");
+    expect(result.stderr).toContain("Invalid YAML config file ");
+    expect(result.stderr).toContain(".reviewstuff.yaml at line");
+    expect(result.stderr).not.toContain(rejectedValue);
+    expect(result.stderr).not.toContain("ConfigFileParseError");
+    expect(result.stderr).not.toContain("at runReview");
+  });
+
+  test("invalid typed config does not expose rejected literals", async () => {
+    const repository = await makeRepository();
+    const rejectedValue = "sk-secret-preset-value";
+    await Bun.write(
+      `${repository}/.reviewstuff.yaml`,
+      `review:\n  preset: ${rejectedValue}\n`,
+    );
+
+    const result = await runSourceCliProcess(["review"], { cwd: repository });
+
+    expect(result.exitCode).toBe(1);
+    expect(result.stdout).toBe("");
+    expect(result.stderr).toContain(".reviewstuff.yaml at review.preset");
+    expect(result.stderr).toContain("Expected quick or standard.");
+    expect(result.stderr).not.toContain(rejectedValue);
+    expect(result.stderr).not.toContain("ConfigFileSchemaError");
+  });
+
+  test("legacy config filenames are ignored", async () => {
+    const repository = await makeRepository();
+    await Bun.write(
+      `${repository}/reviewstuff.config.json`,
+      JSON.stringify({ review: { engine: "wrong-legacy-repository" } }),
+    );
+    await Bun.write(
+      `${repository}/.reviewstuff.yml`,
+      "review:\n  engine: wrong-yml-alias\n",
+    );
+
+    const result = await runSourceCliProcess(["review", "--json"], {
+      cwd: repository,
+    });
+    const report = JSON.parse(result.stdout) as {
+      budget: { maxTokens: number };
+      coverage: { files: ReadonlyArray<{ path: string }> };
+    };
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stderr).toBe("");
+    expect(report.budget.maxTokens).toBe(128_000);
+    expect(report.coverage.files.map((file) => file.path)).toEqual([
+      ".reviewstuff.yml",
+      "reviewstuff.config.json",
+    ]);
+  });
+
+  test("--dir canonicalizes a symlinked nested repository path", async () => {
+    const repository = await makeRepository();
+    const nested = `${repository}/nested`;
+    const linksDirectory = await FileSystem.FileSystem.pipe(
+      Effect.flatMap((fs) =>
+        fs.makeTempDirectory({ prefix: "reviewstuff-links-" })
+      ),
+      Effect.provide(BunServices.layer),
+      Effect.runPromise,
+    );
+    const repositoryLink = `${linksDirectory}/repository`;
+    await FileSystem.FileSystem.pipe(
+      Effect.flatMap((fs) =>
+        fs.makeDirectory(nested).pipe(
+          Effect.andThen(fs.symlink(repository, repositoryLink)),
+        )
+      ),
+      Effect.provide(BunServices.layer),
+      Effect.runPromise,
+    );
+    await Bun.write(
+      `${repository}/symlinked.ts`,
+      "// REVIEWSTUFF_FAKE_FINDING symlinked\n",
+    );
+
+    const result = await runSourceCliProcess([
+      "review",
+      "--dir",
+      `${repositoryLink}/nested`,
+      "--json",
+    ]);
+    const report = JSON.parse(result.stdout) as {
+      findings: ReadonlyArray<{ file: string }>;
+    };
+
+    expect(result.exitCode).toBe(0);
+    expect(report.findings.map((finding) => finding.file)).toEqual([
+      "symlinked.ts",
+    ]);
+  });
+
+  test("--dir rejects non-repositories, missing paths, and bare repositories", async () => {
+    const nonRepository = await FileSystem.FileSystem.pipe(
+      Effect.flatMap((fs) =>
+        fs.makeTempDirectory({ prefix: "reviewstuff-non-repo-" })
+      ),
+      Effect.provide(BunServices.layer),
+      Effect.runPromise,
+    );
+    const missingRepository = `${nonRepository}/missing`;
+    const bareRepository = await FileSystem.FileSystem.pipe(
+      Effect.flatMap((fs) =>
+        fs.makeTempDirectory({ prefix: "reviewstuff-bare-" })
+      ),
+      Effect.provide(BunServices.layer),
+      Effect.runPromise,
+    );
+    await runGit(bareRepository, ["init", "--bare", "--quiet"]);
+
+    const [nonRepositoryResult, missingResult, bareResult] = await Promise.all([
+      runSourceCliProcess(["review", "--dir", nonRepository]),
+      runSourceCliProcess(["review", "--dir", missingRepository]),
+      runSourceCliProcess(["review", "--dir", bareRepository]),
+    ]);
+
+    expect(nonRepositoryResult.exitCode).toBe(1);
+    expect(nonRepositoryResult.stderr).toContain("Not a git repository");
+    expect(missingResult.exitCode).toBe(1);
+    expect(missingResult.stderr).toContain(
+      `Repository path does not exist: ${missingRepository}.`,
+    );
+    expect(bareResult.exitCode).toBe(1);
+    expect(bareResult.stderr).toContain(
+      "The selected repository is not a Git working tree.",
+    );
   });
 });

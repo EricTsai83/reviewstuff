@@ -1,8 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import { renderReviewError } from "../../src/commands/review-error-renderer";
 import {
-  ConfigFileDecodeError,
+  ConfigFileParseError,
   ConfigFileReadError,
+  ConfigFileSchemaError,
 } from "../../src/config/config-service";
 import { ReviewEngineFailure } from "../../src/engines/review-engine";
 import {
@@ -14,6 +15,7 @@ import {
   GitExecutionError,
   GitInvalidOutputError,
   GitNotRepositoryError,
+  GitRepositoryPathNotFoundError,
   GitUnmergedPathsError,
   GitWorkingTreeUnavailableError,
 } from "../../src/git/git-service";
@@ -26,17 +28,29 @@ describe("renderReviewError", () => {
   test.each([
     [
       new ConfigFileReadError({
-        path: "reviewstuff.config.json",
+        path: "/repo/.reviewstuff.yaml",
         cause: undefined,
       }),
-      "Unable to read config file reviewstuff.config.json.",
+      "Unable to read config file /repo/.reviewstuff.yaml.",
     ],
     [
-      new ConfigFileDecodeError({
-        path: "reviewstuff.config.json",
+      new ConfigFileParseError({
+        path: "/repo/.reviewstuff.yaml",
+        failure: "duplicate-key",
+        line: 3,
+        column: 3,
         cause: undefined,
       }),
-      "Invalid config file reviewstuff.config.json: Configuration does not match the supported schema.",
+      "Invalid YAML config file /repo/.reviewstuff.yaml at line 3, column 3: Mapping keys must be unique.",
+    ],
+    [
+      new ConfigFileSchemaError({
+        path: "/repo/.reviewstuff.yaml",
+        fieldPath: ["review", "timeoutMs"],
+        constraint: "The value does not satisfy the expected constraint.",
+        cause: undefined,
+      }),
+      "Invalid config file /repo/.reviewstuff.yaml at review.timeoutMs: The value does not satisfy the expected constraint.",
     ],
     [
       new ReviewSelectionUnsupportedError({
@@ -50,17 +64,20 @@ describe("renderReviewError", () => {
     expect(renderReviewError(error)).toBe(message);
   });
 
-  test("preserves invalid config causes without rendering them", () => {
+  test("preserves invalid config causes without rendering values", () => {
     const cause = new Error("rejected-sensitive-value");
-    const error = new ConfigFileDecodeError({
-      path: "reviewstuff.config.json",
+    const error = new ConfigFileSchemaError({
+      path: "/repo/.reviewstuff.yaml",
+      fieldPath: ["review"],
+      constraint: "The object contains an unsupported field.",
       cause,
     });
 
     expect(error.cause).toBe(cause);
     expect(renderReviewError(error)).toBe(
-      "Invalid config file reviewstuff.config.json: Configuration does not match the supported schema.",
+      "Invalid config file /repo/.reviewstuff.yaml at review: The object contains an unsupported field.",
     );
+    expect(renderReviewError(error)).not.toContain("rejected-sensitive-value");
   });
 
   test("renders review timeout failures", () => {
@@ -125,11 +142,17 @@ describe("renderReviewError", () => {
       "Not a git repository (or any parent directory); detection exited with code 128.",
     ],
     [
+      new GitRepositoryPathNotFoundError({
+        path: "/missing/repo",
+      }),
+      "Repository path does not exist: /missing/repo.",
+    ],
+    [
       new GitWorkingTreeUnavailableError({
         stdoutLength: 6,
         stderrLength: 0,
       }),
-      "The current directory is not inside a Git working tree.",
+      "The selected repository is not a Git working tree.",
     ],
     [
       new GitCommandTimeoutError({

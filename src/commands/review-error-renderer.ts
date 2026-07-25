@@ -54,12 +54,53 @@ function renderGitExecutionFailure(error: GitExecutionError): string {
   }
 }
 
+type ConfigFileParseFailure = Extract<
+  RunReviewError,
+  { readonly _tag: "ConfigFileParseError" }
+>["failure"];
+
+const configParseFailureMessage = (
+  failure: ConfigFileParseFailure,
+): string => {
+  switch (failure) {
+    case "alias":
+      return "Aliases are not supported.";
+    case "anchor":
+      return "Anchors are not supported.";
+    case "custom-tag":
+      return "Custom tags are not supported.";
+    case "duplicate-key":
+      return "Mapping keys must be unique.";
+    case "merge-key":
+      return "Merge keys are not supported.";
+    case "multiple-documents":
+      return "Exactly one YAML document is required.";
+    case "non-string-key":
+      return "Mapping keys must be strings.";
+    case "syntax":
+      return "The YAML syntax is invalid.";
+    case "unsupported-version":
+      return "Only YAML 1.2 is supported.";
+    case "unsupported-value":
+      return "Only JSON-compatible YAML values are supported.";
+    case "warning":
+      return "The YAML parser could not interpret the file safely.";
+  }
+};
+
 export const renderReviewError = (error: RunReviewError): string =>
   Match.valueTags(error, {
     ConfigFileReadError: (configError) =>
       `Unable to read config file ${escapeTerminalText(configError.path)}.`,
-    ConfigFileDecodeError: (configError) =>
-      `Invalid config file ${escapeTerminalText(configError.path)}: Configuration does not match the supported schema.`,
+    ConfigFileParseError: (configError) =>
+      `Invalid YAML config file ${escapeTerminalText(configError.path)} at line ${configError.line}, column ${configError.column}: ${configParseFailureMessage(configError.failure)}`,
+    ConfigFileSchemaError: (configError) => {
+      const fieldPath = configError.fieldPath.length === 0
+        ? "<root>"
+        : configError.fieldPath.join(".");
+
+      return `Invalid config file ${escapeTerminalText(configError.path)} at ${fieldPath}: ${configError.constraint}`;
+    },
     ReviewSelectionUnsupportedError: (selectionError) =>
       `Unsupported review selection: engine=${escapeTerminalText(selectionError.engine)}, provider=${escapeTerminalText(selectionError.provider)}, model=${escapeTerminalText(selectionError.model)}. This build supports engine=fake, provider=fake, model=fake-reviewer-v1.`,
     ReviewTimeoutError: (timeoutError) =>
@@ -68,8 +109,10 @@ export const renderReviewError = (error: RunReviewError): string =>
       `Review engine failed: ${escapeTerminalText(engineError.message)}`,
     GitNotRepositoryError: (repositoryError) =>
       `Not a git repository (or any parent directory); detection exited with code ${repositoryError.exitCode}.`,
+    GitRepositoryPathNotFoundError: (repositoryError) =>
+      `Repository path does not exist: ${escapeTerminalText(repositoryError.path)}.`,
     GitWorkingTreeUnavailableError: () =>
-      "The current directory is not inside a Git working tree.",
+      "The selected repository is not a Git working tree.",
     GitCommandError: renderGitCommandFailure,
     GitCommandTimeoutError: (timeoutError) =>
       `Git ${timeoutError.operation} timed out after ${Duration.format(Duration.millis(timeoutError.timeoutMilliseconds))}.`,
