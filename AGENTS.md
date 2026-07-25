@@ -5,7 +5,6 @@
   
 ## Commands
 - Don't run dev server commands (e.g., `bun run dev`) - assume it's already running.
-- Don't run build commands unless specifically told to.
 - Focus on checking commands like `bun run typecheck`, `bun run lint`, etc.
 
 ## Package Managers
