@@ -1,0 +1,1427 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>reviewstuff CLI 現行實作參考</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #17211d;
+      --muted: #5c6a63;
+      --paper: #fbfcf8;
+      --surface: #f3f6ef;
+      --line: #d7ded5;
+      --accent: #176b4b;
+      --accent-soft: #e5f2eb;
+      --warn: #8a4b08;
+      --warn-soft: #fff1dc;
+      --risk: #992f36;
+      --risk-soft: #fdecef;
+      --unknown: #5d4a78;
+      --unknown-soft: #f1ebf8;
+      --code: #eef2ed;
+      --shadow: 0 18px 45px rgb(31 54 43 / 8%);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      margin: 0;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 90% 3%, rgb(23 107 75 / 9%), transparent 28rem),
+        var(--paper);
+      font-family:
+        Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+        "Segoe UI", sans-serif;
+      font-size: 16px;
+      line-height: 1.72;
+    }
+
+    a {
+      color: var(--accent);
+      text-underline-offset: 0.18em;
+    }
+
+    a:hover {
+      text-decoration-thickness: 2px;
+    }
+
+    a:focus-visible,
+    summary:focus-visible {
+      outline: 3px solid rgb(23 107 75 / 35%);
+      outline-offset: 3px;
+      border-radius: 0.2rem;
+    }
+
+    code {
+      padding: 0.08em 0.32em;
+      border-radius: 0.28rem;
+      background: var(--code);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.88em;
+      overflow-wrap: anywhere;
+    }
+
+    header.hero {
+      padding: 4.5rem max(1.25rem, calc((100vw - 74rem) / 2)) 3.2rem;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .eyebrow {
+      margin: 0 0 0.7rem;
+      color: var(--accent);
+      font-size: 0.78rem;
+      font-weight: 760;
+      letter-spacing: 0.13em;
+      text-transform: uppercase;
+    }
+
+    h1,
+    h2,
+    h3,
+    h4 {
+      margin-top: 0;
+      line-height: 1.22;
+      letter-spacing: -0.025em;
+    }
+
+    h1 {
+      max-width: 18ch;
+      margin-bottom: 1rem;
+      font-size: clamp(2.35rem, 6vw, 4.6rem);
+      font-weight: 780;
+    }
+
+    h2 {
+      margin-bottom: 1rem;
+      font-size: clamp(1.65rem, 3vw, 2.3rem);
+    }
+
+    h3 {
+      margin-top: 2rem;
+      margin-bottom: 0.7rem;
+      font-size: 1.28rem;
+    }
+
+    h4 {
+      margin-top: 1.5rem;
+      margin-bottom: 0.55rem;
+      font-size: 1rem;
+    }
+
+    p,
+    ul,
+    ol {
+      max-width: 72ch;
+    }
+
+    .lede {
+      max-width: 66ch;
+      margin-bottom: 1.5rem;
+      color: #34433c;
+      font-size: clamp(1.07rem, 2vw, 1.28rem);
+    }
+
+    .meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.55rem;
+      margin: 1.5rem 0 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .meta li,
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      width: fit-content;
+      min-height: 1.75rem;
+      padding: 0.18rem 0.62rem;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: rgb(255 255 255 / 70%);
+      font-size: 0.78rem;
+      font-weight: 700;
+      line-height: 1.25;
+    }
+
+    .verified {
+      border-color: #9dcab3;
+      color: #105c3f;
+      background: var(--accent-soft);
+    }
+
+    .supported {
+      border-color: #e2bd83;
+      color: #744006;
+      background: var(--warn-soft);
+    }
+
+    .inferred,
+    .unknown {
+      border-color: #c8b9dc;
+      color: var(--unknown);
+      background: var(--unknown-soft);
+    }
+
+    .high {
+      border-color: #e5a6ac;
+      color: var(--risk);
+      background: var(--risk-soft);
+    }
+
+    .medium {
+      border-color: #e2bd83;
+      color: var(--warn);
+      background: var(--warn-soft);
+    }
+
+    .low {
+      border-color: #b9c8c0;
+      color: #415149;
+      background: #eff3f0;
+    }
+
+    .shell {
+      display: grid;
+      grid-template-columns: minmax(13rem, 17rem) minmax(0, 1fr);
+      gap: clamp(2rem, 5vw, 5rem);
+      width: min(74rem, calc(100% - 2.5rem));
+      margin: 0 auto;
+      padding: 2.5rem 0 5rem;
+    }
+
+    nav.toc {
+      position: sticky;
+      top: 1rem;
+      align-self: start;
+      padding: 1rem;
+      border: 1px solid var(--line);
+      border-radius: 0.8rem;
+      background: rgb(251 252 248 / 94%);
+      box-shadow: var(--shadow);
+    }
+
+    nav.toc h2 {
+      margin: 0 0 0.7rem;
+      color: var(--muted);
+      font-size: 0.78rem;
+      letter-spacing: 0.11em;
+      text-transform: uppercase;
+    }
+
+    nav.toc ol {
+      margin: 0;
+      padding-left: 1.25rem;
+      font-size: 0.88rem;
+    }
+
+    nav.toc li + li {
+      margin-top: 0.28rem;
+    }
+
+    main {
+      min-width: 0;
+    }
+
+    main > section {
+      padding: 1.1rem 0 3.25rem;
+      border-bottom: 1px solid var(--line);
+      scroll-margin-top: 1rem;
+    }
+
+    main > section:last-child {
+      border-bottom: 0;
+    }
+
+    .callout {
+      max-width: 72ch;
+      margin: 1.25rem 0;
+      padding: 1rem 1.1rem;
+      border-left: 4px solid var(--accent);
+      border-radius: 0.3rem 0.65rem 0.65rem 0.3rem;
+      background: var(--surface);
+    }
+
+    .callout.warning {
+      border-left-color: var(--warn);
+      background: var(--warn-soft);
+    }
+
+    .callout strong {
+      display: block;
+      margin-bottom: 0.2rem;
+    }
+
+    .table-scroll {
+      max-width: 100%;
+      margin: 1.1rem 0 1.6rem;
+      overflow-x: auto;
+      border: 1px solid var(--line);
+      border-radius: 0.65rem;
+      background: white;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.9rem;
+    }
+
+    caption {
+      padding: 0.8rem 0.9rem;
+      color: var(--muted);
+      text-align: left;
+      font-weight: 700;
+    }
+
+    th,
+    td {
+      min-width: 8rem;
+      padding: 0.7rem 0.8rem;
+      border-top: 1px solid var(--line);
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th {
+      color: #35463e;
+      background: var(--surface);
+      font-size: 0.78rem;
+      letter-spacing: 0.025em;
+    }
+
+    td:first-child,
+    th:first-child {
+      min-width: 9.5rem;
+    }
+
+    .flow {
+      margin: 1.4rem 0;
+      padding: 1.2rem;
+      border: 1px solid var(--line);
+      border-radius: 0.8rem;
+      background: white;
+      box-shadow: var(--shadow);
+    }
+
+    .flow ol {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(8.5rem, 1fr));
+      gap: 1.6rem;
+      max-width: none;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .flow li {
+      position: relative;
+      padding: 0.8rem;
+      border: 1px solid var(--line);
+      border-radius: 0.55rem;
+      background: var(--surface);
+      font-size: 0.86rem;
+    }
+
+    .flow li:not(:last-child)::after {
+      position: absolute;
+      top: 50%;
+      right: -1.25rem;
+      color: var(--accent);
+      content: "→";
+      font-size: 1.25rem;
+      transform: translateY(-55%);
+    }
+
+    .flow strong {
+      display: block;
+      margin-bottom: 0.2rem;
+    }
+
+    .flow figcaption {
+      margin-top: 0.8rem;
+      color: var(--muted);
+      font-size: 0.82rem;
+    }
+
+    .scenario {
+      margin-top: 2rem;
+      padding: 1.35rem;
+      border: 1px solid var(--line);
+      border-radius: 0.8rem;
+      background: rgb(255 255 255 / 62%);
+      scroll-margin-top: 1rem;
+    }
+
+    .scenario > h3 {
+      margin-top: 0;
+    }
+
+    .facts {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 0.55rem 1.5rem;
+      max-width: 72ch;
+      margin: 1rem 0;
+    }
+
+    .facts div {
+      padding: 0.55rem 0;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .facts dt {
+      color: var(--muted);
+      font-size: 0.76rem;
+      font-weight: 760;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+
+    .facts dd {
+      margin: 0.12rem 0 0;
+    }
+
+    details {
+      max-width: 72ch;
+      margin: 1rem 0;
+      padding: 0.75rem 0.9rem;
+      border: 1px solid var(--line);
+      border-radius: 0.5rem;
+      background: var(--surface);
+    }
+
+    summary {
+      cursor: pointer;
+      color: #32443b;
+      font-weight: 700;
+    }
+
+    .source-list li + li {
+      margin-top: 0.32rem;
+    }
+
+    footer {
+      padding: 2rem max(1.25rem, calc((100vw - 74rem) / 2));
+      border-top: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 0.83rem;
+    }
+
+    @media (max-width: 900px) {
+      .shell {
+        grid-template-columns: 1fr;
+      }
+
+      nav.toc {
+        position: static;
+      }
+
+      .flow {
+        overflow-x: auto;
+      }
+
+      .flow ol {
+        min-width: 50rem;
+      }
+    }
+
+    @media (max-width: 520px) {
+      header.hero {
+        padding-top: 3rem;
+      }
+
+      .shell {
+        width: min(100% - 1.5rem, 74rem);
+        padding-top: 1.5rem;
+      }
+
+      h1 {
+        font-size: 2.35rem;
+      }
+
+      .facts {
+        grid-template-columns: 1fr;
+      }
+
+      .scenario {
+        padding: 1rem;
+      }
+
+      th,
+      td {
+        min-width: 9rem;
+        padding: 0.62rem;
+      }
+    }
+
+    @media print {
+      body {
+        background: white;
+        color: black;
+        font-size: 10pt;
+      }
+
+      header.hero,
+      footer {
+        padding-right: 0;
+        padding-left: 0;
+      }
+
+      .shell {
+        display: block;
+        width: 100%;
+        padding: 1rem 0;
+      }
+
+      nav.toc {
+        position: static;
+        margin-bottom: 1.5rem;
+        box-shadow: none;
+      }
+
+      main > section,
+      .scenario {
+        break-inside: avoid-page;
+      }
+
+      .table-scroll {
+        overflow: visible;
+      }
+
+      table {
+        font-size: 8pt;
+      }
+
+      .flow {
+        box-shadow: none;
+      }
+
+      .flow ol {
+        grid-template-columns: repeat(5, 1fr);
+        min-width: 0;
+        gap: 0.4rem;
+      }
+
+      .flow li:not(:last-child)::after {
+        display: none;
+      }
+
+      details {
+        display: block;
+      }
+
+      details > summary {
+        list-style: none;
+      }
+
+      details > :not(summary) {
+        display: block;
+      }
+
+      a {
+        color: black;
+        text-decoration: underline;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header class="hero">
+    <p class="eyebrow">Scenario-led implementation reference</p>
+    <h1>reviewstuff CLI 現行實作參考</h1>
+    <p class="lede">
+      這是一份從使用者目標向內追蹤的現況快照：reviewstuff 目前能從本機 Git
+      工作樹或 index 收集變更、在 request budget 內選取完整 hunks、交給確定性的 fake
+      reviewer，最後輸出 human-readable 或版本化 JSON 報告。
+    </p>
+    <aside class="callout warning">
+      <strong>最重要的邊界</strong>
+      目前沒有真正的 AI provider、網路傳輸、資料持久化或可用的環境診斷。
+      <code>doctor</code> 只會印出尚未實作；review engine 只辨識新增行中的
+      <code>REVIEWSTUFF_FAKE_FINDING</code> marker。這些是已驗證的產品限制，不是推測。
+    </aside>
+    <ul class="meta" aria-label="分析中繼資料">
+      <li>分析日期：2026-07-25</li>
+      <li>Revision：<code>0f5ec0b</code></li>
+      <li>深度：Scenario overview</li>
+      <li>Runtime：Bun + Effect</li>
+      <li class="verified">主要路徑：Verified</li>
+    </ul>
+  </header>
+
+  <div class="shell">
+    <nav class="toc" aria-label="本報告目錄">
+      <h2>目錄</h2>
+      <ol>
+        <li><a href="#purpose">使用者能完成什麼</a></li>
+        <li><a href="#actors">Actors</a></li>
+        <li><a href="#scenario-catalog">Scenario catalog</a></li>
+        <li><a href="#system-overview">User-to-system overview</a></li>
+        <li><a href="#architecture">支撐 scenarios 的架構</a></li>
+        <li><a href="#domain-data">Domain 與資料設計</a></li>
+        <li><a href="#cross-cutting">Cross-cutting behavior</a></li>
+        <li><a href="#detailed-scenarios">Detailed scenarios</a></li>
+        <li><a href="#findings">Findings 與風險</a></li>
+        <li><a href="#coverage">Coverage 與 unknowns</a></li>
+        <li><a href="#evidence">Evidence index</a></li>
+      </ol>
+    </nav>
+
+    <main>
+      <section id="purpose">
+        <h2>1. 使用者能完成什麼</h2>
+        <p>
+          目前的主要使用者是站在本機 Git repository 裡的開發者。CLI
+          提供兩個實際可觀察的 review scope：預設的 working-tree review
+          會檢視相對 <code>HEAD</code>（沒有首個 commit 時則相對 empty tree）的 tracked
+          淨變更，再合併 untracked files；<code>--staged</code> 則只檢視 index。
+          CLI 不修改 repository，也沒有 upload 或 session store。
+        </p>
+        <p>
+          Review pipeline 不是單純把整份 diff 塞進 engine。它先正規化 Git metadata
+          與完整 hunks，排除 binary，再按 path/source 排序，以 round-robin
+          方式逐輪選取每個檔案的一個完整 hunk，直到 request budget 用完。結果會明確記錄
+          reviewed、truncated、skipped 與 budget 數字。
+        </p>
+        <aside class="callout">
+          <strong>信心邊界</strong>
+          本報告把 runtime wiring、source implementation、schemas 與 executable tests
+          視為現況證據。<code>plans/</code> 中尚未完成的 OpenAI、privacy、persistence、
+          doctor 與 release 工作只代表設計意圖，沒有被列成現行能力。
+        </aside>
+      </section>
+
+      <section id="actors">
+        <h2>2. Actors</h2>
+        <div class="table-scroll">
+          <table>
+            <caption>目前可由 runtime 證明的 actors 與限制</caption>
+            <thead>
+              <tr>
+                <th scope="col">Actor</th>
+                <th scope="col">Goal</th>
+                <th scope="col">Capabilities</th>
+                <th scope="col">Restrictions</th>
+                <th scope="col">Confidence</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>本機開發者</td>
+                <td>在送出變更前檢查 working tree 或 staged changes</td>
+                <td>選 scope、preset、engine/provider/model 字串、timeout、concurrency 與輸出格式</td>
+                <td>實際只能執行 fake/fake/fake-reviewer-v1；無 path filter、branch 或 commit range</td>
+                <td><span class="badge verified">Verified</span></td>
+              </tr>
+              <tr>
+                <td>Script / CI caller</td>
+                <td>讀取穩定的 machine-readable review result</td>
+                <td>使用 <code>--json</code> 取得 <code>ReviewReportV4</code></td>
+                <td>finding 或 incomplete coverage 不會改變成功 exit code；exit-code contract 尚未完成</td>
+                <td><span class="badge supported">Supported</span></td>
+              </tr>
+              <tr>
+                <td>Repository configuration author</td>
+                <td>在 <code>reviewstuff.config.json</code> 設定 preset 與執行參數</td>
+                <td>設定 review preset、selection、timeout、concurrency 與 request budget</td>
+                <td>檔案從 process cwd 讀取，不會先解析 repository root；unknown keys 被拒絕</td>
+                <td><span class="badge verified">Verified</span></td>
+              </tr>
+              <tr>
+                <td>Operator / support</td>
+                <td>檢查本機環境</td>
+                <td>可以呼叫 <code>doctor</code></td>
+                <td>命令目前只回覆「not implemented yet」；沒有實際診斷</td>
+                <td><span class="badge verified">Verified limitation</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          沒有可達的 administrator role、webhook caller、queue consumer、scheduler
+          或 background worker。也沒有 authentication/authorization 邊界；信任邊界是本機
+          process、Git repository data 與未來可能接上的 review engine。
+        </p>
+      </section>
+
+      <section id="scenario-catalog">
+        <h2>3. Scenario catalog</h2>
+        <div class="table-scroll">
+          <table>
+            <caption>現行 CLI 的使用者目標與 implementation entries</caption>
+            <thead>
+              <tr>
+                <th scope="col">Scenario</th>
+                <th scope="col">Actor</th>
+                <th scope="col">Trigger</th>
+                <th scope="col">Successful outcome</th>
+                <th scope="col">Implementation entry</th>
+                <th scope="col">Confidence</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><a href="#scenario-discover">探索 CLI 與版本</a></td>
+                <td>開發者 / script</td>
+                <td><code>--help</code>、<code>--version</code></td>
+                <td>看到版本、usage、review 與 doctor subcommands</td>
+                <td><code>src/cli.ts:rootCommand</code></td>
+                <td><span class="badge verified">Verified</span></td>
+              </tr>
+              <tr>
+                <td><a href="#scenario-working-tree">Review working tree</a></td>
+                <td>開發者</td>
+                <td><code>reviewstuff review</code></td>
+                <td>取得 staged + unstaged 淨變更和 untracked files 的 report</td>
+                <td><code>reviewCommand → runReview → GitService.readDiff</code></td>
+                <td><span class="badge verified">Verified</span></td>
+              </tr>
+              <tr>
+                <td><a href="#scenario-staged">只 review index</a></td>
+                <td>開發者</td>
+                <td><code>reviewstuff review --staged</code></td>
+                <td>report 只涵蓋 staged changes</td>
+                <td><code>reviewCommand → stagedScope</code></td>
+                <td><span class="badge verified">Verified</span></td>
+              </tr>
+              <tr>
+                <td><a href="#scenario-configure">解析有效設定</a></td>
+                <td>開發者 / config author</td>
+                <td>config file 與 CLI flags</td>
+                <td>以 preset defaults → file → CLI 的 precedence 取得 resolved config</td>
+                <td><code>ConfigService.load</code></td>
+                <td><span class="badge verified">Verified</span></td>
+              </tr>
+              <tr>
+                <td><a href="#scenario-output">消費 review report</a></td>
+                <td>開發者 / script</td>
+                <td>預設 terminal 或 <code>--json</code></td>
+                <td>看到 findings、coverage、budget，或嚴格的 v4 JSON contract</td>
+                <td><code>report-renderer.ts</code></td>
+                <td><span class="badge verified">Verified</span></td>
+              </tr>
+              <tr>
+                <td><a href="#scenario-doctor">檢查環境</a></td>
+                <td>Operator</td>
+                <td><code>reviewstuff doctor</code></td>
+                <td>只得到未實作訊息</td>
+                <td><code>doctorCommand</code></td>
+                <td><span class="badge verified">Verified placeholder</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="system-overview">
+        <h2>4. User-to-system overview</h2>
+        <figure class="flow" aria-labelledby="runtime-flow-caption">
+          <ol>
+            <li><strong>CLI boundary</strong>Effect CLI 解析 command、flags 與 usage errors</li>
+            <li><strong>Application flow</strong><code>runReview</code> 解析 config 並協調服務</li>
+            <li><strong>Git boundary</strong>安全執行 Git、解析 paths、metadata 與 complete hunks</li>
+            <li><strong>Review policy</strong>按 budget 選 hunks，建立 normalized untrusted request</li>
+            <li><strong>Engine + output</strong>fake engine 產生 findings；renderer 輸出 terminal/JSON</li>
+          </ol>
+          <figcaption id="runtime-flow-caption">
+            單一 process 內的同步 request path；沒有 database、queue、網路 provider 或背景工作。
+          </figcaption>
+        </figure>
+        <p>
+          <a href="../../src/cli.ts#L14"><code>src/cli.ts:14–29</code></a>
+          是唯一 composition root：<code>GitService.layer</code> 取得
+          <code>CommandRunner.layer</code>，再合併 <code>ConfigService.layer</code> 與
+          <code>ReviewEngine.layer</code>，最後由 <code>BunServices.layer</code>
+          提供 filesystem 與 child-process runtime。command handlers 不自行建立 adapters。
+        </p>
+      </section>
+
+      <section id="architecture">
+        <h2>5. 支撐 scenarios 的架構</h2>
+        <div class="table-scroll">
+          <table>
+            <caption>Runtime units、責任與可達性</caption>
+            <thead>
+              <tr>
+                <th scope="col">Unit / boundary</th>
+                <th scope="col">Scenario responsibility</th>
+                <th scope="col">Runtime wiring</th>
+                <th scope="col">Owned state / side effect</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>src/cli.ts</code></td>
+                <td>建立 root command、註冊 subcommands、提供 production layers</td>
+                <td>唯一 startup entry；由 Bun runtime 執行</td>
+                <td>process lifecycle</td>
+              </tr>
+              <tr>
+                <td><code>commands/</code></td>
+                <td>定義 flags、選 scope、呼叫 use case、render 成功/錯誤並設 exit code</td>
+                <td><code>reviewCommand</code> 與 <code>doctorCommand</code> 都註冊於 root</td>
+                <td>stdout、stderr、<code>process.exitCode</code></td>
+              </tr>
+              <tr>
+                <td><code>use-cases/run-review.ts</code></td>
+                <td>設定 → diff → budget → request → engine → report 的 transaction-like orchestration</td>
+                <td>由 review command 直接呼叫</td>
+                <td>無持久狀態；持有單次執行資料</td>
+              </tr>
+              <tr>
+                <td><code>git/</code></td>
+                <td>repository 檢測、scope 收集、literal path safety、diff parsing、typed Git errors</td>
+                <td><code>GitService.layer</code> 被 <code>AppLive</code> 提供</td>
+                <td>只讀 Git subprocess；不寫 working tree/index</td>
+              </tr>
+              <tr>
+                <td><code>review/</code></td>
+                <td>純函式 budget selection 與 request normalization</td>
+                <td>由 <code>runReview</code> import；沒有獨立 runtime</td>
+                <td>純 in-memory value</td>
+              </tr>
+              <tr>
+                <td><code>engines/review-engine.ts</code></td>
+                <td>目前用 marker scanner 模擬 provider findings</td>
+                <td><code>ReviewEngine.layer</code> 固定接 fake implementation</td>
+                <td>無外部 side effect</td>
+              </tr>
+              <tr>
+                <td><code>config/</code></td>
+                <td>嚴格 decode cwd 中的 JSON，套用 precedence</td>
+                <td><code>ConfigService.layer</code> 取得 Bun filesystem</td>
+                <td>只讀一個 local file</td>
+              </tr>
+              <tr>
+                <td><code>platform/command-runner.ts</code></td>
+                <td>並行 drain stdout/stderr、timeout、combined output cap、cleanup</td>
+                <td>只由 Git adapter 使用</td>
+                <td>child processes</td>
+              </tr>
+              <tr>
+                <td><code>domain/</code> + <code>output/</code></td>
+                <td>finding/report/coverage schemas、migration utilities、rendering</td>
+                <td>純函式，從 use case 與 command 可達</td>
+                <td>versioned in-memory/serialized values</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <h3>Dependency direction</h3>
+        <p>
+          command 依賴 use case；use case 只看 semantic services 與 pure policy；Git adapter
+          再依賴低階 CommandRunner。這個方向不只寫在
+          <a href="../reference/reviewstuff-repository-structure.md"><code>docs/reference/reviewstuff-repository-structure.md</code></a>，
+          也由
+          <a href="../../test/architecture/module-boundaries.test.ts#L251"><code>test/architecture/module-boundaries.test.ts:251–349</code></a>
+          檢查 runtime import、top-level area registration 與 budget ownership。
+        </p>
+      </section>
+
+      <section id="domain-data">
+        <h2>6. Domain 與資料設計</h2>
+        <h3>中央概念</h3>
+        <div class="table-scroll">
+          <table>
+            <caption>主要 domain values 與 invariants</caption>
+            <thead>
+              <tr>
+                <th scope="col">Concept</th>
+                <th scope="col">Owner</th>
+                <th scope="col">Invariant / lifecycle</th>
+                <th scope="col">Used by</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>ReviewScope</code></td>
+                <td><code>domain/scope.ts</code></td>
+                <td>只有 <code>working-tree</code> 或 <code>staged</code></td>
+                <td>CLI selection、Git collection、request 與 report</td>
+              </tr>
+              <tr>
+                <td><code>GitDiff</code> / <code>GitFile</code></td>
+                <td><code>git/git-diff.ts</code></td>
+                <td>每個 file 是 text（完整 header/hunks）或 binary；保留 status/rename metadata</td>
+                <td>budget selection 與 coverage</td>
+              </tr>
+              <tr>
+                <td><code>ReviewSelectionV1</code></td>
+                <td><code>review/review-budget.ts</code></td>
+                <td>只選 complete hunks；每個 file 得到 reviewed/truncated/skipped；總額不可超 budget</td>
+                <td>engine request 與 report coverage</td>
+              </tr>
+              <tr>
+                <td><code>ReviewRequestV1</code></td>
+                <td><code>review/review-request.ts</code></td>
+                <td>repository data 標成 untrusted；只含 engine 所需資料，不含 timeout/concurrency</td>
+                <td><code>ReviewEngine.review</code></td>
+              </tr>
+              <tr>
+                <td><code>ReviewFindingV1</code></td>
+                <td><code>domain/finding.ts</code></td>
+                <td>non-empty identity/rule/message/file、positive line、固定 severity/category、confidence 0–1</td>
+                <td>engine output、report、terminal/JSON</td>
+              </tr>
+              <tr>
+                <td><code>ReviewReportV4</code></td>
+                <td><code>domain/report.ts</code></td>
+                <td>summary counts 必須等於 contents；coverage.complete 與 statuses 一致；file identity 不重複；budget arithmetic 一致</td>
+                <td>CLI current output</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          現行沒有 database schema、migration 或 aggregate persistence。<code>ReviewReportV2</code>
+          與 <code>V3</code> 到 <code>V4</code> 的 migrations 是 serialization compatibility
+          utilities；CLI 只產生 V4，也沒有 runtime path 讀取歷史 report。
+        </p>
+        <h3>Consistency boundary</h3>
+        <p>
+          一次 review 是 read-only、in-memory、best-effort 的單 process flow，不存在 database
+          transaction。Git metadata 和逐檔 patch 之間 repository 仍可能改變；實作會把消失的
+          changed file 映射成 <code>GitChangedFileUnavailableError</code> 並整次失敗。成功 report
+          是該次讀取的自我一致 schema value，但不是 repository 的 atomic snapshot。
+        </p>
+      </section>
+
+      <section id="cross-cutting">
+        <h2>7. Cross-cutting behavior</h2>
+        <div class="table-scroll">
+          <table>
+            <caption>會直接影響 scenarios 正確性或使用體驗的橫切行為</caption>
+            <thead>
+              <tr>
+                <th scope="col">Concern</th>
+                <th scope="col">Current behavior</th>
+                <th scope="col">Scenario effect</th>
+                <th scope="col">Confidence</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Authentication / authorization</td>
+                <td>沒有；只依賴 caller 的 local filesystem 與 Git process permissions</td>
+                <td>無 role 分流；permission/dubious ownership 轉成 typed Git guidance</td>
+                <td><span class="badge verified">Verified</span></td>
+              </tr>
+              <tr>
+                <td>Validation</td>
+                <td>Effect Schema 嚴格拒絕 config excess properties、invalid integers 與 report contradictions</td>
+                <td>invalid config 在 Git/engine 前停止，stderr 不印 rejected data 或 stack trace</td>
+                <td><span class="badge verified">Verified</span></td>
+              </tr>
+              <tr>
+                <td>Timeout / cleanup</td>
+                <td>每個 Git command 固定 10s；整段 Git + engine 使用 resolved review timeout；child 於 timeout/interruption/output cap 後 SIGKILL</td>
+                <td>caller 得到 typed timeout；可修正原因後安全重試</td>
+                <td><span class="badge verified">Verified</span></td>
+              </tr>
+              <tr>
+                <td>Output limits</td>
+                <td>metadata 與每個 patch command 的 stdout+stderr 有 byte cap；patch cap 為 4 MiB</td>
+                <td>超出 cap 會整次 review 失敗，不會降級成 per-file skipped coverage</td>
+                <td><span class="badge verified">Verified</span></td>
+              </tr>
+              <tr>
+                <td>Idempotency / retry</td>
+                <td>review path 不修改 repo、沒有 persistence 或 external call</td>
+                <td>repository 不變時重跑是安全且 deterministic；repository 變動時結果自然改變</td>
+                <td><span class="badge supported">Supported</span></td>
+              </tr>
+              <tr>
+                <td>Untrusted content</td>
+                <td>request 明確標記 repository data 為 untrusted；terminal text escape control characters</td>
+                <td>fake engine 不執行 repo instructions；terminal 降低 escape-sequence injection</td>
+                <td><span class="badge verified">Verified</span></td>
+              </tr>
+              <tr>
+                <td>Privacy</td>
+                <td>現況無網路 provider，因此沒有 source upload；也沒有 secret redaction</td>
+                <td>目前 data 留在 process；一旦接 cloud provider，privacy/redaction 必須先成為可達 policy</td>
+                <td><span class="badge verified">Verified now</span></td>
+              </tr>
+              <tr>
+                <td>Observability</td>
+                <td>只有 stdout/stderr；無 structured event stream、metrics、trace、audit 或 session store</td>
+                <td>失敗對使用者可讀，但跨 run 無法查詢或關聯</td>
+                <td><span class="badge verified">Verified</span></td>
+              </tr>
+              <tr>
+                <td>Testing</td>
+                <td>unit、architecture、temporary Git integration、compiled-binary e2e 與 HTML validator tests</td>
+                <td>主要 CLI path 有 executable corroboration；future plans 不算 coverage</td>
+                <td><span class="badge verified">Verified</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="detailed-scenarios">
+        <h2>8. Detailed scenarios</h2>
+
+        <article class="scenario" id="scenario-discover">
+          <h3>Scenario：開發者探索 CLI 與版本</h3>
+          <dl class="facts">
+            <div><dt>Actor</dt><dd>本機開發者或安裝驗證 script</dd></div>
+            <div><dt>Goal</dt><dd>確認 binary 版本與可用 commands</dd></div>
+            <div><dt>Trigger</dt><dd><code>reviewstuff --version</code> 或 <code>--help</code></dd></div>
+            <div><dt>Success</dt><dd>版本來自 package.json；help 列出 review 與 doctor</dd></div>
+          </dl>
+          <h4>User-visible flow</h4>
+          <ol>
+            <li>Caller 啟動 binary 並傳入 built-in flag。</li>
+            <li>Effect CLI 在 root command 層處理 flag，不需進入 review use case。</li>
+            <li>stdout 顯示版本或 usage；unknown subcommand 則 stderr 顯示 validation error、stdout 顯示 usage，exit 1。</li>
+          </ol>
+          <h4>Evidence and confidence</h4>
+          <p>
+            <span class="badge verified">Verified</span>
+            <a href="../../src/cli.ts#L21"><code>src/cli.ts:21–29 rootCommand</code></a>；
+            <a href="../../test/e2e/cli.e2e.test.ts#L157"><code>test/e2e/cli.e2e.test.ts:157–181</code></a>。
+          </p>
+        </article>
+
+        <article class="scenario" id="scenario-working-tree">
+          <h3>Scenario：開發者 review 整個 working tree</h3>
+          <dl class="facts">
+            <div><dt>Actor</dt><dd>本機開發者</dd></div>
+            <div><dt>Goal</dt><dd>查看尚未 commit 的 net changes 與 finding/coverage</dd></div>
+            <div><dt>Trigger</dt><dd><code>reviewstuff review</code></dd></div>
+            <div><dt>Preconditions</dt><dd>cwd 位於有 working tree 的 Git repository；config 可解碼；selection 是 fake</dd></div>
+            <div><dt>Success</dt><dd>terminal 或 V4 JSON report；無 changes 時明確顯示 no changes</dd></div>
+            <div><dt>Mutation</dt><dd>沒有 repository mutation；只產生 process output</dd></div>
+          </dl>
+          <h4>User-visible flow</h4>
+          <ol>
+            <li>開發者執行 review；可從 repository 的 nested directory 呼叫。</li>
+            <li>系統解析設定，確認目前 build 支援所選 engine/provider/model。</li>
+            <li>系統找 repository root，收集相對 <code>HEAD</code> 的 tracked net diff 及 untracked files；初始 repository 改用 empty tree。</li>
+            <li>binary files 進 coverage 但不送 engine；text hunks 按 budget 選取。</li>
+            <li>fake engine 只為新增行中的 marker 產生 deterministic findings，系統組裝並 render report。</li>
+          </ol>
+          <h4>System implementation</h4>
+          <div class="table-scroll">
+            <table>
+              <caption>Working-tree review 的 end-to-end hops</caption>
+              <thead>
+                <tr>
+                  <th scope="col">User step</th>
+                  <th scope="col">System behavior</th>
+                  <th scope="col">Domain / data effect</th>
+                  <th scope="col">Evidence</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>執行 <code>review</code></td>
+                  <td>flags decode，未給 <code>--staged</code> 時選 <code>workingTreeScope</code></td>
+                  <td>建立 <code>RunReviewInput</code></td>
+                  <td><a href="../../src/commands/review.ts#L84"><code>review.ts:84–113</code></a></td>
+                </tr>
+                <tr>
+                  <td>套用設定</td>
+                  <td>讀 cwd config，依 precedence resolve，再拒絕非 fake selection</td>
+                  <td><code>ResolvedReviewConfig</code></td>
+                  <td><a href="../../src/use-cases/run-review.ts#L178"><code>run-review.ts:178–184</code></a></td>
+                </tr>
+                <tr>
+                  <td>讀取變更</td>
+                  <td>檢測 work tree、root、conflicts；並行收 tracked 與 untracked patches</td>
+                  <td><code>GitDiff</code></td>
+                  <td><a href="../../src/git/git-service.ts#L254"><code>git-service.ts:254–330</code></a></td>
+                </tr>
+                <tr>
+                  <td>限制 request</td>
+                  <td>只取 text files，以 sorted round-robin 選 complete hunks</td>
+                  <td><code>ReviewSelectionV1</code> + coverage + estimate</td>
+                  <td><a href="../../src/review/review-budget.ts#L184"><code>review-budget.ts:184–330</code></a></td>
+                </tr>
+                <tr>
+                  <td>產生 findings</td>
+                  <td>normalized request 標成 untrusted；fake engine 掃 added lines</td>
+                  <td><code>ReviewFindingV1[]</code></td>
+                  <td><a href="../../src/engines/review-engine.ts#L56"><code>review-engine.ts:56–120</code></a></td>
+                </tr>
+                <tr>
+                  <td>看結果</td>
+                  <td>schema 驗證 summary/coverage/budget，再 render</td>
+                  <td><code>ReviewReportV4</code></td>
+                  <td><a href="../../src/use-cases/run-review.ts#L133"><code>run-review.ts:133–167</code></a></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <h4>Alternative and failure paths</h4>
+          <ul>
+            <li>無 changes：成功、terminal 顯示 <code>No changes to review.</code>，JSON 仍是完整 V4 report。</li>
+            <li>不是 repository、bare/no work tree、unmerged paths：失敗 exit 1，stderr 提供對應 guidance。</li>
+            <li>Git timeout、output cap、invalid output、changed file 在讀取中消失：整次失敗，不產生 partial report。</li>
+            <li>沒有任何 hunk 能放入 budget：engine 不被呼叫，仍成功產生 incomplete coverage report。</li>
+            <li>流程是 read-only；解決衝突、權限、lock 或 repository race 後可安全重試。</li>
+          </ul>
+          <h4>Dependencies</h4>
+          <p>
+            Bun filesystem、Effect child-process runtime、local <code>git</code> executable、
+            <code>reviewstuff.config.json</code>（optional）與 fake ReviewEngine。沒有 network、
+            database 或 queue。
+          </p>
+          <h4>Evidence and confidence</h4>
+          <p>
+            <span class="badge verified">Verified</span>
+            runtime chain 有 source wiring，且
+            <a href="../../test/e2e/cli.e2e.test.ts#L306"><code>test/e2e/cli.e2e.test.ts:306–347, 388–561</code></a>
+            以 temporary repositories 驗證 staged + unstaged + untracked、renames、literal paths、
+            budget 與 binary coverage。Git 細節另見
+            <a href="./reviewstuff-git-pipeline-implementation-reference.html">Git pipeline implementation reference</a>。
+          </p>
+        </article>
+
+        <article class="scenario" id="scenario-staged">
+          <h3>Scenario：開發者只 review index</h3>
+          <dl class="facts">
+            <div><dt>Actor</dt><dd>準備 commit 的開發者</dd></div>
+            <div><dt>Goal</dt><dd>確認 staged snapshot，不混入 unstaged/untracked work</dd></div>
+            <div><dt>Trigger</dt><dd><code>reviewstuff review --staged</code></dd></div>
+            <div><dt>Success</dt><dd>report.scope 是 <code>staged</code>，coverage 只含 index changes</dd></div>
+          </dl>
+          <h4>User-visible flow</h4>
+          <ol>
+            <li>CLI 將 boolean flag 映射成 <code>stagedScope</code>。</li>
+            <li>GitService 使用 <code>git diff --cached</code> 列檔並逐檔收 patch。</li>
+            <li>其餘 budget、request、engine 與 report pipeline 和 working-tree scenario 相同。</li>
+          </ol>
+          <h4>Decisions and rules</h4>
+          <div class="table-scroll">
+            <table>
+              <caption>Staged scope 的關鍵差異</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Rule</th>
+                  <th scope="col">Accepted outcome</th>
+                  <th scope="col">Rejected / excluded</th>
+                  <th scope="col">Owner</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Scope selection</td>
+                  <td>index 中的 A/C/D/M/R/T/U/X/B changes</td>
+                  <td>unstaged 與 untracked 不進 report</td>
+                  <td>CLI + GitService</td>
+                </tr>
+                <tr>
+                  <td>Unmerged guard</td>
+                  <td>沒有 status U</td>
+                  <td>有 unresolved conflict 時整次停止</td>
+                  <td>GitService</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <h4>Evidence and confidence</h4>
+          <p>
+            <span class="badge verified">Verified</span>
+            <a href="../../src/git/git-service.ts#L236"><code>src/git/git-service.ts:236–252, 305–329</code></a>；
+            <a href="../../test/e2e/cli.e2e.test.ts#L349"><code>test/e2e/cli.e2e.test.ts:349–386</code></a>。
+            Failure 與 retry 性質和 working-tree scenario 相同。
+          </p>
+        </article>
+
+        <article class="scenario" id="scenario-configure">
+          <h3>Scenario：開發者解析 review 設定</h3>
+          <dl class="facts">
+            <div><dt>Actor</dt><dd>開發者或 repository config author</dd></div>
+            <div><dt>Goal</dt><dd>選擇 preset 與執行 budget</dd></div>
+            <div><dt>Trigger</dt><dd>執行任何 review command</dd></div>
+            <div><dt>Success</dt><dd>取得完整 <code>ResolvedReviewConfig</code></dd></div>
+          </dl>
+          <h4>User-visible flow</h4>
+          <ol>
+            <li>ConfigService 嘗試從 process cwd 讀 <code>reviewstuff.config.json</code>；not found 視為空設定。</li>
+            <li>JSON 以 strict schema decode；unknown properties、empty strings、non-positive timeout/concurrency 都失敗。</li>
+            <li>先選 quick/standard preset defaults，再覆蓋 file values，最後覆蓋 CLI flags。</li>
+            <li>目前只有完整的 fake/fake/fake-reviewer-v1 tuple 可進入 Git work；其他 selection 明確失敗。</li>
+          </ol>
+          <h4>Precedence</h4>
+          <p>
+            <code>selected preset defaults → reviewstuff.config.json review object → CLI overrides</code>。
+            quick 與 standard 的 model/budget 相同，但 quick 是 30s / concurrency 1，standard 是
+            120s / concurrency 2。
+          </p>
+          <h4>Alternative and failure paths</h4>
+          <ul>
+            <li>檔案不存在：採 standard defaults。</li>
+            <li>讀檔 permission failure：<code>ConfigFileReadError</code>，exit 1。</li>
+            <li>內容 invalid：<code>ConfigFileDecodeError</code>；user-facing output 不包含原始 rejected value、cause 或 stack。</li>
+            <li>從 nested directory 執行時，Git root 會解析到 repository root，但 config 仍取 nested cwd；這是現行行為。</li>
+          </ul>
+          <h4>Evidence and confidence</h4>
+          <p>
+            <span class="badge verified">Verified</span>
+            <a href="../../src/config/config-service.ts#L92"><code>src/config/config-service.ts:92–160</code></a>；
+            <a href="../../test/config/config-service.test.ts#L108"><code>test/config/config-service.test.ts:108–199</code></a>；
+            <a href="../../test/e2e/cli.e2e.test.ts#L230"><code>test/e2e/cli.e2e.test.ts:230–304</code></a>。
+          </p>
+        </article>
+
+        <article class="scenario" id="scenario-output">
+          <h3>Scenario：開發者或 script 消費 review report</h3>
+          <dl class="facts">
+            <div><dt>Actor</dt><dd>人類開發者或 automation caller</dd></div>
+            <div><dt>Goal</dt><dd>理解 findings、coverage 與 request budget</dd></div>
+            <div><dt>Trigger</dt><dd>review 成功；可選 <code>--json</code></dd></div>
+            <div><dt>Success</dt><dd>human-readable text 或 strict <code>ReviewReportV4</code></dd></div>
+          </dl>
+          <h4>Rules</h4>
+          <ul>
+            <li>Terminal finding 顯示 file:line、severity/category、confidence、message 與 ruleId。</li>
+            <li>coverage 不完整時，列出 truncated/skipped files 與 request-budget/binary/file-too-large reason。</li>
+            <li>terminal 中所有 repository/engine controlled strings 會 escape control characters；JSON 則保留資料並交由 JSON escaping。</li>
+            <li>report schema 驗證 summary counts、coverage completeness、unique identity、hunk counts 與 budget arithmetic。</li>
+          </ul>
+          <h4>State transitions</h4>
+          <p>
+            沒有 persisted lifecycle。資料只從 <code>GitDiff → ReviewSelectionV1 →
+            ReviewRequestV1 + findings → ReviewReportV4 → rendered bytes</code> 轉換。
+          </p>
+          <h4>Important limitation</h4>
+          <p>
+            findings 數量與 incomplete coverage 目前不改變 process 成功狀態；只有 pipeline error
+            由 command handler 設 <code>process.exitCode = 1</code>。Automation 必須解析 JSON
+            才能依 finding/coverage 做 gate。
+          </p>
+          <h4>Evidence and confidence</h4>
+          <p>
+            <span class="badge verified">Verified</span>
+            <a href="../../src/domain/report.ts#L117"><code>src/domain/report.ts:117–201</code></a>；
+            <a href="../../src/output/report-renderer.ts#L38"><code>src/output/report-renderer.ts:38–89</code></a>；
+            <a href="../../test/output/report-renderer.test.ts#L8"><code>test/output/report-renderer.test.ts</code></a>。
+          </p>
+        </article>
+
+        <article class="scenario" id="scenario-doctor">
+          <h3>Scenario：Operator 檢查環境</h3>
+          <dl class="facts">
+            <div><dt>Actor</dt><dd>Operator / 開發者</dd></div>
+            <div><dt>Goal</dt><dd>診斷 Git、config 或 provider readiness</dd></div>
+            <div><dt>Trigger</dt><dd><code>reviewstuff doctor</code></dd></div>
+            <div><dt>Observed result</dt><dd><code>doctor command is not implemented yet.</code></dd></div>
+          </dl>
+          <p>
+            這個 command 確實已註冊並可達，但沒有任何檢查、typed result 或 non-zero failure
+            policy。因此不能把「doctor command 存在」解讀成「環境診斷 capability 已存在」。
+          </p>
+          <p>
+            <span class="badge verified">Verified placeholder</span>
+            <a href="../../src/commands/doctor.ts#L4"><code>src/commands/doctor.ts:4–9</code></a>。
+          </p>
+        </article>
+      </section>
+
+      <section id="findings">
+        <h2>9. Findings 與風險</h2>
+        <p>
+          下表先描述現況影響，再分開提出 recommendation。風險不是已發生事故，也不代表未完成
+          roadmap 本身是 bug。
+        </p>
+        <div class="table-scroll">
+          <table>
+            <caption>Scenario-linked findings</caption>
+            <thead>
+              <tr>
+                <th scope="col">Finding</th>
+                <th scope="col">Affected scenario</th>
+                <th scope="col">Evidence / impact</th>
+                <th scope="col">Severity</th>
+                <th scope="col">Confidence</th>
+                <th scope="col">Recommendation</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>產品目前只做 deterministic fake review</td>
+                <td>Working-tree / staged review</td>
+                <td><code>AppLive</code> 固定提供 fake layer，use case 拒絕其他 selection；使用者不能得到真實 AI review</td>
+                <td><span class="badge high">High limitation</span></td>
+                <td><span class="badge verified">Verified</span></td>
+                <td>在 privacy、redaction、preview policy 可達後，再接真實 provider；不要讓任意 selection 默默 fallback</td>
+              </tr>
+              <tr>
+                <td>Config root 與 Git root 不一致</td>
+                <td>Configure / nested-directory review</td>
+                <td>config 在 root resolution 前以相對 path 讀 cwd；同一 repo 從不同 directory 呼叫可能得到不同設定</td>
+                <td><span class="badge medium">Medium</span></td>
+                <td><span class="badge verified">Verified</span></td>
+                <td>定義並顯示 effective config source；若要 repository-scoped config，將 lookup anchor 到 resolved root</td>
+              </tr>
+              <tr>
+                <td>Oversized patch 會中止整次 review</td>
+                <td>Working-tree / staged review</td>
+                <td>每個 patch command cap 4 MiB，超限映射成 error；現行 use case 不會產生 <code>file-too-large</code> coverage</td>
+                <td><span class="badge medium">Medium</span></td>
+                <td><span class="badge verified">Verified</span></td>
+                <td>建立中央 file skip policy，把可預期的大檔降級成 explicit skipped coverage；保留 process cap 作最後防線</td>
+              </tr>
+              <tr>
+                <td>Success exit code 不表達 findings 或 incomplete coverage</td>
+                <td>JSON automation</td>
+                <td>command 只在 typed failure 設 exit 1；caller 若只看 exit code 可能把 partial review 視為通過</td>
+                <td><span class="badge medium">Medium</span></td>
+                <td><span class="badge supported">Supported</span></td>
+                <td>在公開 automation 前定義 exit-code contract；避免現在猜測 future semantics</td>
+              </tr>
+              <tr>
+                <td>Git read 不是 atomic snapshot</td>
+                <td>所有 review</td>
+                <td>list 與逐檔 diff 之間可能有 repo mutation；部分 race 轉 typed unavailable error，沒有 snapshot/retry</td>
+                <td><span class="badge low">Low–Medium</span></td>
+                <td><span class="badge supported">Supported</span></td>
+                <td>維持明確失敗；若實務上常見，再針對安全的 race 加 bounded retry 或 snapshot strategy</td>
+              </tr>
+              <tr>
+                <td><code>doctor</code> 暴露但沒有診斷價值</td>
+                <td>Environment check</td>
+                <td>help 會宣告 command，但 handler 永遠只印 placeholder</td>
+                <td><span class="badge low">Low</span></td>
+                <td><span class="badge verified">Verified</span></td>
+                <td>實作 minimal typed checks 前，在 user docs 清楚標成 placeholder，或延後對一般使用者宣告</td>
+              </tr>
+              <tr>
+                <td>跨 run 沒有 provenance 與 observability</td>
+                <td>Automation / failure recovery</td>
+                <td>沒有 session store、structured events、provider metadata 或 audit trail</td>
+                <td><span class="badge low">Low now</span></td>
+                <td><span class="badge verified">Verified</span></td>
+                <td>當 review 不再是 local fake 時，再把 run identity、effective config、engine metadata 納入持久化契約</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="coverage">
+        <h2>10. Coverage 與 unknowns</h2>
+        <div class="table-scroll">
+          <table>
+            <caption>本次 breadth-first analysis ledger</caption>
+            <thead>
+              <tr>
+                <th scope="col">Area</th>
+                <th scope="col">Inspected surface</th>
+                <th scope="col">Evidence depth</th>
+                <th scope="col">Remaining gap</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Actors / commands</td>
+                <td>root CLI、review、doctor、help/version/unknown command e2e</td>
+                <td>所有現行 command entry points traced</td>
+                <td>沒有 shell completion、install UX 或 release artifact 行為分析</td>
+              </tr>
+              <tr>
+                <td>Review scenarios</td>
+                <td>working-tree、staged、config、budget、fake engine、terminal/JSON、typed failures</td>
+                <td>完整 runtime chain + representative executable tests</td>
+                <td>未執行 production-scale repositories；performance 只從 concurrency/limits 推論</td>
+              </tr>
+              <tr>
+                <td>Runtime units</td>
+                <td>全部 <code>src/**/*.ts</code>、composition root、build target</td>
+                <td>static reachability verified</td>
+                <td>沒有啟動 dev server（repository 也沒有 server）</td>
+              </tr>
+              <tr>
+                <td>Data / stores</td>
+                <td>request、finding、coverage、report schemas 與 V2/V3 migrations</td>
+                <td>source + fixtures/tests</td>
+                <td>沒有 store；歷史 decode utilities 目前無 CLI consumer</td>
+              </tr>
+              <tr>
+                <td>Integrations</td>
+                <td>local Git executable、filesystem、Bun process runtime</td>
+                <td>source + temporary-repo/process tests</td>
+                <td>OpenAI/Codex/cloud integrations 尚未實作，因此不分析為現況</td>
+              </tr>
+              <tr>
+                <td>Operations</td>
+                <td>timeouts、output cap、cleanup、human errors、exit behavior</td>
+                <td>source + unit/e2e tests</td>
+                <td>沒有 metrics、tracing、audit、retry telemetry 或 production service</td>
+              </tr>
+              <tr>
+                <td>Documentation</td>
+                <td>docs taxonomy、repository structure rules、focused Git pipeline report、plan status index</td>
+                <td>used as supporting intent and destination convention</td>
+                <td>learning articles 未逐篇審查，因為不是 runtime evidence</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <h3>Excluded artifacts</h3>
+        <ul>
+          <li><code>node_modules/</code>、<code>dist/</code>、cache 與 generated output：非 application source。</li>
+          <li>未完成 plans 013–048：只用來劃清現況，不將 acceptance criteria 當作已實作 behavior。</li>
+          <li>大多數 learning articles：它們是教學材料，不是 runtime composition evidence。</li>
+          <li>Dependency internals：本次沒有 unresolved framework behavior 需要查 <code>~/.opensrc</code>；repository-local wiring 足以確立主要 scenarios。</li>
+        </ul>
+        <h3>Material unknowns</h3>
+        <ul>
+          <li>尚無 production 使用資料，無法判定 4 MiB per-patch cap、10s Git timeout 或 default request budget 在真實大型 repos 的失敗率。</li>
+          <li>README 稱專案為 work in progress；沒有發布或支援政策可證明目前 binary 對外承諾的 compatibility level。</li>
+          <li>未來 cloud engine 的 privacy、redaction、retry、billing 與 provider failure semantics 都尚未進入 runtime，不能從 interfaces 推定。</li>
+        </ul>
+      </section>
+
+      <section id="evidence">
+        <h2>11. Evidence index</h2>
+        <p>以下是支撐本報告主要結論的高價值來源；不是 directory inventory。</p>
+        <ul class="source-list">
+          <li><a href="../../src/cli.ts"><code>src/cli.ts</code></a> — composition root、runtime layers、command registration。</li>
+          <li><a href="../../src/commands/review.ts"><code>src/commands/review.ts</code></a> — user flags、scope selection、render 與 exit behavior。</li>
+          <li><a href="../../src/use-cases/run-review.ts"><code>src/use-cases/run-review.ts</code></a> — primary application flow 與 timeout boundary。</li>
+          <li><a href="../../src/git/git-service.ts"><code>src/git/git-service.ts</code></a> — repository/scope orchestration；細節另見 <a href="./reviewstuff-git-pipeline-implementation-reference.html">Git pipeline report</a>。</li>
+          <li><a href="../../src/review/review-budget.ts"><code>src/review/review-budget.ts</code></a> — fair complete-hunk budget selection。</li>
+          <li><a href="../../src/review/review-request.ts"><code>src/review/review-request.ts</code></a> — normalized untrusted engine request。</li>
+          <li><a href="../../src/engines/review-engine.ts"><code>src/engines/review-engine.ts</code></a> — sole reachable fake engine。</li>
+          <li><a href="../../src/domain/report.ts"><code>src/domain/report.ts</code></a> — report versions、invariants、migrations。</li>
+          <li><a href="../../src/platform/command-runner.ts"><code>src/platform/command-runner.ts</code></a> — subprocess safety、timeout、output cap、cleanup。</li>
+          <li><a href="../../test/e2e/cli.e2e.test.ts"><code>test/e2e/cli.e2e.test.ts</code></a> — compiled-binary scenarios through temporary repositories。</li>
+          <li><a href="../../plans/README.md"><code>plans/README.md</code></a> — DONE 001–012 與尚未實作 roadmap 的明確分界。</li>
+        </ul>
+        <details>
+          <summary>分析與驗證註記</summary>
+          <p>
+            報告採 scenario overview 深度。全數 application source 已做 breadth-first static
+            inspection；selected unit/integration/e2e tests 用來 triangulate behavior。
+            Source 在分析期間保持 read-only；只有本 HTML 與既有 documentation index 被更新。
+            驗證結果列於交付訊息。
+          </p>
+        </details>
+      </section>
+    </main>
+  </div>
+
+  <footer>
+    <p>
+      reviewstuff current-implementation snapshot · analyzed at revision
+      <code>0f5ec0b</code> on 2026-07-25 · recommendations are explicitly separated
+      from verified behavior.
+    </p>
+  </footer>
+</body>
+</html>
