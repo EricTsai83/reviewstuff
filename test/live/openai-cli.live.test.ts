@@ -87,7 +87,8 @@ test.skipIf(!liveSmokeEnabled)(
       expect(result.stderr).not.toContain(apiKey);
       expect(result.exitCode, result.stderr).toBe(0);
       expect(JSON.parse(result.stdout)).toMatchObject({
-        schemaVersion: 5,
+        schemaVersion: 6,
+        workload: "standard",
         privacy: {
           mode: "cloud-allowed",
           transport: "cloud",

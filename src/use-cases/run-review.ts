@@ -18,8 +18,8 @@ import {
   type ReviewFileCoverage,
 } from "../domain/review-file";
 import {
-  decodeReviewReportV5,
-  type ReviewReportV5,
+  decodeReviewReportV6,
+  type ReviewReportV6,
 } from "../domain/report";
 import type { ReviewScope } from "../domain/scope";
 import {
@@ -164,7 +164,8 @@ const buildReviewReport = (
   selection: ReviewSelectionV1,
   findings: ReadonlyArray<ReviewFindingV1>,
   privacy: ReviewAllowedPrivacyDecision,
-): ReviewReportV5 => {
+  workload: ResolvedReviewConfig["workload"],
+): ReviewReportV6 => {
   const coverageFiles = buildCoverageFiles(diff, selection);
   const reviewedFiles = coverageFiles.filter((file) =>
     file.status === "reviewed"
@@ -176,10 +177,11 @@ const buildReviewReport = (
     file.status === "skipped"
   ).length;
 
-  return decodeReviewReportV5({
-    schemaVersion: 5,
+  return decodeReviewReportV6({
+    schemaVersion: 6,
     scope,
     privacy,
+    workload,
     summary: {
       changedFiles: coverageFiles.length,
       reviewedFiles,
@@ -291,7 +293,7 @@ export const previewReviewRequest = (
 export const runReview = (
   input: RunReviewInput,
 ): Effect.Effect<
-  ReviewReportV5,
+  ReviewReportV6,
   RunReviewError,
   GitService | ConfigService | ReviewEngineRegistry
 > =>
@@ -324,6 +326,7 @@ export const runReview = (
         selection,
         findings,
         privacy,
+        resolved.config.workload,
       );
     }),
   );

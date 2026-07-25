@@ -9,7 +9,7 @@ Each selected Git working-tree repository may contain one optional
 
 ```yaml
 review:
-  preset: standard
+  workload: standard
   privacy: local-only
   engine: fake
   provider: fake
@@ -24,8 +24,15 @@ comment-only files use defaults. Invalid YAML or unsupported fields fail
 closed. `reviewstuff.config.json`, `.reviewstuff.yml`, and other aliases are
 not loaded.
 
-Precedence is `CLI flags > repository configuration > preset/built-in
+Precedence is `CLI flags > repository configuration > workload/built-in
 defaults`.
+
+`workload` defaults to `standard`. Use `reviewstuff review --light` or
+`reviewstuff review --workload light` to reduce only the request context
+budget; engine, provider, model, timeout, concurrency, and finding criteria
+remain unchanged. An explicit `review.requestBudget` remains authoritative even
+when a CLI workload flag is present; reports show both the selected workload
+and the actual resolved budget.
 
 `privacy` defaults to `local-only`. A cloud transport must be explicitly
 enabled with `--privacy cloud-allowed` or `review.privacy: cloud-allowed`

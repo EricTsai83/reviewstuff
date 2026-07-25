@@ -457,7 +457,7 @@ test("runReview builds the normalized request before invoking the engine", async
   await runReview({
     scope: "working-tree",
     configOverrides: {
-      preset: "quick",
+      workload: "light",
       model: "fake-reviewer-v1",
       concurrency: 1,
     },
@@ -481,9 +481,68 @@ test("runReview builds the normalized request before invoking the engine", async
   });
   expect(receivedExecution).toEqual({
     concurrency: 1,
-    timeoutMilliseconds: 30_000,
-    maxOutputTokens: 16_384,
+    timeoutMilliseconds: 120_000,
+    maxOutputTokens: 8_192,
   });
+});
+
+test("light reduces selected context without changing selection ordering", async () => {
+  const patch = (name: string) =>
+    `@@ -0,0 +1 @@\n+export const ${name} = "${"x".repeat(15_000)}";\n`;
+  const git = makeGit({
+    readDiff: () =>
+      Effect.succeed({
+        files: [
+          gitTextFile("src/b.ts", "working-tree", patch("b")),
+          gitTextFile("src/a.ts", "working-tree", patch("a")),
+        ],
+      }),
+  });
+  const received: Array<ReviewRequestV1> = [];
+  const executions: Array<ReviewEngineExecution> = [];
+  const engine = registryWithEngine({
+    transport: "local",
+    review: (request, execution) =>
+      Effect.sync(() => {
+        received.push(request);
+        executions.push(execution);
+        return [];
+      }),
+  });
+  const provided = Layer.mergeAll(git, config, engine);
+
+  const standard = await runReview({
+    scope: "working-tree",
+    configOverrides: { workload: "standard" },
+  }).pipe(Effect.provide(provided), Effect.runPromise);
+  const light = await runReview({
+    scope: "working-tree",
+    configOverrides: { workload: "light" },
+  }).pipe(Effect.provide(provided), Effect.runPromise);
+
+  expect(standard.workload).toBe("standard");
+  expect(light.workload).toBe("light");
+  expect(standard.budget.maxTokens).toBe(128_000);
+  expect(light.budget.maxTokens).toBe(32_000);
+  expect(received[0]?.context.files.map((file) => file.path)).toEqual([
+    "src/a.ts",
+    "src/b.ts",
+  ]);
+  expect(received[1]?.context.files.map((file) => file.path)).toEqual([
+    "src/a.ts",
+  ]);
+  expect(executions).toEqual([
+    {
+      concurrency: 2,
+      timeoutMilliseconds: 120_000,
+      maxOutputTokens: 16_384,
+    },
+    {
+      concurrency: 2,
+      timeoutMilliseconds: 120_000,
+      maxOutputTokens: 8_192,
+    },
+  ]);
 });
 
 test("preview returns the exact redacted request without invoking the engine", async () => {
@@ -661,13 +720,14 @@ test("runReview produces deterministic findings from added marker lines", async 
   );
 
   expect(report).toMatchObject({
-    schemaVersion: 5,
+    schemaVersion: 6,
     scope: "working-tree",
     privacy: {
       mode: "local-only",
       transport: "local",
       decision: "allowed",
     },
+    workload: "standard",
     summary: {
       changedFiles: 1,
       reviewedFiles: 1,

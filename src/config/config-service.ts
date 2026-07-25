@@ -10,8 +10,11 @@ import * as SchemaIssue from "effect/SchemaIssue";
 import type { RepositoryContext } from "../domain/repository";
 import type { ReviewPrivacyMode } from "../domain/privacy";
 import {
-  type ReviewPresetName,
   type ReviewRequestBudgetConfig,
+  type ReviewWorkload,
+  reviewWorkloadPresets,
+} from "../domain/workload";
+import {
   type ReviewstuffConfig,
   ReviewstuffConfigSchema,
   reviewConfigFileName,
@@ -23,7 +26,7 @@ import {
 } from "./yaml-parser";
 
 export interface ResolvedReviewConfig {
-  readonly preset: ReviewPresetName;
+  readonly workload: ReviewWorkload;
   readonly privacy: ReviewPrivacyMode;
   readonly engine?: string;
   readonly provider?: string;
@@ -34,7 +37,7 @@ export interface ResolvedReviewConfig {
 }
 
 export interface ReviewConfigOverrides {
-  readonly preset?: ReviewPresetName;
+  readonly workload?: ReviewWorkload;
   readonly privacy?: ReviewPrivacyMode;
   readonly engine?: string;
   readonly provider?: string;
@@ -43,36 +46,6 @@ export interface ReviewConfigOverrides {
   readonly concurrency?: number;
   readonly requestBudget?: ReviewRequestBudgetConfig;
 }
-
-export type ReviewPresetConfig = Omit<
-  ResolvedReviewConfig,
-  "engine" | "model" | "preset" | "provider"
->;
-
-export const reviewPresets: Readonly<
-  Record<ReviewPresetName, ReviewPresetConfig>
-> = {
-  quick: {
-    privacy: "local-only",
-    timeoutMs: 30_000,
-    concurrency: 1,
-    requestBudget: {
-      maxTokens: 128_000,
-      fixedRequestOverheadTokens: 2_048,
-      outputReserveTokens: 16_384,
-    },
-  },
-  standard: {
-    privacy: "local-only",
-    timeoutMs: 120_000,
-    concurrency: 2,
-    requestBudget: {
-      maxTokens: 128_000,
-      fixedRequestOverheadTokens: 2_048,
-      outputReserveTokens: 16_384,
-    },
-  },
-};
 
 export class ConfigFileReadError extends Data.TaggedError(
   "ConfigFileReadError",
@@ -120,13 +93,16 @@ export const resolveReviewConfig = (
   overrides: ReviewConfigOverrides = {},
 ): ResolvedReviewConfig => {
   const configured = config?.review;
-  const preset = overrides.preset ?? configured?.preset ?? "standard";
+  const workload = overrides.workload ?? configured?.workload ?? "standard";
 
   return {
-    ...reviewPresets[preset],
+    privacy: "local-only",
+    timeoutMs: 120_000,
+    concurrency: 2,
+    requestBudget: reviewWorkloadPresets[workload].requestBudget,
     ...configured,
     ...overrides,
-    preset,
+    workload,
   };
 };
 
@@ -136,11 +112,11 @@ const configFieldChildren: Readonly<Record<string, ReadonlySet<string>>> = {
     "concurrency",
     "engine",
     "model",
-    "preset",
     "privacy",
     "provider",
     "requestBudget",
     "timeoutMs",
+    "workload",
   ]),
   "review.requestBudget": new Set([
     "fixedRequestOverheadTokens",
@@ -155,7 +131,6 @@ const configFieldConstraints: Readonly<Record<string, string>> = {
   "review.concurrency": "Expected a positive integer.",
   "review.engine": "Expected a non-empty string.",
   "review.model": "Expected a non-empty string.",
-  "review.preset": "Expected quick or standard.",
   "review.privacy": "Expected local-only or cloud-allowed.",
   "review.provider": "Expected a non-empty string.",
   "review.requestBudget": "Expected a complete request-budget mapping.",
@@ -164,6 +139,7 @@ const configFieldConstraints: Readonly<Record<string, string>> = {
   "review.requestBudget.maxTokens": "Expected a positive integer.",
   "review.requestBudget.outputReserveTokens": "Expected a non-negative integer.",
   "review.timeoutMs": "Expected a positive integer.",
+  "review.workload": "Expected standard or light.",
 };
 
 interface SchemaIssueLocation {

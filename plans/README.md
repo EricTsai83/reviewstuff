@@ -56,7 +56,7 @@ service skeleton、flag 或空目錄。
 | [x] DONE | 015 | [Preview The Exact Outbound Request](./015-preview-the-exact-outbound-request.md) | Safe cloud dogfood |
 | [x] DONE | 016 | [Implement The OpenAI Responses Adapter](./016-implement-the-openai-responses-adapter.md) | Safe cloud dogfood |
 | [x] DONE | 017 | [Select And Run The OpenAI Engine](./017-select-and-run-the-openai-engine.md) | Safe cloud dogfood |
-| [ ] TODO | 026 | [Add The Light Review Workload](./026-add-light-review-workload.md) | Safe cloud dogfood |
+| [x] DONE | 026 | [Add The Light Review Workload](./026-add-light-review-workload.md) | Safe cloud dogfood |
 | [ ] TODO | 048 | [Explain Effective Configuration Sources](./048-explain-effective-configuration-sources.md) | Real repository UX |
 | [ ] TODO | 019 | [Review An Exact Committed Range](./019-review-an-exact-committed-range.md) | Real repository UX |
 | [ ] TODO | 020 | [Review A Branch Using Merge-base Semantics](./020-review-a-branch-using-merge-base-semantics.md) | Real repository UX |

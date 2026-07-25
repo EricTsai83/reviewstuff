@@ -858,10 +858,11 @@
   typeof <span class="t">ReviewstuffConfigSchema</span><span class="o">.</span><span class="p">Type</span><span class="o">;</span>
 
 <span class="k">export</span> interface <span class="t">ResolvedReviewConfig</span> <span class="o">{</span>
-  readonly preset<span class="o">:</span> <span class="t">ReviewPresetName</span><span class="o">;</span>
-  readonly engine<span class="o">:</span> string<span class="o">;</span>
-  readonly provider<span class="o">:</span> string<span class="o">;</span>
-  readonly model<span class="o">:</span> string<span class="o">;</span>
+  readonly workload<span class="o">:</span> <span class="t">ReviewWorkload</span><span class="o">;</span>
+  readonly privacy<span class="o">:</span> <span class="t">ReviewPrivacyMode</span><span class="o">;</span>
+  readonly engine<span class="o">?</span><span class="o">:</span> string<span class="o">;</span>
+  readonly provider<span class="o">?</span><span class="o">:</span> string<span class="o">;</span>
+  readonly model<span class="o">?</span><span class="o">:</span> string<span class="o">;</span>
   readonly timeoutMs<span class="o">:</span> number<span class="o">;</span>
   readonly concurrency<span class="o">:</span> number<span class="o">;</span>
   readonly requestBudget<span class="o">:</span> <span class="t">ReviewRequestBudgetConfig</span><span class="o">;</span>
@@ -874,7 +875,7 @@
 
       <h3>為什麼目前的使用者 config 不需要 V1/V2</h3>
       <p>
-        後續規劃會把尚未對外發布的 <code>preset</code> 改成 <code>workload</code>。
+        ReviewStuff 已把尚未對外發布的 <code>preset</code> 直接改成 <code>workload</code>。
         因為沒有需要相容的真實舊設定，所以直接更新 current schema 即可；
         預先建立 <code>ReviewstuffConfigV1</code>、<code>schemaVersion</code> 與 migration
         並沒有保護任何使用者，只會建立永久維護面積。

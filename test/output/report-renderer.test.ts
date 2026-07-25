@@ -7,13 +7,14 @@ import {
 
 test("terminal reports escape control characters in untrusted fields", () => {
   const report: ReviewReport = {
-    schemaVersion: 5,
+    schemaVersion: 6,
     scope: "working-tree",
     privacy: {
       mode: "local-only",
       transport: "local",
       decision: "allowed",
     },
+    workload: "standard",
     summary: {
       changedFiles: 1,
       reviewedFiles: 1,
@@ -82,13 +83,14 @@ test("terminal reports escape control characters in untrusted fields", () => {
 
 test("terminal reports incomplete coverage and skip reasons", () => {
   const report: ReviewReport = {
-    schemaVersion: 5,
+    schemaVersion: 6,
     scope: "working-tree",
     privacy: {
       mode: "local-only",
       transport: "local",
       decision: "allowed",
     },
+    workload: "light",
     summary: {
       changedFiles: 3,
       reviewedFiles: 0,
@@ -148,18 +150,20 @@ test("terminal reports incomplete coverage and skip reasons", () => {
   expect(output).toContain("assets/binary\\u001b[31m.dat [untracked] — binary file");
   expect(output).toContain("600000 bytes exceeds the 524288 byte file limit");
   expect(output).not.toContain("\u001b");
+  expect(output).toContain("Review workload: light.");
   expect(output).toContain("Request budget: 18688 of 128000 tokens reserved");
 });
 
 test("terminal reports files skipped by the request budget", () => {
   const report: ReviewReport = {
-    schemaVersion: 5,
+    schemaVersion: 6,
     scope: "staged",
     privacy: {
       mode: "local-only",
       transport: "local",
       decision: "allowed",
     },
+    workload: "standard",
     summary: {
       changedFiles: 1,
       reviewedFiles: 0,

@@ -241,21 +241,23 @@ describe("reviewstuff binary", () => {
 
   test("review exits cleanly when the working tree has no changes", async () => {
     const cwd = await makeRepository();
+    const terminal = await runCli(["review"], { cwd });
 
-    expect((await runCli(["review"], { cwd })).trim()).toBe(
-      "No changes to review.",
-    );
+    expect(terminal).toContain("No changes to review.");
+    expect(terminal).toContain("Review workload: standard.");
+    expect(terminal).toContain("Request budget:");
 
     expect(
       JSON.parse(await runCli(["review", "--json"], { cwd })),
     ).toMatchObject({
-      schemaVersion: 5,
+      schemaVersion: 6,
       scope: "working-tree",
       privacy: {
         mode: "local-only",
         transport: "local",
         decision: "allowed",
       },
+      workload: "standard",
       summary: {
         changedFiles: 0,
         reviewedFiles: 0,
@@ -275,13 +277,13 @@ describe("reviewstuff binary", () => {
     });
   });
 
-  test("review accepts config presets and CLI selection overrides", async () => {
+  test("review accepts config workload and CLI selection overrides", async () => {
     const cwd = await makeRepository();
     await Bun.write(
       `${cwd}/.reviewstuff.yaml`,
       [
         "review:",
-        "  preset: quick",
+        "  workload: light",
         "  privacy: cloud-allowed",
         "  engine: configured-engine",
         "  provider: configured-provider",
@@ -296,7 +298,7 @@ describe("reviewstuff binary", () => {
       await runCli(
         [
           "review",
-          "--preset",
+          "--workload",
           "standard",
           "--privacy",
           "local-only",
@@ -317,9 +319,16 @@ describe("reviewstuff binary", () => {
     ) as {
       schemaVersion: number;
       privacy: { mode: string; transport: string; decision: string };
+      workload: string;
+      budget: { maxTokens: number; outputReserveTokens: number };
     };
 
-    expect(report.schemaVersion).toBe(5);
+    expect(report.schemaVersion).toBe(6);
+    expect(report.workload).toBe("standard");
+    expect(report.budget).toMatchObject({
+      maxTokens: 128_000,
+      outputReserveTokens: 16_384,
+    });
     expect(report.privacy).toEqual({
       mode: "local-only",
       transport: "local",
@@ -327,12 +336,79 @@ describe("reviewstuff binary", () => {
     });
   });
 
+  test("--light matches --workload light and only reduces selected context", async () => {
+    const cwd = await makeRepository();
+    await Bun.write(
+      `${cwd}/.reviewstuff.yaml`,
+      "review:\n  workload: standard\n",
+    );
+    await runGit(cwd, ["add", ".reviewstuff.yaml"]);
+    await runGit(cwd, ["commit", "--quiet", "-m", "add review config"]);
+    await Bun.write(
+      `${cwd}/large-context.ts`,
+      `export const context = "${"x".repeat(40_000)}";\n`,
+    );
+
+    const standard = JSON.parse(
+      await runCli(["review", "--workload", "standard", "--json"], { cwd }),
+    ) as {
+      workload: string;
+      budget: { maxTokens: number; outputReserveTokens: number };
+      coverage: {
+        files: ReadonlyArray<{ path: string; status: string }>;
+      };
+    };
+    const lightShortcut = JSON.parse(
+      await runCli(["review", "--light", "--json"], { cwd }),
+    ) as typeof standard;
+    const lightExplicit = JSON.parse(
+      await runCli(["review", "--workload", "light", "--json"], { cwd }),
+    ) as typeof standard;
+    const lightRedundant = JSON.parse(
+      await runCli(
+        ["review", "--light", "--workload", "light", "--json"],
+        { cwd },
+      ),
+    ) as typeof standard;
+
+    expect(lightShortcut).toEqual(lightExplicit);
+    expect(lightRedundant).toEqual(lightExplicit);
+    expect(standard).toMatchObject({
+      workload: "standard",
+      budget: { maxTokens: 128_000, outputReserveTokens: 16_384 },
+      coverage: {
+        files: [{ path: "large-context.ts", status: "reviewed" }],
+      },
+    });
+    expect(lightShortcut).toMatchObject({
+      workload: "light",
+      budget: { maxTokens: 32_000, outputReserveTokens: 8_192 },
+      coverage: {
+        files: [{ path: "large-context.ts", status: "skipped" }],
+      },
+    });
+  });
+
+  test("conflicting light workload flags fail explicitly", async () => {
+    const cwd = await makeRepository();
+    const result = await runCliExpectingFailure(
+      ["review", "--light", "--workload", "standard"],
+      { cwd },
+    );
+
+    expect(result.exitCode).toBe(1);
+    expect(result.stdout).toBe("");
+    expect(result.stderr).toContain(
+      "Cannot combine --light with --workload standard.",
+    );
+  });
+
   test("invalid config does not expose rejected values or a stack trace", async () => {
     const cwd = await makeRepository();
     const rejectedValue = "sk-secret-value";
     await Bun.write(
       `${cwd}/.reviewstuff.yaml`,
-      `review:\n  preset: ${rejectedValue}\n`,
+      `review:\n  workload: ${rejectedValue}\n`,
     );
 
     const result = await runCliExpectingFailure(["review"], { cwd });
@@ -650,6 +726,35 @@ describe("reviewstuff binary", () => {
 });
 
 describe("request preview", () => {
+  test("light shortcut and explicit workload preview the same reduced request", async () => {
+    const repository = await makeRepository();
+    await Bun.write(
+      `${repository}/large-preview.ts`,
+      `export const preview = "${"x".repeat(40_000)}";\n`,
+    );
+    const preview = (workloadArgs: ReadonlyArray<string>) =>
+      runCli([
+        "review",
+        "--dry-run-request",
+        "--json",
+        ...workloadArgs,
+      ], { cwd: repository }).then((stdout) =>
+        JSON.parse(stdout) as {
+          context: { files: ReadonlyArray<{ path: string }> };
+        }
+      );
+
+    const standard = await preview(["--workload", "standard"]);
+    const lightShortcut = await preview(["--light"]);
+    const lightExplicit = await preview(["--workload", "light"]);
+
+    expect(lightShortcut).toEqual(lightExplicit);
+    expect(standard.context.files.map((file) => file.path)).toEqual([
+      "large-preview.ts",
+    ]);
+    expect(lightShortcut.context.files).toEqual([]);
+  });
+
   test("--dry-run-request --json emits one redacted request and writes nothing", async () => {
     const repository = await makeRepository();
     const apiKey = "sk-proj-C1l2I3p4R5e6V7i8E9w0A1b2";
@@ -746,6 +851,7 @@ describe("repository selection", () => {
       `${repository}/.reviewstuff.yaml`,
       [
         "review:",
+        "  workload: light",
         "  requestBudget:",
         "    maxTokens: 100",
         "    fixedRequestOverheadTokens: 0",
@@ -762,11 +868,13 @@ describe("repository selection", () => {
       cwd: nested,
     });
     const report = JSON.parse(result.stdout) as {
+      workload: string;
       budget: { maxTokens: number };
       coverage: { files: ReadonlyArray<{ path: string }> };
     };
 
     expect(result.exitCode).toBe(0);
+    expect(report.workload).toBe("light");
     expect(report.budget.maxTokens).toBe(100);
     expect(report.coverage.files.map((file) => file.path)).toEqual([
       ".reviewstuff.yaml",
@@ -822,18 +930,18 @@ describe("repository selection", () => {
 
   test("invalid typed config does not expose rejected literals", async () => {
     const repository = await makeRepository();
-    const rejectedValue = "sk-secret-preset-value";
+    const rejectedValue = "sk-secret-workload-value";
     await Bun.write(
       `${repository}/.reviewstuff.yaml`,
-      `review:\n  preset: ${rejectedValue}\n`,
+      `review:\n  workload: ${rejectedValue}\n`,
     );
 
     const result = await runSourceCliProcess(["review"], { cwd: repository });
 
     expect(result.exitCode).toBe(1);
     expect(result.stdout).toBe("");
-    expect(result.stderr).toContain(".reviewstuff.yaml at review.preset");
-    expect(result.stderr).toContain("Expected quick or standard.");
+    expect(result.stderr).toContain(".reviewstuff.yaml at review.workload");
+    expect(result.stderr).toContain("Expected standard or light.");
     expect(result.stderr).not.toContain(rejectedValue);
     expect(result.stderr).not.toContain("ConfigFileSchemaError");
   });

@@ -620,21 +620,21 @@
               <tr>
                 <td>本機開發者</td>
                 <td>在送出變更前檢查 working tree 或 staged changes</td>
-                <td>選 scope、preset、engine/provider/model 字串、timeout、concurrency 與輸出格式</td>
+                <td>選 scope、workload、engine/provider/model 字串、timeout、concurrency 與輸出格式</td>
                 <td>實際只能執行 fake/fake/fake-reviewer-v1；無 path filter、branch 或 commit range</td>
                 <td><span class="badge verified">Verified</span></td>
               </tr>
               <tr>
                 <td>Script / CI caller</td>
                 <td>讀取穩定的 machine-readable review result</td>
-                <td>使用 <code>--json</code> 取得 <code>ReviewReportV4</code></td>
+                <td>使用 <code>--json</code> 取得 <code>ReviewReportV6</code></td>
                 <td>finding 或 incomplete coverage 不會改變成功 exit code；exit-code contract 尚未完成</td>
                 <td><span class="badge supported">Supported</span></td>
               </tr>
               <tr>
                 <td>Repository configuration author</td>
-                <td>在 repository root 的 <code>.reviewstuff.yaml</code> 設定 preset 與執行參數</td>
-                <td>設定 review preset、selection、timeout、concurrency 與 request budget</td>
+                <td>在 repository root 的 <code>.reviewstuff.yaml</code> 設定 workload 與執行參數</td>
+                <td>設定 review workload、selection、timeout、concurrency 與 request budget</td>
                 <td>只載入 canonical filename；unknown keys 與 YAML-only features 被拒絕</td>
                 <td><span class="badge verified">Verified</span></td>
               </tr>
@@ -699,7 +699,7 @@
                 <td><a href="#scenario-configure">解析有效設定</a></td>
                 <td>開發者 / config author</td>
                 <td>config file 與 CLI flags</td>
-                <td>以 preset defaults → file → CLI 的 precedence 取得 resolved config</td>
+                <td>以 workload defaults → file → CLI 的 precedence 取得 resolved config</td>
                 <td><code>ConfigService.load</code></td>
                 <td><span class="badge verified">Verified</span></td>
               </tr>
@@ -707,7 +707,7 @@
                 <td><a href="#scenario-output">消費 review report</a></td>
                 <td>開發者 / script</td>
                 <td>預設 terminal 或 <code>--json</code></td>
-                <td>看到 findings、coverage、budget，或嚴格的 v4 JSON contract</td>
+                <td>看到 workload、findings、coverage、budget，或嚴格的 v6 JSON contract</td>
                 <td><code>report-renderer.ts</code></td>
                 <td><span class="badge verified">Verified</span></td>
               </tr>
@@ -875,7 +875,7 @@
                 <td>engine output、report、terminal/JSON</td>
               </tr>
               <tr>
-                <td><code>ReviewReportV4</code></td>
+                <td><code>ReviewReportV6</code></td>
                 <td><code>domain/report.ts</code></td>
                 <td>summary counts 必須等於 contents；coverage.complete 與 statuses 一致；file identity 不重複；budget arithmetic 一致</td>
                 <td>CLI current output</td>
@@ -1059,7 +1059,7 @@
                 <tr>
                   <td>看結果</td>
                   <td>schema 驗證 summary/coverage/budget，再 render</td>
-                  <td><code>ReviewReportV4</code></td>
+                  <td><code>ReviewReportV6</code></td>
                   <td><a href="../../src/use-cases/run-review.ts#L133"><code>run-review.ts:133–167</code></a></td>
                 </tr>
               </tbody>
@@ -1146,7 +1146,7 @@
           <h3>Scenario：開發者解析 review 設定</h3>
           <dl class="facts">
             <div><dt>Actor</dt><dd>開發者或 repository config author</dd></div>
-            <div><dt>Goal</dt><dd>選擇 preset 與執行 budget</dd></div>
+            <div><dt>Goal</dt><dd>選擇 workload 與執行 budget</dd></div>
             <div><dt>Trigger</dt><dd>執行任何 review command</dd></div>
             <div><dt>Success</dt><dd>取得完整 <code>ResolvedReviewConfig</code></dd></div>
           </dl>
@@ -1155,14 +1155,15 @@
             <li>GitService 先從 cwd 或 <code>--dir</code> 解析 canonical working-tree root；ConfigService 只讀該 root 的 <code>.reviewstuff.yaml</code>。</li>
             <li>YAML 1.2 parser 先拒絕 duplicate keys、tags、anchors、aliases、merge keys、multiple documents 與非 JSON-compatible values。</li>
             <li>parser output 視為 <code>unknown</code>，再由 Effect Schema strict decode；unknown properties、empty strings、non-positive timeout/concurrency 都失敗。</li>
-            <li>先選 quick/standard preset defaults，再覆蓋 file values，最後覆蓋 CLI flags。</li>
+            <li>先依 effective <code>standard</code>/<code>light</code> workload 選 request-budget defaults，再覆蓋 file values，最後覆蓋 CLI flags；<code>--light</code> 等同 <code>--workload light</code>。</li>
             <li>目前只有完整的 fake/fake/fake-reviewer-v1 tuple 可進入 Git work；其他 selection 明確失敗。</li>
           </ol>
           <h4>Precedence</h4>
           <p>
-            <code>selected preset defaults → .reviewstuff.yaml review object → CLI overrides</code>。
-            quick 與 standard 的 model/budget 相同，但 quick 是 30s / concurrency 1，standard 是
-            120s / concurrency 2。
+            <code>selected workload defaults → .reviewstuff.yaml review object → CLI overrides</code>。
+            standard budget 是 128000 max / 2048 fixed overhead / 16384 output reserve；light 是
+            32000 / 2048 / 8192。timeout 120s 與 concurrency 2 是正交 defaults，不隨 workload
+            改變；明確設定的 <code>review.requestBudget</code> 仍覆蓋 workload budget。
           </p>
           <h4>Alternative and failure paths</h4>
           <ul>
@@ -1190,7 +1191,7 @@
             <div><dt>Actor</dt><dd>人類開發者或 automation caller</dd></div>
             <div><dt>Goal</dt><dd>理解 findings、coverage 與 request budget</dd></div>
             <div><dt>Trigger</dt><dd>review 成功；可選 <code>--json</code></dd></div>
-            <div><dt>Success</dt><dd>human-readable text 或 strict <code>ReviewReportV4</code></dd></div>
+            <div><dt>Success</dt><dd>human-readable text 或 strict <code>ReviewReportV6</code></dd></div>
           </dl>
           <h4>Rules</h4>
           <ul>
@@ -1202,7 +1203,7 @@
           <h4>State transitions</h4>
           <p>
             沒有 persisted lifecycle。資料只從 <code>GitDiff → ReviewSelectionV1 →
-            ReviewRequestV1 + findings → ReviewReportV4 → rendered bytes</code> 轉換。
+            ReviewRequestV1 + findings → ReviewReportV6 → rendered bytes</code> 轉換。
           </p>
           <h4>Important limitation</h4>
           <p>
@@ -1213,7 +1214,7 @@
           <h4>Evidence and confidence</h4>
           <p>
             <span class="badge verified">Verified</span>
-            <a href="../../src/domain/report.ts#L117"><code>src/domain/report.ts:117–201</code></a>；
+            <a href="../../src/domain/report.ts"><code>src/domain/report.ts</code></a>；
             <a href="../../src/output/report-renderer.ts#L38"><code>src/output/report-renderer.ts:38–89</code></a>；
             <a href="../../test/output/report-renderer.test.ts#L8"><code>test/output/report-renderer.test.ts</code></a>。
           </p>

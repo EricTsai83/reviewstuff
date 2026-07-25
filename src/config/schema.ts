@@ -1,23 +1,18 @@
 import * as Schema from "effect/Schema";
 import {
   NonEmptyStringSchema,
-  NonNegativeIntegerSchema,
   PositiveIntegerSchema,
 } from "../shared/schema-primitives";
 import { ReviewPrivacyModeSchema } from "../domain/privacy";
+import {
+  ReviewRequestBudgetConfigSchema,
+  ReviewWorkloadSchema,
+} from "../domain/workload";
 
 export const reviewConfigFileName = ".reviewstuff.yaml";
 
-export const ReviewPresetNameSchema = Schema.Literals(["quick", "standard"]);
-
-export const ReviewRequestBudgetConfigSchema = Schema.Struct({
-  maxTokens: PositiveIntegerSchema,
-  fixedRequestOverheadTokens: NonNegativeIntegerSchema,
-  outputReserveTokens: NonNegativeIntegerSchema,
-});
-
 export const ReviewConfigSchema = Schema.Struct({
-  preset: Schema.optionalKey(ReviewPresetNameSchema),
+  workload: Schema.optionalKey(ReviewWorkloadSchema),
   privacy: Schema.optionalKey(ReviewPrivacyModeSchema),
   engine: Schema.optionalKey(NonEmptyStringSchema),
   provider: Schema.optionalKey(NonEmptyStringSchema),
@@ -31,7 +26,4 @@ export const ReviewstuffConfigSchema = Schema.Struct({
   review: Schema.optionalKey(ReviewConfigSchema),
 });
 
-export type ReviewPresetName = typeof ReviewPresetNameSchema.Type;
-export type ReviewRequestBudgetConfig =
-  typeof ReviewRequestBudgetConfigSchema.Type;
 export type ReviewstuffConfig = typeof ReviewstuffConfigSchema.Type;

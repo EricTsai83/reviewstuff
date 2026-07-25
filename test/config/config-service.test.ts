@@ -9,9 +9,9 @@ import {
   ConfigFileReadError,
   ConfigFileSchemaError,
   make,
-  reviewPresets,
   resolveReviewConfig,
 } from "../../src/config/config-service";
+import { reviewWorkloadPresets } from "../../src/domain/workload";
 
 const pathService = Path.Path.pipe(
   Effect.provide(BunServices.layer),
@@ -68,8 +68,11 @@ describe("review config loading", () => {
     );
 
     expect(config).toEqual({
-      ...reviewPresets.standard,
-      preset: "standard",
+      workload: "standard",
+      privacy: "local-only",
+      timeoutMs: 120_000,
+      concurrency: 2,
+      requestBudget: reviewWorkloadPresets.standard.requestBudget,
     });
   });
 
@@ -79,8 +82,11 @@ describe("review config loading", () => {
     ).pipe(Effect.runPromise);
 
     expect(config).toEqual({
-      ...reviewPresets.standard,
-      preset: "standard",
+      workload: "standard",
+      privacy: "local-only",
+      timeoutMs: 120_000,
+      concurrency: 2,
+      requestBudget: reviewWorkloadPresets.standard.requestBudget,
     });
   });
 
@@ -88,7 +94,7 @@ describe("review config loading", () => {
     const config = await loadConfigWith(() =>
       Effect.succeed(`
 review:
-  preset: quick
+  workload: light
   privacy: cloud-allowed
   engine: fake
   provider: fake
@@ -103,7 +109,7 @@ review:
     ).pipe(Effect.runPromise);
 
     expect(config).toEqual({
-      preset: "quick",
+      workload: "light",
       privacy: "cloud-allowed",
       engine: "fake",
       provider: "fake",
@@ -154,10 +160,11 @@ review:
     ["- review\n", [], "sequence root"],
     ["unknown: true\n", [], "unknown root field"],
     ["review:\n  apiKey: secret\n", ["review"], "unknown review field"],
+    ["review:\n  preset: quick\n", ["review"], "removed preset field"],
     [
-      "review:\n  preset: thorough\n",
-      ["review", "preset"],
-      "unsupported preset",
+      "review:\n  workload: thorough\n",
+      ["review", "workload"],
+      "unsupported workload",
     ],
     [
       "review:\n  privacy: implicit\n",
@@ -204,17 +211,17 @@ review:
   );
 
   test("schema error metadata never includes a rejected literal", async () => {
-    const rejectedValue = "sk-secret-preset";
+    const rejectedValue = "sk-secret-workload";
     const error = await loadConfigWith(() =>
-      Effect.succeed(`review:\n  preset: ${rejectedValue}\n`)
+      Effect.succeed(`review:\n  workload: ${rejectedValue}\n`)
     ).pipe(Effect.flip, Effect.runPromise);
 
     expect(error).toBeInstanceOf(ConfigFileSchemaError);
     if (!(error instanceof ConfigFileSchemaError)) {
       throw new Error("expected ConfigFileSchemaError");
     }
-    expect(error.fieldPath).toEqual(["review", "preset"]);
-    expect(error.constraint).toBe("Expected quick or standard.");
+    expect(error.fieldPath).toEqual(["review", "workload"]);
+    expect(error.constraint).toBe("Expected standard or light.");
     expect(error.constraint).not.toContain(rejectedValue);
   });
 
@@ -237,31 +244,50 @@ review:
 });
 
 describe("review config resolution", () => {
-  test("uses the standard preset when no config exists", () => {
+  test("uses the standard workload and orthogonal defaults when no config exists", () => {
     expect(resolveReviewConfig(undefined)).toEqual({
-      ...reviewPresets.standard,
-      preset: "standard",
+      workload: "standard",
+      privacy: "local-only",
+      timeoutMs: 120_000,
+      concurrency: 2,
+      requestBudget: reviewWorkloadPresets.standard.requestBudget,
     });
     expect(resolveReviewConfig(undefined).privacy).toBe("local-only");
   });
 
-  test("quick and standard presets have distinct execution budgets", () => {
-    expect(reviewPresets.quick.privacy).toBe("local-only");
-    expect(reviewPresets.standard.privacy).toBe("local-only");
-    expect(reviewPresets.quick.timeoutMs).toBeLessThan(
-      reviewPresets.standard.timeoutMs,
+  test("light changes only the request budget", () => {
+    const standard = resolveReviewConfig(undefined, { workload: "standard" });
+    const light = resolveReviewConfig(undefined, { workload: "light" });
+
+    expect(light.requestBudget.maxTokens).toBeLessThan(
+      standard.requestBudget.maxTokens,
     );
-    expect(reviewPresets.quick.concurrency).toBeLessThan(
-      reviewPresets.standard.concurrency,
+    expect(light.requestBudget.outputReserveTokens).toBeLessThan(
+      standard.requestBudget.outputReserveTokens,
     );
+    expect({
+      privacy: light.privacy,
+      timeoutMs: light.timeoutMs,
+      concurrency: light.concurrency,
+      engine: light.engine,
+      provider: light.provider,
+      model: light.model,
+    }).toEqual({
+      privacy: standard.privacy,
+      timeoutMs: standard.timeoutMs,
+      concurrency: standard.concurrency,
+      engine: standard.engine,
+      provider: standard.provider,
+      model: standard.model,
+    });
   });
 
-  test("resolves preset defaults, config values, then CLI overrides", () => {
+  test("resolves workload defaults, config values, then CLI overrides", () => {
     expect(
       resolveReviewConfig(
         {
           review: {
-            preset: "quick",
+            workload: "light",
             privacy: "cloud-allowed",
             engine: "config-engine",
             provider: "config-provider",
@@ -271,21 +297,43 @@ describe("review config resolution", () => {
           },
         },
         {
-          preset: "standard",
+          workload: "standard",
           privacy: "local-only",
           engine: "cli-engine",
           model: "cli-model",
         },
       ),
     ).toEqual({
-      preset: "standard",
+      workload: "standard",
       privacy: "local-only",
       engine: "cli-engine",
       provider: "config-provider",
       model: "cli-model",
       timeoutMs: 45_000,
       concurrency: 3,
-      requestBudget: reviewPresets.standard.requestBudget,
+      requestBudget: reviewWorkloadPresets.standard.requestBudget,
+    });
+  });
+
+  test("an explicit request budget remains observable independently of workload", () => {
+    const requestBudget = {
+      maxTokens: 64_000,
+      fixedRequestOverheadTokens: 1_024,
+      outputReserveTokens: 4_096,
+    };
+
+    expect(
+      resolveReviewConfig(
+        {
+          review: {
+            requestBudget,
+          },
+        },
+        { workload: "light" },
+      ),
+    ).toMatchObject({
+      workload: "light",
+      requestBudget,
     });
   });
 });

@@ -29,9 +29,12 @@ const dryRunRequestFlag = Flag.boolean("dry-run-request").pipe(
 const stagedFlag = Flag.boolean("staged").pipe(
   Flag.withDescription("Review only changes staged in the index."),
 );
-const presetFlag = Flag.choice("preset", ["quick", "standard"]).pipe(
+const workloadFlag = Flag.choice("workload", ["standard", "light"]).pipe(
   Flag.optional,
-  Flag.withDescription("Select the quick or standard review preset."),
+  Flag.withDescription("Select the standard or light review workload."),
+);
+const lightFlag = Flag.boolean("light").pipe(
+  Flag.withDescription("Use the light review workload."),
 );
 const privacyFlag = Flag.choice("privacy", [
   "local-only",
@@ -83,17 +86,22 @@ const reportCommandFailure = (message: string) =>
 interface ReviewConfigFlags {
   readonly concurrency: Option.Option<number>;
   readonly engine: Option.Option<string>;
+  readonly light: boolean;
   readonly model: Option.Option<string>;
-  readonly preset: Option.Option<"quick" | "standard">;
   readonly privacy: Option.Option<"local-only" | "cloud-allowed">;
   readonly provider: Option.Option<string>;
   readonly timeoutMs: Option.Option<number>;
+  readonly workload: Option.Option<"standard" | "light">;
 }
 
 const collectCliConfigOverrides = (
   flags: ReviewConfigFlags,
 ): ReviewConfigOverrides => ({
-  ...(Option.isSome(flags.preset) && { preset: flags.preset.value }),
+  ...(flags.light
+    ? { workload: "light" as const }
+    : Option.isSome(flags.workload)
+    ? { workload: flags.workload.value }
+    : {}),
   ...(Option.isSome(flags.privacy) && { privacy: flags.privacy.value }),
   ...(Option.isSome(flags.engine) && { engine: flags.engine.value }),
   ...(Option.isSome(flags.provider) && { provider: flags.provider.value }),
@@ -110,15 +118,26 @@ export const reviewCommand = Command.make("review", {
   dryRunRequest: dryRunRequestFlag,
   engine: engineFlag,
   json: jsonFlag,
+  light: lightFlag,
   model: modelFlag,
-  preset: presetFlag,
   privacy: privacyFlag,
   provider: providerFlag,
   staged: stagedFlag,
   timeoutMs: timeoutFlag,
+  workload: workloadFlag,
 }).pipe(
   Command.withDescription("Review local Git changes."),
   Command.withHandler((cliOptions) => {
+    if (
+      cliOptions.light &&
+      Option.isSome(cliOptions.workload) &&
+      cliOptions.workload.value === "standard"
+    ) {
+      return reportCommandFailure(
+        "Cannot combine --light with --workload standard.",
+      );
+    }
+
     const input = {
       scope: cliOptions.staged ? stagedScope : workingTreeScope,
       ...(Option.isSome(cliOptions.dir) && {

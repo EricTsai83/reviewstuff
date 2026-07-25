@@ -10,6 +10,7 @@ import {
 } from "./review-file";
 import { ReviewScopeSchema } from "./scope";
 import { ReviewAllowedPrivacyDecisionSchema } from "./privacy";
+import { ReviewWorkloadSchema } from "./workload";
 import {
   NonEmptyStringSchema,
   NonNegativeIntegerSchema,
@@ -86,6 +87,17 @@ export const ReviewReportV5Schema = Schema.Struct({
   findings: Schema.Array(ReviewFindingV1Schema),
 });
 
+export const ReviewReportV6Schema = Schema.Struct({
+  schemaVersion: Schema.Literal(6),
+  scope: ReviewScopeSchema,
+  privacy: ReviewAllowedPrivacyDecisionSchema,
+  workload: ReviewWorkloadSchema,
+  summary: ReviewReportSummaryV4Schema,
+  coverage: ReviewCoverageV2Schema,
+  budget: ReviewBudgetEstimateV1Schema,
+  findings: Schema.Array(ReviewFindingV1Schema),
+});
+
 export const ReviewReportV3Schema = Schema.Struct({
   schemaVersion: Schema.Literal(3),
   scope: ReviewScopeSchema,
@@ -116,18 +128,19 @@ export const ReviewReportV2Schema = Schema.Struct({
 export type ReviewReportSummaryV3 = typeof ReviewReportSummarySchema.Type;
 export type ReviewReportSummaryV4 = typeof ReviewReportSummaryV4Schema.Type;
 export type ReviewReportSummary = ReviewReportSummaryV4;
+export type ReviewReportV6 = typeof ReviewReportV6Schema.Type;
 export type ReviewReportV5 = typeof ReviewReportV5Schema.Type;
 export type ReviewReportV4 = typeof ReviewReportV4Schema.Type;
 export type ReviewReportV3 = typeof ReviewReportV3Schema.Type;
 export type ReviewReportV2 = typeof ReviewReportV2Schema.Type;
-export type ReviewReport = ReviewReportV5;
+export type ReviewReport = ReviewReportV6;
 
 const invalidReviewReport = (reason: string): never => {
   throw new Error(`Invalid review report: ${reason}`);
 };
 
 const validateCurrentReportContents = <
-  Report extends ReviewReportV4 | ReviewReportV5,
+  Report extends ReviewReportV4 | ReviewReportV5 | ReviewReportV6,
 >(
   report: Report,
 ): Report => {
@@ -223,6 +236,13 @@ export const decodeReviewReportV5 = (input: unknown): ReviewReportV5 =>
     }),
   );
 
+export const decodeReviewReportV6 = (input: unknown): ReviewReportV6 =>
+  validateCurrentReportContents(
+    Schema.decodeUnknownSync(ReviewReportV6Schema)(input, {
+      onExcessProperty: "error",
+    }),
+  );
+
 export const decodeReviewReportV3 = (input: unknown): ReviewReportV3 =>
   Schema.decodeUnknownSync(ReviewReportV3Schema)(input, {
     onExcessProperty: "error",
@@ -291,37 +311,56 @@ export const migrateReviewReportV4 = (
     },
   });
 
+export const migrateReviewReportV5 = (
+  report: ReviewReportV5,
+): ReviewReportV6 =>
+  decodeReviewReportV6({
+    ...report,
+    schemaVersion: 6,
+    workload: "standard",
+  });
+
 const readSchemaVersion = (input: unknown): unknown =>
   typeof input === "object" && input !== null && "schemaVersion" in input
     ? input.schemaVersion
     : undefined;
 
-export const decodeReviewReport = (input: unknown): ReviewReportV5 => {
+export const decodeReviewReport = (input: unknown): ReviewReportV6 => {
   const schemaVersion = readSchemaVersion(input);
 
+  if (schemaVersion === 6) {
+    return decodeReviewReportV6(input);
+  }
+
   if (schemaVersion === 5) {
-    return decodeReviewReportV5(input);
+    return migrateReviewReportV5(decodeReviewReportV5(input));
   }
 
   if (schemaVersion === 4) {
-    return migrateReviewReportV4(decodeReviewReportV4(input));
+    return migrateReviewReportV5(
+      migrateReviewReportV4(decodeReviewReportV4(input)),
+    );
   }
 
   if (schemaVersion === 3) {
-    return migrateReviewReportV4(
-      migrateReviewReportV3(decodeReviewReportV3(input)),
+    return migrateReviewReportV5(
+      migrateReviewReportV4(
+        migrateReviewReportV3(decodeReviewReportV3(input)),
+      ),
     );
   }
 
   if (schemaVersion === 2) {
-    return migrateReviewReportV4(
-      migrateReviewReportV3(
-        migrateReviewReportV2(decodeReviewReportV2(input)),
+    return migrateReviewReportV5(
+      migrateReviewReportV4(
+        migrateReviewReportV3(
+          migrateReviewReportV2(decodeReviewReportV2(input)),
+        ),
       ),
     );
   }
 
   throw new Error(
-    `Unsupported review report schema version: ${String(schemaVersion)}; supported versions are 2, 3, 4, and 5`,
+    `Unsupported review report schema version: ${String(schemaVersion)}; supported versions are 2, 3, 4, 5, and 6`,
   );
 };

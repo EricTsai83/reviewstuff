@@ -37,7 +37,7 @@ describe("strict YAML config parser", () => {
     expect(
       parseYamlConfig(`
 review:
-  preset: standard
+  workload: standard
   privacy: local-only
   engine: fake
   provider: fake
@@ -47,7 +47,7 @@ review:
 `),
     ).toEqual({
       review: {
-        preset: "standard",
+        workload: "standard",
         privacy: "local-only",
         engine: "fake",
         provider: "fake",
@@ -56,8 +56,8 @@ review:
         concurrency: 2,
       },
     });
-    expect(parseYamlConfig('{"review":{"preset":"quick"}}')).toEqual({
-      review: { preset: "quick" },
+    expect(parseYamlConfig('{"review":{"workload":"light"}}')).toEqual({
+      review: { workload: "light" },
     });
   });
 
@@ -78,12 +78,12 @@ review:
 
   test.each([
     [
-      "review:\n  preset: quick\n  preset: standard\n",
+      "review:\n  workload: light\n  workload: standard\n",
       "duplicate-key",
       "duplicate key",
     ],
     [
-      "review: &review\n  preset: standard\n",
+      "review: &review\n  workload: standard\n",
       "anchor",
       "anchor",
     ],
