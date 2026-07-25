@@ -102,7 +102,7 @@ export const renderReviewError = (error: RunReviewError): string =>
       return `Invalid config file ${escapeTerminalText(configError.path)} at ${fieldPath}: ${configError.constraint}`;
     },
     ReviewSelectionUnsupportedError: (selectionError) =>
-      `Unsupported review selection: engine=${escapeTerminalText(selectionError.engine)}, provider=${escapeTerminalText(selectionError.provider)}, model=${escapeTerminalText(selectionError.model)}. This build supports engine=fake, provider=fake, model=fake-reviewer-v1.`,
+      `Unsupported review selection: engine=${escapeTerminalText(selectionError.engine ?? "<not set>")}, provider=${escapeTerminalText(selectionError.provider ?? "<not set>")}, model=${escapeTerminalText(selectionError.model ?? "<not set>")}. This build supports ${selectionError.supportedSelections.map(escapeTerminalText).join("; ")}.`,
     ReviewCloudPrivacyError: () =>
       "Cloud review is disabled by privacy=local-only. Re-run with `--privacy cloud-allowed` or set `review.privacy: cloud-allowed` in .reviewstuff.yaml after confirming repository data may be sent to the configured provider.",
     ReviewTimeoutError: (timeoutError) =>
@@ -110,7 +110,9 @@ export const renderReviewError = (error: RunReviewError): string =>
     ReviewEngineFailure: (engineError) =>
       `Review engine failed: ${escapeTerminalText(engineError.message)}`,
     ReviewEngineAuthenticationError: (engineError) =>
-      `Review engine authentication failed for provider ${escapeTerminalText(engineError.provider)}.`,
+      engineError.provider === "openai"
+        ? "Review engine authentication failed for provider openai. Set OPENAI_API_KEY to a valid API key and try again."
+        : `Review engine authentication failed for provider ${escapeTerminalText(engineError.provider)}.`,
     ReviewEngineConfigurationError: (engineError) =>
       `Invalid ${escapeTerminalText(engineError.engine)} configuration at ${escapeTerminalText(engineError.field)}: ${escapeTerminalText(engineError.message)}`,
     ReviewEngineTransportError: (engineError) =>

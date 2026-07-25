@@ -54,8 +54,8 @@ service skeleton、flag 或空目錄。
 | [x] DONE | 013 | [Enforce An Explicit Cloud Privacy Mode](./013-enforce-an-explicit-cloud-privacy-mode.md) | Safe cloud dogfood |
 | [x] DONE | 014 | [Redact Obvious Secrets Before Engine Input](./014-redact-obvious-secrets-before-engine-input.md) | Safe cloud dogfood |
 | [x] DONE | 015 | [Preview The Exact Outbound Request](./015-preview-the-exact-outbound-request.md) | Safe cloud dogfood |
-| [ ] TODO | 016 | [Implement The OpenAI Responses Adapter](./016-implement-the-openai-responses-adapter.md) | Safe cloud dogfood |
-| [ ] TODO | 017 | [Select And Run The OpenAI Engine](./017-select-and-run-the-openai-engine.md) | Safe cloud dogfood |
+| [x] DONE | 016 | [Implement The OpenAI Responses Adapter](./016-implement-the-openai-responses-adapter.md) | Safe cloud dogfood |
+| [x] DONE | 017 | [Select And Run The OpenAI Engine](./017-select-and-run-the-openai-engine.md) | Safe cloud dogfood |
 | [ ] TODO | 026 | [Add The Light Review Workload](./026-add-light-review-workload.md) | Safe cloud dogfood |
 | [ ] TODO | 048 | [Explain Effective Configuration Sources](./048-explain-effective-configuration-sources.md) | Real repository UX |
 | [ ] TODO | 019 | [Review An Exact Committed Range](./019-review-an-exact-committed-range.md) | Real repository UX |

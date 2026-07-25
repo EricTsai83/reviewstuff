@@ -5,7 +5,11 @@ import {
   ConfigFileReadError,
   ConfigFileSchemaError,
 } from "../../src/config/config-service";
-import { ReviewEngineFailure } from "../../src/engines/review-engine";
+import {
+  ReviewEngineAuthenticationError,
+  ReviewEngineFailure,
+} from "../../src/engines/review-engine";
+import { ReviewSelectionUnsupportedError } from "../../src/engines/review-engine-registry";
 import {
   GitChangedFileUnavailableError,
   GitCommandError,
@@ -21,7 +25,6 @@ import {
 } from "../../src/git/git-service";
 import {
   ReviewCloudPrivacyError,
-  ReviewSelectionUnsupportedError,
   ReviewTimeoutError,
 } from "../../src/use-cases/run-review";
 
@@ -58,8 +61,22 @@ describe("renderReviewError", () => {
         engine: "openai",
         provider: "openai",
         model: "gpt-example",
+        supportedSelections: [
+          "engine=fake, provider=fake, model=fake-reviewer-v1",
+          "engine=openai, provider=openai, model=<required>",
+        ],
       }),
-      "Unsupported review selection: engine=openai, provider=openai, model=gpt-example. This build supports engine=fake, provider=fake, model=fake-reviewer-v1.",
+      "Unsupported review selection: engine=openai, provider=openai, model=gpt-example. This build supports engine=fake, provider=fake, model=fake-reviewer-v1; engine=openai, provider=openai, model=<required>.",
+    ],
+    [
+      new ReviewSelectionUnsupportedError({
+        engine: "openai",
+        supportedSelections: [
+          "engine=fake, provider=fake, model=fake-reviewer-v1",
+          "engine=openai, provider=openai, model=<required>",
+        ],
+      }),
+      "Unsupported review selection: engine=openai, provider=<not set>, model=<not set>. This build supports engine=fake, provider=fake, model=fake-reviewer-v1; engine=openai, provider=openai, model=<required>.",
     ],
     [
       new ReviewCloudPrivacyError({
@@ -105,6 +122,13 @@ describe("renderReviewError", () => {
         }),
       ),
     ).toBe("Review engine failed: Invalid response\\u000afrom engine.");
+    expect(
+      renderReviewError(
+        new ReviewEngineAuthenticationError({ provider: "openai" }),
+      ),
+    ).toBe(
+      "Review engine authentication failed for provider openai. Set OPENAI_API_KEY to a valid API key and try again.",
+    );
   });
 
   test.each([

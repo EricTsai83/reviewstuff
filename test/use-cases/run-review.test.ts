@@ -1,16 +1,22 @@
 import { expect, test } from "bun:test";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Redacted from "effect/Redacted";
 import {
   ConfigService,
   resolveReviewConfig,
 } from "../../src/config/config-service";
 import {
-  layer as fakeReviewEngine,
+  make as fakeReviewEngine,
   ReviewEngine,
   type ReviewEngineExecution,
   ReviewEngineFailure,
 } from "../../src/engines/review-engine";
+import {
+  make as makeReviewEngineRegistry,
+  ReviewEngineRegistry,
+  ReviewSelectionUnsupportedError,
+} from "../../src/engines/review-engine-registry";
 import { GitService } from "../../src/git/git-service";
 import type { ReviewRequestV1 } from "../../src/review/review-request";
 import { fallbackReviewRequestEstimator } from "../../src/review/review-budget";
@@ -18,7 +24,6 @@ import {
   decideReviewPrivacy,
   previewReviewRequest,
   ReviewCloudPrivacyError,
-  ReviewSelectionUnsupportedError,
   ReviewTimeoutError,
   runReview,
 } from "../../src/use-cases/run-review";
@@ -28,7 +33,21 @@ const config = Layer.succeed(ConfigService, {
   load: (_repository, overrides) =>
     Effect.succeed(resolveReviewConfig(undefined, overrides)),
 });
-const services = Layer.merge(config, fakeReviewEngine);
+const registryWithEngine = (
+  engine: ReviewEngine["Service"],
+): Layer.Layer<ReviewEngineRegistry> =>
+  Layer.succeed(ReviewEngineRegistry, {
+    resolve: (selection) =>
+      Effect.succeed({
+        acquire: Effect.succeed(engine),
+        engineId: selection.engine ?? "fake",
+        model: selection.model ?? "fake-reviewer-v1",
+        provider: selection.provider ?? "fake",
+        transport: engine.transport,
+      }),
+  });
+const fakeReviewEngineRegistry = registryWithEngine(fakeReviewEngine);
+const services = Layer.merge(config, fakeReviewEngineRegistry);
 const makeGit = (
   service: Pick<GitService["Service"], "readDiff">,
 ) =>
@@ -91,7 +110,7 @@ test("runReview resolves the repository once and shares its context", async () =
     repositoryPath: "../selected",
   }).pipe(
     Effect.provide(git),
-    Effect.provide(Layer.merge(selectedConfig, fakeReviewEngine)),
+    Effect.provide(Layer.merge(selectedConfig, fakeReviewEngineRegistry)),
     Effect.runPromise,
   );
 
@@ -100,7 +119,7 @@ test("runReview resolves the repository once and shares its context", async () =
   expect(diffRepository).toBe(selectedRepository);
 });
 
-test("runReview rejects selections that cannot execute yet", async () => {
+test("runReview rejects unsupported selections before Git work", async () => {
   const git = makeGit({
     readDiff: () => Effect.die("unsupported selections must fail before Git"),
   });
@@ -108,22 +127,27 @@ test("runReview rejects selections that cannot execute yet", async () => {
   const error = await runReview({
     scope: "working-tree",
     configOverrides: {
-      engine: "openai",
-      provider: "openai",
-      model: "gpt-example",
+      engine: "unsupported",
     },
   }).pipe(
     Effect.provide(git),
-    Effect.provide(services),
+    Effect.provide(
+      Layer.merge(
+        config,
+        Layer.succeed(ReviewEngineRegistry, makeReviewEngineRegistry()),
+      ),
+    ),
     Effect.flip,
     Effect.runPromise,
   );
 
   expect(error).toEqual(
     new ReviewSelectionUnsupportedError({
-      engine: "openai",
-      provider: "openai",
-      model: "gpt-example",
+      engine: "unsupported",
+      supportedSelections: [
+        "engine=fake, provider=fake, model=fake-reviewer-v1",
+        "engine=openai, provider=openai, model=<required>",
+      ],
     }),
   );
 });
@@ -161,7 +185,7 @@ test("local-only refuses a cloud transport before diff or engine work", async ()
         return { files: [] };
       }),
   });
-  const engine = Layer.succeed(ReviewEngine, {
+  const engine = registryWithEngine({
     transport: "cloud",
     review: () =>
       Effect.sync(() => {
@@ -202,7 +226,7 @@ test("cloud-allowed invokes a cloud transport and records the decision", async (
         ],
       }),
   });
-  const engine = Layer.succeed(ReviewEngine, {
+  const engine = registryWithEngine({
     transport: "cloud",
     review: () =>
       Effect.sync(() => {
@@ -227,6 +251,131 @@ test("cloud-allowed invokes a cloud transport and records the decision", async (
     transport: "cloud",
     decision: "allowed",
   });
+});
+
+test("runReview selects OpenAI through the registry and uses a fake transport", async () => {
+  let outboundBody: string | undefined;
+  const git = makeGit({
+    readDiff: () =>
+      Effect.succeed({
+        files: [
+          gitTextFile(
+            "src/example.ts",
+            "working-tree",
+            "@@ -0,0 +1 @@\n+changed();\n",
+          ),
+        ],
+      }),
+  });
+  const registry = Layer.succeed(
+    ReviewEngineRegistry,
+    makeReviewEngineRegistry({
+      openAIApiKey: Redacted.make("test-api-key"),
+      openAITransport: async (request) => {
+        outboundBody = request.body;
+
+        return {
+          status: 200,
+          body: await Bun.file(
+            `${import.meta.dir}/../fixtures/openai-responses/completed.json`,
+          ).text(),
+        };
+      },
+    }),
+  );
+
+  const report = await runReview({
+    scope: "working-tree",
+    configOverrides: {
+      engine: "openai",
+      model: "gpt-example",
+      privacy: "cloud-allowed",
+    },
+  }).pipe(
+    Effect.provide(Layer.mergeAll(git, config, registry)),
+    Effect.runPromise,
+  );
+
+  expect(JSON.parse(outboundBody ?? "{}")).toMatchObject({
+    model: "gpt-example",
+    store: false,
+  });
+  expect(report.privacy).toEqual({
+    mode: "cloud-allowed",
+    transport: "cloud",
+    decision: "allowed",
+  });
+  expect(report.findings).toHaveLength(1);
+});
+
+test("real registry refuses local-only OpenAI before credential or transport work", async () => {
+  let transportCalls = 0;
+  const registry = Layer.succeed(
+    ReviewEngineRegistry,
+    makeReviewEngineRegistry({
+      openAIApiKey: Redacted.make("test-api-key"),
+      openAITransport: async () => {
+        transportCalls += 1;
+        return { status: 200, body: "" };
+      },
+    }),
+  );
+  const git = makeGit({
+    readDiff: () => Effect.die("privacy must fail before Git"),
+  });
+
+  const error = await runReview({
+    scope: "working-tree",
+    configOverrides: {
+      engine: "openai",
+      model: "gpt-example",
+    },
+  }).pipe(
+    Effect.provide(Layer.mergeAll(git, config, registry)),
+    Effect.flip,
+    Effect.runPromise,
+  );
+
+  expect(error).toEqual(
+    new ReviewCloudPrivacyError({
+      mode: "local-only",
+      transport: "cloud",
+    }),
+  );
+  expect(transportCalls).toBe(0);
+});
+
+test("preview resolves an OpenAI request without credentials or cloud authorization", async () => {
+  const git = makeGit({
+    readDiff: () =>
+      Effect.succeed({
+        files: [
+          gitTextFile(
+            "src/preview.ts",
+            "working-tree",
+            "@@ -0,0 +1 @@\n+preview();\n",
+          ),
+        ],
+      }),
+  });
+  const registry = Layer.succeed(
+    ReviewEngineRegistry,
+    makeReviewEngineRegistry(),
+  );
+
+  const request = await previewReviewRequest({
+    scope: "working-tree",
+    configOverrides: {
+      engine: "openai",
+      model: "gpt-example",
+    },
+  }).pipe(
+    Effect.provide(Layer.mergeAll(git, config, registry)),
+    Effect.runPromise,
+  );
+
+  expect(request.options.model).toBe("gpt-example");
+  expect(request.context.files).toHaveLength(1);
 });
 
 test("runReview applies the resolved timeout to Git diff work", async () => {
@@ -260,7 +409,7 @@ test("runReview applies the same resolved timeout to engine work", async () => {
         ],
       }),
   });
-  const engine = Layer.succeed(ReviewEngine, {
+  const engine = registryWithEngine({
     transport: "local",
     review: () => Effect.never,
   });
@@ -295,7 +444,7 @@ test("runReview builds the normalized request before invoking the engine", async
   });
   let received: ReviewRequestV1 | undefined;
   let receivedExecution: ReviewEngineExecution | undefined;
-  const engine = Layer.succeed(ReviewEngine, {
+  const engine = registryWithEngine({
     transport: "local",
     review: (request, execution) =>
       Effect.sync(() => {
@@ -353,7 +502,7 @@ test("preview returns the exact redacted request without invoking the engine", a
   });
   let engineCalls = 0;
   const received: Array<ReviewRequestV1> = [];
-  const engine = Layer.succeed(ReviewEngine, {
+  const engine = registryWithEngine({
     transport: "local",
     review: (request) =>
       Effect.sync(() => {
@@ -424,7 +573,7 @@ test("runReview gives the engine only redacted repository data", async () => {
       }),
   });
   let received: ReviewRequestV1 | undefined;
-  const engine = Layer.succeed(ReviewEngine, {
+  const engine = registryWithEngine({
     transport: "local",
     review: (request) =>
       Effect.sync(() => {
@@ -464,7 +613,7 @@ test("engine failures cannot echo the original secret through their cause", asyn
         ],
       }),
   });
-  const engine = Layer.succeed(ReviewEngine, {
+  const engine = registryWithEngine({
     transport: "local",
     review: (request) =>
       Effect.fail(
@@ -670,7 +819,7 @@ test("runReview sends only budget-selected hunks and reports the same coverage",
       }),
   });
   let received: ReviewRequestV1 | undefined;
-  const engine = Layer.succeed(ReviewEngine, {
+  const engine = registryWithEngine({
     transport: "local",
     review: (request) =>
       Effect.sync(() => {
@@ -767,7 +916,7 @@ test("runReview skips the engine when no hunk fits the request budget", async ()
     ),
     Effect.provide(config),
     Effect.provide(
-      Layer.succeed(ReviewEngine, {
+      registryWithEngine({
         transport: "local",
         review: () =>
           Effect.sync(() => {
@@ -810,7 +959,7 @@ test("runReview sends metadata-only files to the engine", async () => {
     ),
     Effect.provide(config),
     Effect.provide(
-      Layer.succeed(ReviewEngine, {
+      registryWithEngine({
         transport: "local",
         review: (request) =>
           Effect.sync(() => {
@@ -856,7 +1005,7 @@ test("runReview propagates typed engine failures", async () => {
         ],
       }),
   });
-  const engine = Layer.succeed(ReviewEngine, {
+  const engine = registryWithEngine({
     transport: "local",
     review: () => Effect.fail(failure),
   });

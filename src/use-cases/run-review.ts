@@ -24,8 +24,12 @@ import {
 import type { ReviewScope } from "../domain/scope";
 import {
   type ReviewEngineError,
-  ReviewEngine,
 } from "../engines/review-engine";
+import {
+  type ResolvedReviewEngine,
+  type ReviewEngineRegistryError,
+  ReviewEngineRegistry,
+} from "../engines/review-engine-registry";
 import {
   type GitError,
   type GitDiff,
@@ -52,14 +56,6 @@ export class ReviewTimeoutError extends Data.TaggedError(
   readonly timeoutMilliseconds: number;
 }> {}
 
-export class ReviewSelectionUnsupportedError extends Data.TaggedError(
-  "ReviewSelectionUnsupportedError",
-)<{
-  readonly engine: string;
-  readonly provider: string;
-  readonly model: string;
-}> {}
-
 export class ReviewCloudPrivacyError extends Data.TaggedError(
   "ReviewCloudPrivacyError",
 )<{
@@ -70,7 +66,7 @@ export class ReviewCloudPrivacyError extends Data.TaggedError(
 export type RunReviewError =
   | GitError
   | ConfigError
-  | ReviewSelectionUnsupportedError
+  | ReviewEngineRegistryError
   | ReviewCloudPrivacyError
   | ReviewEngineError
   | ReviewTimeoutError;
@@ -82,21 +78,6 @@ export interface RunReviewInput {
 }
 
 export type PreviewReviewRequestResult = ReviewRequestV1;
-
-const ensureSupportedFakeSelection = (
-  config: ResolvedReviewConfig,
-): Effect.Effect<void, ReviewSelectionUnsupportedError> =>
-  config.engine === "fake" &&
-    config.provider === "fake" &&
-    config.model === "fake-reviewer-v1"
-    ? Effect.void
-    : Effect.fail(
-        new ReviewSelectionUnsupportedError({
-          engine: config.engine,
-          provider: config.provider,
-          model: config.model,
-        }),
-      );
 
 export const decideReviewPrivacy = (
   mode: ReviewPrivacyMode,
@@ -148,11 +129,11 @@ const buildCoverageFiles = (
 
 const requestEnvelopeTokens = (
   scope: ReviewScope,
-  config: ResolvedReviewConfig,
+  model: string,
 ): number => {
   const emptyRequest = buildReviewRequestV1({
     repository: { scope },
-    config: { model: config.model },
+    config: { model },
     files: [],
   });
   const emptyRequestTokens = fallbackReviewRequestEstimator.estimate(
@@ -168,11 +149,12 @@ const requestEnvelopeTokens = (
 const effectiveBudgetPolicy = (
   scope: ReviewScope,
   config: ResolvedReviewConfig,
+  model: string,
 ): ReviewBudgetPolicy => ({
   ...config.requestBudget,
   fixedRequestOverheadTokens: Math.max(
     config.requestBudget.fixedRequestOverheadTokens,
-    requestEnvelopeTokens(scope, config),
+    requestEnvelopeTokens(scope, model),
   ),
 });
 
@@ -215,68 +197,72 @@ const buildReviewReport = (
   });
 };
 
-interface PreparedReview {
-  readonly config: ResolvedReviewConfig;
+interface PreparedReviewRequest {
   readonly diff: GitDiff;
-  readonly engine: ReviewEngine["Service"];
-  readonly privacy: ReviewAllowedPrivacyDecision;
   readonly request: ReviewRequestV1;
   readonly selection: ReviewSelectionV1;
 }
 
-const withPreparedReview = <Success, Error>(
+interface ResolvedReview {
+  readonly config: ResolvedReviewConfig;
+  readonly engine: ResolvedReviewEngine;
+  readonly git: GitService["Service"];
+  readonly repository: { readonly root: string };
+}
+
+const prepareReviewRequest = (
+  resolved: ResolvedReview,
+  scope: ReviewScope,
+): Effect.Effect<PreparedReviewRequest, GitError> =>
+  Effect.gen(function* () {
+    const diff = yield* resolved.git.readDiff(resolved.repository, scope);
+    const reviewableFiles = textFiles(diff);
+    const selection = selectReviewHunks({
+      files: reviewableFiles.map(({ path, source, fileHeader, hunks }) => ({
+        path,
+        source,
+        fileHeader,
+        hunks: hunks.map(({ patch }) => ({ patch })),
+      })),
+      policy: effectiveBudgetPolicy(
+        scope,
+        resolved.config,
+        resolved.engine.model,
+      ),
+    });
+    const { request } = redactReviewRequestV1(
+      buildReviewRequestV1({
+        repository: { scope },
+        config: { model: resolved.engine.model },
+        files: selection.files,
+      }),
+    );
+
+    return { diff, request, selection };
+  });
+
+const withResolvedReview = <Success, Error>(
   {
     scope,
     repositoryPath,
     configOverrides = {},
   }: RunReviewInput,
   effect: (
-    prepared: PreparedReview,
+    resolved: ResolvedReview,
   ) => Effect.Effect<Success, Error>,
 ): Effect.Effect<
   Success,
   RunReviewError | Error,
-  GitService | ConfigService | ReviewEngine
+  GitService | ConfigService | ReviewEngineRegistry
 > =>
   Effect.gen(function* () {
     const configService = yield* ConfigService;
     const git = yield* GitService;
-    const engine = yield* ReviewEngine;
+    const engineRegistry = yield* ReviewEngineRegistry;
     const repository = yield* git.resolveRepository(repositoryPath);
     const config = yield* configService.load(repository, configOverrides);
-    const privacy = yield* enforceReviewPrivacy(
-      decideReviewPrivacy(config.privacy, engine.transport),
-    );
-    yield* ensureSupportedFakeSelection(config);
-    return yield* Effect.gen(function* () {
-      const diff = yield* git.readDiff(repository, scope);
-      const reviewableFiles = textFiles(diff);
-      const selection = selectReviewHunks({
-        files: reviewableFiles.map(({ path, source, fileHeader, hunks }) => ({
-          path,
-          source,
-          fileHeader,
-          hunks: hunks.map(({ patch }) => ({ patch })),
-        })),
-        policy: effectiveBudgetPolicy(scope, config),
-      });
-      const { request } = redactReviewRequestV1(
-        buildReviewRequestV1({
-          repository: { scope },
-          config: { model: config.model },
-          files: selection.files,
-        }),
-      );
-
-      return yield* effect({
-        config,
-        diff,
-        engine,
-        privacy,
-        request,
-        selection,
-      });
-    }).pipe(
+    const engine = yield* engineRegistry.resolve(config);
+    return yield* effect({ config, engine, git, repository }).pipe(
       Effect.timeoutOrElse({
         duration: config.timeoutMs,
         orElse: () =>
@@ -294,32 +280,41 @@ export const previewReviewRequest = (
 ): Effect.Effect<
   PreviewReviewRequestResult,
   RunReviewError,
-  GitService | ConfigService | ReviewEngine
+  GitService | ConfigService | ReviewEngineRegistry
 > =>
-  withPreparedReview(input, ({ request }) => Effect.succeed(request));
+  withResolvedReview(input, (resolved) =>
+    prepareReviewRequest(resolved, input.scope).pipe(
+      Effect.map(({ request }) => request),
+    )
+  );
 
 export const runReview = (
   input: RunReviewInput,
 ): Effect.Effect<
   ReviewReportV5,
   RunReviewError,
-  GitService | ConfigService | ReviewEngine
+  GitService | ConfigService | ReviewEngineRegistry
 > =>
-  withPreparedReview(
+  withResolvedReview(
     input,
-    Effect.fn(function* ({
-      config,
-      diff,
-      engine,
-      privacy,
-      request,
-      selection,
-    }) {
+    Effect.fn(function* (resolved) {
+      const privacy = yield* enforceReviewPrivacy(
+        decideReviewPrivacy(
+          resolved.config.privacy,
+          resolved.engine.transport,
+        ),
+      );
+      const engine = yield* resolved.engine.acquire;
+      const { diff, request, selection } = yield* prepareReviewRequest(
+        resolved,
+        input.scope,
+      );
       const findings = selection.files.length > 0
         ? yield* engine.review(request, {
-          concurrency: config.concurrency,
-          timeoutMilliseconds: config.timeoutMs,
-          maxOutputTokens: config.requestBudget.outputReserveTokens,
+          concurrency: resolved.config.concurrency,
+          timeoutMilliseconds: resolved.config.timeoutMs,
+          maxOutputTokens:
+            resolved.config.requestBudget.outputReserveTokens,
         })
         : [];
 

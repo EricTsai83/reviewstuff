@@ -25,9 +25,9 @@ import {
 export interface ResolvedReviewConfig {
   readonly preset: ReviewPresetName;
   readonly privacy: ReviewPrivacyMode;
-  readonly engine: string;
-  readonly provider: string;
-  readonly model: string;
+  readonly engine?: string;
+  readonly provider?: string;
+  readonly model?: string;
   readonly timeoutMs: number;
   readonly concurrency: number;
   readonly requestBudget: ReviewRequestBudgetConfig;
@@ -44,16 +44,16 @@ export interface ReviewConfigOverrides {
   readonly requestBudget?: ReviewRequestBudgetConfig;
 }
 
-export type ReviewPresetConfig = Omit<ResolvedReviewConfig, "preset">;
+export type ReviewPresetConfig = Omit<
+  ResolvedReviewConfig,
+  "engine" | "model" | "preset" | "provider"
+>;
 
 export const reviewPresets: Readonly<
   Record<ReviewPresetName, ReviewPresetConfig>
 > = {
   quick: {
     privacy: "local-only",
-    engine: "fake",
-    provider: "fake",
-    model: "fake-reviewer-v1",
     timeoutMs: 30_000,
     concurrency: 1,
     requestBudget: {
@@ -64,9 +64,6 @@ export const reviewPresets: Readonly<
   },
   standard: {
     privacy: "local-only",
-    engine: "fake",
-    provider: "fake",
-    model: "fake-reviewer-v1",
     timeoutMs: 120_000,
     concurrency: 2,
     requestBudget: {

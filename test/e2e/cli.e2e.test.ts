@@ -25,6 +25,11 @@ interface CliResult {
   stderr: string;
 }
 
+interface ProcessOptions {
+  readonly cwd?: string;
+  readonly env?: Readonly<Record<string, string | undefined>>;
+}
+
 const streamToString = (
   stream: Stream.Stream<Uint8Array, unknown>,
 ): Effect.Effect<string, unknown> =>
@@ -47,11 +52,12 @@ function formatFailure(args: ReadonlyArray<string>, result: CliResult): string {
 const runProcess = (
   program: string,
   args: ReadonlyArray<string>,
-  options: { cwd?: string } = {},
+  options: ProcessOptions = {},
 ): Promise<CliResult> =>
   Effect.gen(function* () {
     const process = yield* ChildProcess.make(program, args, {
       ...(options.cwd === undefined ? {} : { cwd: options.cwd }),
+      ...(options.env === undefined ? {} : { env: options.env }),
       stdout: "pipe",
       stderr: "pipe",
     });
@@ -74,18 +80,18 @@ const runProcess = (
 
 const runCliProcess = (
   args: ReadonlyArray<string>,
-  options: { cwd?: string } = {},
+  options: ProcessOptions = {},
 ): Promise<CliResult> => runProcess(binaryPath, args, options);
 
 const runSourceCliProcess = (
   args: ReadonlyArray<string>,
-  options: { cwd?: string } = {},
+  options: ProcessOptions = {},
 ): Promise<CliResult> =>
   runProcess(process.execPath, [sourceCliPath, ...args], options);
 
 const runCli = (
   args: ReadonlyArray<string>,
-  options: { cwd?: string } = {},
+  options: ProcessOptions = {},
 ): Promise<string> =>
   runCliProcess(args, options).then((result) => {
     if (!result.success) {
@@ -97,7 +103,7 @@ const runCli = (
 
 const runCliExpectingFailure = (
   args: ReadonlyArray<string>,
-  options: { cwd?: string } = {},
+  options: ProcessOptions = {},
 ): Promise<CliResult> =>
   runCliProcess(args, options).then((result) => {
     if (result.success) {
@@ -340,16 +346,47 @@ describe("reviewstuff binary", () => {
     expect(result.stderr).not.toContain("at runReview");
   });
 
+  test("missing OpenAI credentials fail with remediation instead of using fake", async () => {
+    const cwd = await makeRepository();
+    const result = await runCliExpectingFailure(
+      [
+        "review",
+        "--engine",
+        "openai",
+        "--model",
+        "gpt-example",
+        "--privacy",
+        "cloud-allowed",
+      ],
+      {
+        cwd,
+        env: {
+          ...process.env,
+          OPENAI_API_KEY: "",
+        },
+      },
+    );
+
+    expect(result.exitCode).toBe(1);
+    expect(result.stdout).toBe("");
+    expect(result.stderr).toContain(
+      "Review engine authentication failed for provider openai.",
+    );
+    expect(result.stderr).toContain("Set OPENAI_API_KEY");
+    expect(result.stderr).not.toContain("sk-");
+  });
+
   test("unsupported engine selection fails instead of running the fake reviewer", async () => {
     const cwd = await makeRepository();
     const result = await runCliExpectingFailure(
-      ["review", "--engine", "openai", "--model", "gpt-example"],
+      ["review", "--engine", "unsupported"],
       { cwd },
     );
 
     expect(result.exitCode).toBe(1);
     expect(result.stdout).toBe("");
     expect(result.stderr).toContain("Unsupported review selection");
+    expect(result.stderr).toContain("engine=unsupported");
     expect(result.stderr).toContain("This build supports engine=fake");
   });
 
@@ -659,6 +696,40 @@ describe("request preview", () => {
     expect(result.exitCode).toBe(1);
     expect(result.stdout).toBe("");
     expect(result.stderr).toContain("Unsupported review selection");
+  });
+
+  test("--dry-run-request previews OpenAI without credentials or cloud authorization", async () => {
+    const repository = await makeRepository();
+    await Bun.write(
+      `${repository}/preview-openai.ts`,
+      "export const previewOpenAI = true;\n",
+    );
+
+    const result = await runCliProcess(
+      [
+        "review",
+        "--dry-run-request",
+        "--engine",
+        "openai",
+        "--model",
+        "gpt-example",
+        "--json",
+      ],
+      {
+        cwd: repository,
+        env: {
+          ...process.env,
+          OPENAI_API_KEY: "",
+        },
+      },
+    );
+    const request = JSON.parse(result.stdout) as {
+      options: { model: string };
+    };
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stderr).toBe("");
+    expect(request.options.model).toBe("gpt-example");
   });
 });
 

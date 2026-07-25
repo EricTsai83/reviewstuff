@@ -1,5 +1,4 @@
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 import { OpenAiStructuredOutput } from "effect/unstable/ai";
 import {
@@ -427,12 +426,3 @@ export const make = (
     review: (request, execution) =>
       review(config, transport, request, execution),
   });
-
-export const layer = (
-  config: OpenAIResponsesReviewEngineConfig,
-  transport?: OpenAIResponsesTransport,
-): Layer.Layer<ReviewEngine> =>
-  Layer.succeed(
-    ReviewEngine,
-    make(config, transport),
-  );

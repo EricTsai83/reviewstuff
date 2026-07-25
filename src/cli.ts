@@ -7,14 +7,14 @@ import packageJson from "../package.json";
 import { doctorCommand } from "./commands/doctor";
 import { reviewCommand } from "./commands/review";
 import * as ConfigService from "./config/config-service";
-import * as ReviewEngine from "./engines/review-engine";
+import * as ReviewEngineRegistry from "./engines/review-engine-registry";
 import * as GitService from "./git/git-service";
 import * as CommandRunner from "./platform/command-runner";
 
 const AppLive = GitService.layer.pipe(
   Layer.provide(CommandRunner.layer),
   Layer.merge(ConfigService.layer),
-  Layer.merge(ReviewEngine.layer),
+  Layer.merge(ReviewEngineRegistry.layer),
   Layer.provideMerge(BunServices.layer),
 );
 
