@@ -31,6 +31,13 @@ defaults`.
 enabled with `--privacy cloud-allowed` or `review.privacy: cloud-allowed`
 before any repository data can be sent to it.
 
+Before an engine receives a normalized review request, reviewstuff replaces
+recognized API-key formats, private-key blocks, and bounded high-entropy tokens
+with deterministic redaction markers. Redaction diagnostics contain only
+reason/count metadata. This is a best-effort safeguard for obvious secrets, not
+a guarantee that arbitrary sensitive data cannot leave the machine; review
+diffs and configuration before enabling a cloud transport.
+
 ## Development
 
 ```bash

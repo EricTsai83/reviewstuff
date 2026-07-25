@@ -38,6 +38,7 @@ import {
   type ReviewSelectionV1,
   selectReviewHunks,
 } from "../review/review-budget";
+import { redactReviewRequestV1 } from "../review/review-redaction";
 import { buildReviewRequestV1 } from "../review/review-request";
 
 export type { ReviewConfigOverrides } from "../config/config-service";
@@ -240,11 +241,13 @@ export const runReview = ({
         })),
         policy: effectiveBudgetPolicy(scope, config),
       });
-      const request = buildReviewRequestV1({
-        repository: { scope },
-        config: { model: config.model },
-        files: selection.files,
-      });
+      const { request } = redactReviewRequestV1(
+        buildReviewRequestV1({
+          repository: { scope },
+          config: { model: config.model },
+          files: selection.files,
+        }),
+      );
       const findings = selection.files.length > 0
         ? yield* engine.review(request, { concurrency: config.concurrency })
         : [];

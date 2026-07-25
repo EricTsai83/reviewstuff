@@ -328,6 +328,91 @@ test("runReview builds the normalized request before invoking the engine", async
   });
 });
 
+test("runReview gives the engine only redacted repository data", async () => {
+  const apiKey = "sk-proj-A1b2C3d4E5f6G7h8I9j0K1l2";
+  const privateKey = [
+    "-----BEGIN ENCRYPTED PRIVATE KEY-----",
+    "bUY7a1F2S3d4G5h6J7k8L9m0N1p2Q3r4",
+    "-----END ENCRYPTED PRIVATE KEY-----",
+  ].join("\n");
+  const privateKeyPatch = privateKey.split("\n").map((line) => `+${line}`)
+    .join("\n");
+  const git = makeGit({
+    readDiff: () =>
+      Effect.succeed({
+        files: [
+          gitTextFile(
+            `src/${apiKey}.ts`,
+            "working-tree",
+            `@@ -0,0 +1,4 @@\n+${apiKey}\n${privateKeyPatch}\n`,
+          ),
+        ],
+      }),
+  });
+  let received: ReviewRequestV1 | undefined;
+  const engine = Layer.succeed(ReviewEngine, {
+    transport: "local",
+    review: (request) =>
+      Effect.sync(() => {
+        received = request;
+        return [];
+      }),
+  });
+
+  await runReview({ scope: "working-tree" }).pipe(
+    Effect.provide(git),
+    Effect.provide(config),
+    Effect.provide(engine),
+    Effect.runPromise,
+  );
+
+  const serialized = JSON.stringify(received);
+  expect(serialized).not.toContain(apiKey);
+  expect(serialized).not.toContain(privateKey);
+  expect(serialized).toContain("[REDACTED:api-key]");
+  expect(serialized).toContain("[REDACTED:private-key]");
+  expect(received?.context.files[0]?.patch).toContain(
+    "+[REDACTED:private-key]\n+\n+",
+  );
+});
+
+test("engine failures cannot echo the original secret through their cause", async () => {
+  const apiKey = "sk-proj-Z9y8X7w6V5u4T3s2R1q0P9o8";
+  const git = makeGit({
+    readDiff: () =>
+      Effect.succeed({
+        files: [
+          gitTextFile(
+            "src/secret.ts",
+            "working-tree",
+            `@@ -0,0 +1 @@\n+const apiKey = "${apiKey}";\n`,
+          ),
+        ],
+      }),
+  });
+  const engine = Layer.succeed(ReviewEngine, {
+    transport: "local",
+    review: (request) =>
+      Effect.fail(
+        new ReviewEngineFailure({
+          message: "Provider rejected the redacted request.",
+          cause: request,
+        }),
+      ),
+  });
+
+  const error = await runReview({ scope: "working-tree" }).pipe(
+    Effect.provide(git),
+    Effect.provide(config),
+    Effect.provide(engine),
+    Effect.flip,
+    Effect.runPromise,
+  );
+
+  expect(JSON.stringify(error)).not.toContain(apiKey);
+  expect(JSON.stringify(error)).toContain("[REDACTED:api-key]");
+});
+
 test("runReview produces deterministic findings from added marker lines", async () => {
   const git = makeGit({
     readDiff: () =>
