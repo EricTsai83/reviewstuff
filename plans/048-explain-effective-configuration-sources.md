@@ -2,12 +2,12 @@
 
 [← Plan index](./README.md)
 
-**Depends on:** 018。 **Learning:** observable configuration provenance without
+**Depends on:** 018、026、049。 **Learning:** observable configuration provenance without
 duplicating resolution logic。
 
-> 本 plan 排在 018 之後：013、017、026 先固定 privacy、engine/provider/model 與 workload
-> config contract，018 再固定 selected repository root。此時建立 provenance 可避免前期欄位
-> churn，也能讓 config path 從一開始就相對於正確的 repository context。
+> Plan 018、049 已先固定 selected repository root 與唯一 YAML config contract；013、017、026
+> 再固定 privacy、engine/provider/model 與 workload fields。此時建立 provenance 可避免前期欄位
+> churn，並讓 config path 從一開始就指向 canonical repository config。
 
 ## Goal
 
@@ -26,7 +26,7 @@ reviewstuff config show --dir ../repo
 Human output 顯示 config file 狀態、effective value 與來源，例如：
 
 ```text
-Config: /repo/reviewstuff.config.json (loaded)
+Config: /repo/.reviewstuff.yaml (loaded)
 workload      light       config: review.workload
 engine        openai      cli: --engine
 model         gpt-5.1     provider-default: openai
@@ -106,7 +106,7 @@ value/source。加入新 config 欄位時，必須同步更新 source coverage �
 
 ## Out Of Scope
 
-- 編輯、產生或自動修復 `reviewstuff.config.json`。
+- 編輯、產生或自動修復 `.reviewstuff.yaml`。
 - Global、organization、central repository config 或 inheritance。
 - Array merge/deduplication rules。
 - Credentials、engine health、storage 或 network diagnostics（由 034 doctor 負責）。

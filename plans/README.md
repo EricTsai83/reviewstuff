@@ -49,13 +49,14 @@ service skeleton、flag 或空目錄。
 | [x] DONE | 010 | [Preserve Normalized File And Hunk Metadata](./010-preserve-normalized-file-and-hunk-metadata.md) | Safe cloud dogfood |
 | [x] DONE | 011 | [Select Complete Hunks Within A Request Budget](./011-select-complete-hunks-within-a-request-budget.md) | Safe cloud dogfood |
 | [x] DONE | 012 | [Integrate Budgeted Coverage Into Review Output](./012-integrate-budgeted-coverage-into-review-output.md) | Safe cloud dogfood |
+| [ ] TODO | 018 | [Select A Repository With `--dir`](./018-select-a-repository-with-dir.md) | Repository config foundation |
+| [ ] TODO | 049 | [Adopt Repository-root YAML Configuration](./049-adopt-repository-root-yaml-configuration.md) | Repository config foundation |
 | [ ] TODO | 013 | [Enforce An Explicit Cloud Privacy Mode](./013-enforce-an-explicit-cloud-privacy-mode.md) | Safe cloud dogfood |
 | [ ] TODO | 014 | [Redact Obvious Secrets Before Engine Input](./014-redact-obvious-secrets-before-engine-input.md) | Safe cloud dogfood |
 | [ ] TODO | 015 | [Preview The Exact Outbound Request](./015-preview-the-exact-outbound-request.md) | Safe cloud dogfood |
 | [ ] TODO | 016 | [Implement The OpenAI Responses Adapter](./016-implement-the-openai-responses-adapter.md) | Safe cloud dogfood |
 | [ ] TODO | 017 | [Select And Run The OpenAI Engine](./017-select-and-run-the-openai-engine.md) | Safe cloud dogfood |
 | [ ] TODO | 026 | [Add The Light Review Workload](./026-add-light-review-workload.md) | Safe cloud dogfood |
-| [ ] TODO | 018 | [Select A Repository With `--dir`](./018-select-a-repository-with-dir.md) | Real repository UX |
 | [ ] TODO | 048 | [Explain Effective Configuration Sources](./048-explain-effective-configuration-sources.md) | Real repository UX |
 | [ ] TODO | 019 | [Review An Exact Committed Range](./019-review-an-exact-committed-range.md) | Real repository UX |
 | [ ] TODO | 020 | [Review A Branch Using Merge-base Semantics](./020-review-a-branch-using-merge-base-semantics.md) | Real repository UX |
@@ -86,15 +87,17 @@ service skeleton、flag 或空目錄。
 | [ ] TODO | 046 | [Document Installation And First Review](./046-document-installation-and-first-review.md) | Supported macOS v1 |
 | [ ] TODO | 047 | [Pass The Read-only macOS v1 Readiness Gate](./047-pass-the-read-only-macos-v1-readiness-gate.md) | Supported macOS v1 |
 
-狀態只能由 `TODO` → `IN PROGRESS` → `DONE`；從 007 開始維持嚴格順序。
+狀態只能由 `TODO` → `IN PROGRESS` → `DONE`；從 007 開始依本表列序維持嚴格順序，不以 plan
+編號大小判定先後。
 
 ## Milestones
 
 | Milestone | Plans | Exit state |
 | --- | --- | --- |
 | Baseline closure | 005 | 現有 deterministic review pipeline 正式關閉 |
+| Repository config foundation | 018、049 | selected Git root、`--dir` 與 strict repository YAML config |
 | Safe cloud dogfood | 007–017、026 | 有 budget、privacy、redaction、preview 的 OpenAI review 與 light workload |
-| Real repository UX | 018、048、019–025 | repo root、effective config provenance、commit/branch scopes、filters、skip policy |
+| Real repository UX | 048、019–025 | effective config provenance、commit/branch scopes、filters、skip policy |
 | Durable automation beta | 027–037 | sessions、queries、exit-code contract、NDJSON、doctor、Codex CLI、provider reliability |
 | Supported macOS v1 | 038–047 | report polish、CI、signed artifact、Homebrew/npm、docs、readiness gate |
 

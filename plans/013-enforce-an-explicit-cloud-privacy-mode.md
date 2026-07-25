@@ -2,7 +2,7 @@
 
 [← Plan index](./README.md)
 
-**Depends on:** 012。 **Learning:** policy gate before transport。
+**Depends on:** 049。 **Learning:** policy gate before transport。
 
 **Working state:** fresh/default config 是 `local-only`；任何 cloud transport 都在 engine call 前被拒絕，
 除非使用者明確選擇 `cloud-allowed`。

@@ -2,7 +2,7 @@
 
 [← Plan index](./README.md)
 
-**Depends on:** 017。 **Learning:** reduce optional context work through one
+**Depends on:** 017、049。 **Learning:** reduce optional context work through one
 explicit workload contract without branching the review architecture。
 
 > 本 plan 已提前至 017 之後執行：light workload 的價值由真實 engine 解鎖（省 token 與
@@ -61,19 +61,17 @@ config/CLI resolution 控制。
 
 ## Config Evolution
 
-current config schema 將 `preset` 替換為 `workload`：
+current config schema 將 `preset` 替換為 `workload`；repository config 的檔名、YAML parsing 與
+root lookup 已由 Plan 018、049 固定，本 plan 只演進 typed config fields：
 
-```json
-{
-  "review": {
-    "workload": "light",
-    "engine": "fake",
-    "provider": "fake",
-    "model": "fake-reviewer-v1",
-    "timeoutMs": 120000,
-    "concurrency": 2
-  }
-}
+```yaml
+review:
+  workload: light
+  engine: fake
+  provider: fake
+  model: fake-reviewer-v1
+  timeoutMs: 120000
+  concurrency: 2
 ```
 
 loader 在 Effect Schema boundary 嚴格 decode raw config，再由 config resolution 產生單一
