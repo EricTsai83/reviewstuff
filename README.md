@@ -10,6 +10,7 @@ Each selected Git working-tree repository may contain one optional
 ```yaml
 review:
   preset: standard
+  privacy: local-only
   engine: fake
   provider: fake
   model: fake-reviewer-v1
@@ -25,6 +26,10 @@ not loaded.
 
 Precedence is `CLI flags > repository configuration > preset/built-in
 defaults`.
+
+`privacy` defaults to `local-only`. A cloud transport must be explicitly
+enabled with `--privacy cloud-allowed` or `review.privacy: cloud-allowed`
+before any repository data can be sent to it.
 
 ## Development
 

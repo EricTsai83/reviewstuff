@@ -4,6 +4,7 @@ import {
   NonNegativeIntegerSchema,
   PositiveIntegerSchema,
 } from "../shared/schema-primitives";
+import { ReviewPrivacyModeSchema } from "../domain/privacy";
 
 export const reviewConfigFileName = ".reviewstuff.yaml";
 
@@ -17,6 +18,7 @@ export const ReviewRequestBudgetConfigSchema = Schema.Struct({
 
 export const ReviewConfigSchema = Schema.Struct({
   preset: Schema.optionalKey(ReviewPresetNameSchema),
+  privacy: Schema.optionalKey(ReviewPrivacyModeSchema),
   engine: Schema.optionalKey(NonEmptyStringSchema),
   provider: Schema.optionalKey(NonEmptyStringSchema),
   model: Schema.optionalKey(NonEmptyStringSchema),

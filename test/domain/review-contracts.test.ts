@@ -6,6 +6,7 @@ import {
   decodeReviewReport,
   decodeReviewReportV3,
   decodeReviewReportV4,
+  decodeReviewReportV5,
 } from "../../src/domain/report";
 
 const readFixture = async (name: string): Promise<unknown> =>
@@ -15,20 +16,20 @@ const readFixture = async (name: string): Promise<unknown> =>
     ).text(),
   );
 
-test("current report fixture passes the strict v4 decode boundary", async () => {
-  const fixture = await readFixture("review-report-v4.json");
+test("current report fixture passes the strict v5 decode boundary", async () => {
+  const fixture = await readFixture("review-report-v5.json");
 
   expect(JSON.stringify(decodeReviewReport(fixture))).toBe(
     JSON.stringify(fixture),
   );
-  expect(JSON.stringify(decodeReviewReportV4(fixture))).toBe(
+  expect(JSON.stringify(decodeReviewReportV5(fixture))).toBe(
     JSON.stringify(fixture),
   );
 });
 
-test("v4 rejects contradictory summary, coverage, and budget values", async () => {
-  const report = decodeReviewReportV4(
-    await readFixture("review-report-v4.json"),
+test("v5 rejects invalid privacy and contradictory report values", async () => {
+  const report = decodeReviewReportV5(
+    await readFixture("review-report-v5.json"),
   );
   const reviewedFile = report.coverage.files[0];
   if (reviewedFile?.status !== "reviewed") {
@@ -65,18 +66,52 @@ test("v4 rejects contradictory summary, coverage, and budget values", async () =
   ];
 
   for (const invalidReport of invalidReports) {
-    expect(() => decodeReviewReportV4(invalidReport)).toThrow(
+    expect(() => decodeReviewReportV5(invalidReport)).toThrow(
       "Invalid review report",
     );
   }
+
+  expect(() =>
+    decodeReviewReportV5({
+      ...report,
+      privacy: { ...report.privacy, decision: "refused" },
+    })
+  ).toThrow('Expected "allowed", got "refused"');
+  expect(() =>
+    decodeReviewReportV5({
+      ...report,
+      privacy: {
+        mode: "local-only",
+        transport: "cloud",
+        decision: "allowed",
+      },
+    })
+  ).toThrow();
 });
 
-test("previous v3 fixture is strictly decoded and explicitly migrated", async () => {
+test("previous v4 fixture is strictly decoded and explicitly migrated", async () => {
+  const fixture = await readFixture("review-report-v4.json");
+  const migrated = decodeReviewReport(fixture);
+
+  expect(migrated).toMatchObject({
+    schemaVersion: 5,
+    privacy: {
+      mode: "local-only",
+      transport: "local",
+      decision: "allowed",
+    },
+  });
+  expect(() => decodeReviewReportV5(fixture)).toThrow();
+  expect(decodeReviewReportV4(fixture).schemaVersion).toBe(4);
+});
+
+test("v3 fixture migrates through v4 to the current report", async () => {
   const fixture = await readFixture("review-report-v3.json");
   const migrated = decodeReviewReport(fixture);
 
   expect(migrated).toMatchObject({
-    schemaVersion: 4,
+    schemaVersion: 5,
+    privacy: { mode: "local-only", transport: "local", decision: "allowed" },
     summary: { truncatedFiles: 0 },
     coverage: { schemaVersion: 2 },
     budget: { totalReservedTokens: 0, fitsBudget: true },
@@ -85,10 +120,10 @@ test("previous v3 fixture is strictly decoded and explicitly migrated", async ()
   expect(decodeReviewReportV3(fixture).schemaVersion).toBe(3);
 });
 
-test("v2 fixtures still migrate through v3 to the current report", async () => {
+test("v2 fixtures still migrate through v3 and v4 to the current report", async () => {
   const migrated = decodeReviewReport(await readFixture("review-report-v2.json"));
 
-  expect(migrated.schemaVersion).toBe(4);
+  expect(migrated.schemaVersion).toBe(5);
   expect(migrated.findings[0]).toMatchObject({
     severity: "medium",
     category: "correctness",
@@ -97,8 +132,8 @@ test("v2 fixtures still migrate through v3 to the current report", async () => {
 });
 
 test("unknown report versions are refused instead of guessed", () => {
-  expect(() => decodeReviewReport({ schemaVersion: 5 })).toThrow(
-    "Unsupported review report schema version: 5",
+  expect(() => decodeReviewReport({ schemaVersion: 6 })).toThrow(
+    "Unsupported review report schema version: 6",
   );
 });
 

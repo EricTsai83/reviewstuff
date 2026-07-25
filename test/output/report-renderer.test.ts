@@ -7,8 +7,13 @@ import {
 
 test("terminal reports escape control characters in untrusted fields", () => {
   const report: ReviewReport = {
-    schemaVersion: 4,
+    schemaVersion: 5,
     scope: "working-tree",
+    privacy: {
+      mode: "local-only",
+      transport: "local",
+      decision: "allowed",
+    },
     summary: {
       changedFiles: 1,
       reviewedFiles: 1,
@@ -77,8 +82,13 @@ test("terminal reports escape control characters in untrusted fields", () => {
 
 test("terminal reports incomplete coverage and skip reasons", () => {
   const report: ReviewReport = {
-    schemaVersion: 4,
+    schemaVersion: 5,
     scope: "working-tree",
+    privacy: {
+      mode: "local-only",
+      transport: "local",
+      decision: "allowed",
+    },
     summary: {
       changedFiles: 3,
       reviewedFiles: 0,
@@ -143,8 +153,13 @@ test("terminal reports incomplete coverage and skip reasons", () => {
 
 test("terminal reports files skipped by the request budget", () => {
   const report: ReviewReport = {
-    schemaVersion: 4,
+    schemaVersion: 5,
     scope: "staged",
+    privacy: {
+      mode: "local-only",
+      transport: "local",
+      decision: "allowed",
+    },
     summary: {
       changedFiles: 1,
       reviewedFiles: 0,

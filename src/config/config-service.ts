@@ -8,6 +8,7 @@ import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 import * as SchemaIssue from "effect/SchemaIssue";
 import type { RepositoryContext } from "../domain/repository";
+import type { ReviewPrivacyMode } from "../domain/privacy";
 import {
   type ReviewPresetName,
   type ReviewRequestBudgetConfig,
@@ -23,6 +24,7 @@ import {
 
 export interface ResolvedReviewConfig {
   readonly preset: ReviewPresetName;
+  readonly privacy: ReviewPrivacyMode;
   readonly engine: string;
   readonly provider: string;
   readonly model: string;
@@ -33,6 +35,7 @@ export interface ResolvedReviewConfig {
 
 export interface ReviewConfigOverrides {
   readonly preset?: ReviewPresetName;
+  readonly privacy?: ReviewPrivacyMode;
   readonly engine?: string;
   readonly provider?: string;
   readonly model?: string;
@@ -47,6 +50,7 @@ export const reviewPresets: Readonly<
   Record<ReviewPresetName, ReviewPresetConfig>
 > = {
   quick: {
+    privacy: "local-only",
     engine: "fake",
     provider: "fake",
     model: "fake-reviewer-v1",
@@ -59,6 +63,7 @@ export const reviewPresets: Readonly<
     },
   },
   standard: {
+    privacy: "local-only",
     engine: "fake",
     provider: "fake",
     model: "fake-reviewer-v1",
@@ -135,6 +140,7 @@ const configFieldChildren: Readonly<Record<string, ReadonlySet<string>>> = {
     "engine",
     "model",
     "preset",
+    "privacy",
     "provider",
     "requestBudget",
     "timeoutMs",
@@ -153,6 +159,7 @@ const configFieldConstraints: Readonly<Record<string, string>> = {
   "review.engine": "Expected a non-empty string.",
   "review.model": "Expected a non-empty string.",
   "review.preset": "Expected quick or standard.",
+  "review.privacy": "Expected local-only or cloud-allowed.",
   "review.provider": "Expected a non-empty string.",
   "review.requestBudget": "Expected a complete request-budget mapping.",
   "review.requestBudget.fixedRequestOverheadTokens":

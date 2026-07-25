@@ -6,6 +6,7 @@ import {
   decodeReviewFindingV1,
   type ReviewFindingV1,
 } from "../domain/finding";
+import type { ReviewTransport } from "../domain/privacy";
 import type {
   ReviewRequestFileV1,
   ReviewRequestV1,
@@ -29,6 +30,9 @@ export interface ReviewEngineExecution {
 export class ReviewEngine extends Context.Service<
   ReviewEngine,
   {
+    /** Classifies whether invoking this engine keeps repository data on the
+     * local machine or sends it to a remote service. */
+    readonly transport: ReviewTransport;
     /** Reviews the exact normalized request. Budgeting and truncation are
      * upstream policy decisions; engines must not silently truncate it. */
     readonly review: (
@@ -113,7 +117,10 @@ const review = (
     { concurrency: execution.concurrency },
   ).pipe(Effect.map((fileFindings) => fileFindings.flat()));
 
-export const make: ReviewEngine["Service"] = ReviewEngine.of({ review });
+export const make: ReviewEngine["Service"] = ReviewEngine.of({
+  transport: "local",
+  review,
+});
 
 export const layer: Layer.Layer<ReviewEngine> = Layer.succeed(
   ReviewEngine,

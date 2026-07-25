@@ -23,6 +23,13 @@ const presetFlag = Flag.choice("preset", ["quick", "standard"]).pipe(
   Flag.optional,
   Flag.withDescription("Select the quick or standard review preset."),
 );
+const privacyFlag = Flag.choice("privacy", [
+  "local-only",
+  "cloud-allowed",
+]).pipe(
+  Flag.optional,
+  Flag.withDescription("Control whether cloud review transports are allowed."),
+);
 const optionalNonEmptyFlag = (name: string, description: string) =>
   Flag.string(name).pipe(
     Flag.filter((value) => value.length > 0, () => `${name} must not be empty`),
@@ -68,6 +75,7 @@ interface ReviewConfigFlags {
   readonly engine: Option.Option<string>;
   readonly model: Option.Option<string>;
   readonly preset: Option.Option<"quick" | "standard">;
+  readonly privacy: Option.Option<"local-only" | "cloud-allowed">;
   readonly provider: Option.Option<string>;
   readonly timeoutMs: Option.Option<number>;
 }
@@ -76,6 +84,7 @@ const collectCliConfigOverrides = (
   flags: ReviewConfigFlags,
 ): ReviewConfigOverrides => ({
   ...(Option.isSome(flags.preset) && { preset: flags.preset.value }),
+  ...(Option.isSome(flags.privacy) && { privacy: flags.privacy.value }),
   ...(Option.isSome(flags.engine) && { engine: flags.engine.value }),
   ...(Option.isSome(flags.provider) && { provider: flags.provider.value }),
   ...(Option.isSome(flags.model) && { model: flags.model.value }),
@@ -92,6 +101,7 @@ export const reviewCommand = Command.make("review", {
   json: jsonFlag,
   model: modelFlag,
   preset: presetFlag,
+  privacy: privacyFlag,
   provider: providerFlag,
   staged: stagedFlag,
   timeoutMs: timeoutFlag,

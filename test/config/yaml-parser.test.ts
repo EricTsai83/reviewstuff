@@ -38,6 +38,7 @@ describe("strict YAML config parser", () => {
       parseYamlConfig(`
 review:
   preset: standard
+  privacy: local-only
   engine: fake
   provider: fake
   model: fake-reviewer-v1
@@ -47,6 +48,7 @@ review:
     ).toEqual({
       review: {
         preset: "standard",
+        privacy: "local-only",
         engine: "fake",
         provider: "fake",
         model: "fake-reviewer-v1",

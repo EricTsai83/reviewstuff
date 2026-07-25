@@ -9,6 +9,7 @@ import {
   TruncatedFileCoverageSchema,
 } from "./review-file";
 import { ReviewScopeSchema } from "./scope";
+import { ReviewAllowedPrivacyDecisionSchema } from "./privacy";
 import {
   NonEmptyStringSchema,
   NonNegativeIntegerSchema,
@@ -75,6 +76,16 @@ export const ReviewReportV4Schema = Schema.Struct({
   findings: Schema.Array(ReviewFindingV1Schema),
 });
 
+export const ReviewReportV5Schema = Schema.Struct({
+  schemaVersion: Schema.Literal(5),
+  scope: ReviewScopeSchema,
+  privacy: ReviewAllowedPrivacyDecisionSchema,
+  summary: ReviewReportSummaryV4Schema,
+  coverage: ReviewCoverageV2Schema,
+  budget: ReviewBudgetEstimateV1Schema,
+  findings: Schema.Array(ReviewFindingV1Schema),
+});
+
 export const ReviewReportV3Schema = Schema.Struct({
   schemaVersion: Schema.Literal(3),
   scope: ReviewScopeSchema,
@@ -105,16 +116,21 @@ export const ReviewReportV2Schema = Schema.Struct({
 export type ReviewReportSummaryV3 = typeof ReviewReportSummarySchema.Type;
 export type ReviewReportSummaryV4 = typeof ReviewReportSummaryV4Schema.Type;
 export type ReviewReportSummary = ReviewReportSummaryV4;
+export type ReviewReportV5 = typeof ReviewReportV5Schema.Type;
 export type ReviewReportV4 = typeof ReviewReportV4Schema.Type;
 export type ReviewReportV3 = typeof ReviewReportV3Schema.Type;
 export type ReviewReportV2 = typeof ReviewReportV2Schema.Type;
-export type ReviewReport = ReviewReportV4;
+export type ReviewReport = ReviewReportV5;
 
 const invalidReviewReport = (reason: string): never => {
   throw new Error(`Invalid review report: ${reason}`);
 };
 
-const validateReviewReportV4 = (report: ReviewReportV4): ReviewReportV4 => {
+const validateCurrentReportContents = <
+  Report extends ReviewReportV4 | ReviewReportV5,
+>(
+  report: Report,
+): Report => {
   const reviewedFiles = report.coverage.files.filter(
     (file) => file.status === "reviewed",
   ).length;
@@ -194,8 +210,15 @@ const validateReviewReportV4 = (report: ReviewReportV4): ReviewReportV4 => {
 };
 
 export const decodeReviewReportV4 = (input: unknown): ReviewReportV4 =>
-  validateReviewReportV4(
+  validateCurrentReportContents(
     Schema.decodeUnknownSync(ReviewReportV4Schema)(input, {
+      onExcessProperty: "error",
+    }),
+  );
+
+export const decodeReviewReportV5 = (input: unknown): ReviewReportV5 =>
+  validateCurrentReportContents(
+    Schema.decodeUnknownSync(ReviewReportV5Schema)(input, {
       onExcessProperty: "error",
     }),
   );
@@ -255,29 +278,50 @@ export const migrateReviewReportV3 = (
     },
   });
 
+export const migrateReviewReportV4 = (
+  report: ReviewReportV4,
+): ReviewReportV5 =>
+  decodeReviewReportV5({
+    ...report,
+    schemaVersion: 5,
+    privacy: {
+      mode: "local-only",
+      transport: "local",
+      decision: "allowed",
+    },
+  });
+
 const readSchemaVersion = (input: unknown): unknown =>
   typeof input === "object" && input !== null && "schemaVersion" in input
     ? input.schemaVersion
     : undefined;
 
-export const decodeReviewReport = (input: unknown): ReviewReportV4 => {
+export const decodeReviewReport = (input: unknown): ReviewReportV5 => {
   const schemaVersion = readSchemaVersion(input);
 
+  if (schemaVersion === 5) {
+    return decodeReviewReportV5(input);
+  }
+
   if (schemaVersion === 4) {
-    return decodeReviewReportV4(input);
+    return migrateReviewReportV4(decodeReviewReportV4(input));
   }
 
   if (schemaVersion === 3) {
-    return migrateReviewReportV3(decodeReviewReportV3(input));
+    return migrateReviewReportV4(
+      migrateReviewReportV3(decodeReviewReportV3(input)),
+    );
   }
 
   if (schemaVersion === 2) {
-    return migrateReviewReportV3(
-      migrateReviewReportV2(decodeReviewReportV2(input)),
+    return migrateReviewReportV4(
+      migrateReviewReportV3(
+        migrateReviewReportV2(decodeReviewReportV2(input)),
+      ),
     );
   }
 
   throw new Error(
-    `Unsupported review report schema version: ${String(schemaVersion)}; supported versions are 2, 3, and 4`,
+    `Unsupported review report schema version: ${String(schemaVersion)}; supported versions are 2, 3, 4, and 5`,
   );
 };

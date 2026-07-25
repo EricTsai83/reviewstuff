@@ -87,11 +87,12 @@ Resolution precedence：explicit CLI workload > config workload > `standard` def
 只需要收到已正規化、已 budget 的 exact request；把 workload 塞進 provider request
 會讓 Plan 016 的 adapter 無故承擔上游 policy。
 
-Report contract 升版並加入 effective workload，舊 report migration 預設為 `standard`：
+Plan 013 已由 privacy metadata 建立 `ReviewReportV5`。本 plan 再升版加入
+effective workload，舊 report migration 預設為 `standard`：
 
 ```ts
-interface ReviewReportV5 {
-  readonly schemaVersion: 5
+interface ReviewReportV6 {
+  readonly schemaVersion: 6
   readonly workload: ReviewWorkload
   // existing scope, summary, coverage, budget, findings
 }

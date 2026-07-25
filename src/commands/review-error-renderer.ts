@@ -103,6 +103,8 @@ export const renderReviewError = (error: RunReviewError): string =>
     },
     ReviewSelectionUnsupportedError: (selectionError) =>
       `Unsupported review selection: engine=${escapeTerminalText(selectionError.engine)}, provider=${escapeTerminalText(selectionError.provider)}, model=${escapeTerminalText(selectionError.model)}. This build supports engine=fake, provider=fake, model=fake-reviewer-v1.`,
+    ReviewCloudPrivacyError: () =>
+      "Cloud review is disabled by privacy=local-only. Re-run with `--privacy cloud-allowed` or set `review.privacy: cloud-allowed` in .reviewstuff.yaml after confirming repository data may be sent to the configured provider.",
     ReviewTimeoutError: (timeoutError) =>
       `Review timed out after ${Duration.format(Duration.millis(timeoutError.timeoutMilliseconds))}.`,
     ReviewEngineFailure: (engineError) =>

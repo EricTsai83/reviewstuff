@@ -51,7 +51,7 @@ service skeleton、flag 或空目錄。
 | [x] DONE | 012 | [Integrate Budgeted Coverage Into Review Output](./012-integrate-budgeted-coverage-into-review-output.md) | Safe cloud dogfood |
 | [x] DONE | 018 | [Select A Repository With `--dir`](./018-select-a-repository-with-dir.md) | Repository config foundation |
 | [x] DONE | 049 | [Adopt Repository-root YAML Configuration](./049-adopt-repository-root-yaml-configuration.md) | Repository config foundation |
-| [ ] TODO | 013 | [Enforce An Explicit Cloud Privacy Mode](./013-enforce-an-explicit-cloud-privacy-mode.md) | Safe cloud dogfood |
+| [x] DONE | 013 | [Enforce An Explicit Cloud Privacy Mode](./013-enforce-an-explicit-cloud-privacy-mode.md) | Safe cloud dogfood |
 | [ ] TODO | 014 | [Redact Obvious Secrets Before Engine Input](./014-redact-obvious-secrets-before-engine-input.md) | Safe cloud dogfood |
 | [ ] TODO | 015 | [Preview The Exact Outbound Request](./015-preview-the-exact-outbound-request.md) | Safe cloud dogfood |
 | [ ] TODO | 016 | [Implement The OpenAI Responses Adapter](./016-implement-the-openai-responses-adapter.md) | Safe cloud dogfood |

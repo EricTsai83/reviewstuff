@@ -89,6 +89,7 @@ describe("review config loading", () => {
       Effect.succeed(`
 review:
   preset: quick
+  privacy: cloud-allowed
   engine: fake
   provider: fake
   model: fake-reviewer-v1
@@ -103,6 +104,7 @@ review:
 
     expect(config).toEqual({
       preset: "quick",
+      privacy: "cloud-allowed",
       engine: "fake",
       provider: "fake",
       model: "fake-reviewer-v1",
@@ -156,6 +158,11 @@ review:
       "review:\n  preset: thorough\n",
       ["review", "preset"],
       "unsupported preset",
+    ],
+    [
+      "review:\n  privacy: implicit\n",
+      ["review", "privacy"],
+      "unsupported privacy mode",
     ],
     [
       "review:\n  timeoutMs: 0\n",
@@ -235,9 +242,12 @@ describe("review config resolution", () => {
       ...reviewPresets.standard,
       preset: "standard",
     });
+    expect(resolveReviewConfig(undefined).privacy).toBe("local-only");
   });
 
   test("quick and standard presets have distinct execution budgets", () => {
+    expect(reviewPresets.quick.privacy).toBe("local-only");
+    expect(reviewPresets.standard.privacy).toBe("local-only");
     expect(reviewPresets.quick.timeoutMs).toBeLessThan(
       reviewPresets.standard.timeoutMs,
     );
@@ -252,6 +262,7 @@ describe("review config resolution", () => {
         {
           review: {
             preset: "quick",
+            privacy: "cloud-allowed",
             engine: "config-engine",
             provider: "config-provider",
             model: "config-model",
@@ -261,12 +272,14 @@ describe("review config resolution", () => {
         },
         {
           preset: "standard",
+          privacy: "local-only",
           engine: "cli-engine",
           model: "cli-model",
         },
       ),
     ).toEqual({
       preset: "standard",
+      privacy: "local-only",
       engine: "cli-engine",
       provider: "config-provider",
       model: "cli-model",

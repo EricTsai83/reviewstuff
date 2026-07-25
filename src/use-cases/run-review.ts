@@ -8,12 +8,18 @@ import {
 } from "../config/config-service";
 import type { ReviewFindingV1 } from "../domain/finding";
 import {
+  type ReviewAllowedPrivacyDecision,
+  type ReviewPrivacyDecision,
+  type ReviewPrivacyMode,
+  type ReviewTransport,
+} from "../domain/privacy";
+import {
   compareReviewFileIdentity,
   type ReviewFileCoverage,
 } from "../domain/review-file";
 import {
-  decodeReviewReportV4,
-  type ReviewReportV4,
+  decodeReviewReportV5,
+  type ReviewReportV5,
 } from "../domain/report";
 import type { ReviewScope } from "../domain/scope";
 import {
@@ -50,10 +56,18 @@ export class ReviewSelectionUnsupportedError extends Data.TaggedError(
   readonly model: string;
 }> {}
 
+export class ReviewCloudPrivacyError extends Data.TaggedError(
+  "ReviewCloudPrivacyError",
+)<{
+  readonly mode: "local-only";
+  readonly transport: "cloud";
+}> {}
+
 export type RunReviewError =
   | GitError
   | ConfigError
   | ReviewSelectionUnsupportedError
+  | ReviewCloudPrivacyError
   | ReviewEngineError
   | ReviewTimeoutError;
 
@@ -75,6 +89,31 @@ const ensureSupportedFakeSelection = (
           engine: config.engine,
           provider: config.provider,
           model: config.model,
+        }),
+      );
+
+export const decideReviewPrivacy = (
+  mode: ReviewPrivacyMode,
+  transport: ReviewTransport,
+): ReviewPrivacyDecision => {
+  if (mode === "local-only") {
+    return transport === "local"
+      ? { mode, transport, decision: "allowed" }
+      : { mode, transport, decision: "refused" };
+  }
+
+  return { mode, transport, decision: "allowed" };
+};
+
+const enforceReviewPrivacy = (
+  decision: ReviewPrivacyDecision,
+): Effect.Effect<ReviewAllowedPrivacyDecision, ReviewCloudPrivacyError> =>
+  decision.decision === "allowed"
+    ? Effect.succeed(decision)
+    : Effect.fail(
+        new ReviewCloudPrivacyError({
+          mode: decision.mode,
+          transport: decision.transport,
         }),
       );
 
@@ -136,7 +175,8 @@ const buildReviewReport = (
   diff: GitDiff,
   selection: ReviewSelectionV1,
   findings: ReadonlyArray<ReviewFindingV1>,
-): ReviewReportV4 => {
+  privacy: ReviewAllowedPrivacyDecision,
+): ReviewReportV5 => {
   const coverageFiles = buildCoverageFiles(diff, selection);
   const reviewedFiles = coverageFiles.filter((file) =>
     file.status === "reviewed"
@@ -148,9 +188,10 @@ const buildReviewReport = (
     file.status === "skipped"
   ).length;
 
-  return decodeReviewReportV4({
-    schemaVersion: 4,
+  return decodeReviewReportV5({
+    schemaVersion: 5,
     scope,
+    privacy,
     summary: {
       changedFiles: coverageFiles.length,
       reviewedFiles,
@@ -173,7 +214,7 @@ export const runReview = ({
   repositoryPath,
   configOverrides = {},
 }: RunReviewInput): Effect.Effect<
-  ReviewReportV4,
+  ReviewReportV5,
   RunReviewError,
   GitService | ConfigService | ReviewEngine
 > =>
@@ -183,6 +224,9 @@ export const runReview = ({
     const engine = yield* ReviewEngine;
     const repository = yield* git.resolveRepository(repositoryPath);
     const config = yield* configService.load(repository, configOverrides);
+    const privacy = yield* enforceReviewPrivacy(
+      decideReviewPrivacy(config.privacy, engine.transport),
+    );
     yield* ensureSupportedFakeSelection(config);
     return yield* Effect.gen(function* () {
       const diff = yield* git.readDiff(repository, scope);
@@ -204,7 +248,13 @@ export const runReview = ({
       const findings = selection.files.length > 0
         ? yield* engine.review(request, { concurrency: config.concurrency })
         : [];
-      return buildReviewReport(scope, diff, selection, findings);
+      return buildReviewReport(
+        scope,
+        diff,
+        selection,
+        findings,
+        privacy,
+      );
     }).pipe(
       Effect.timeoutOrElse({
         duration: config.timeoutMs,

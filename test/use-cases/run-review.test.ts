@@ -14,6 +14,8 @@ import { GitService } from "../../src/git/git-service";
 import type { ReviewRequestV1 } from "../../src/review/review-request";
 import { fallbackReviewRequestEstimator } from "../../src/review/review-budget";
 import {
+  decideReviewPrivacy,
+  ReviewCloudPrivacyError,
   ReviewSelectionUnsupportedError,
   ReviewTimeoutError,
   runReview,
@@ -124,6 +126,107 @@ test("runReview rejects selections that cannot execute yet", async () => {
   );
 });
 
+test("privacy decisions are pure and conservative", () => {
+  expect(decideReviewPrivacy("local-only", "local")).toEqual({
+    mode: "local-only",
+    transport: "local",
+    decision: "allowed",
+  });
+  expect(decideReviewPrivacy("cloud-allowed", "local")).toEqual({
+    mode: "cloud-allowed",
+    transport: "local",
+    decision: "allowed",
+  });
+  expect(decideReviewPrivacy("cloud-allowed", "cloud")).toEqual({
+    mode: "cloud-allowed",
+    transport: "cloud",
+    decision: "allowed",
+  });
+  expect(decideReviewPrivacy("local-only", "cloud")).toEqual({
+    mode: "local-only",
+    transport: "cloud",
+    decision: "refused",
+  });
+});
+
+test("local-only refuses a cloud transport before diff or engine work", async () => {
+  let diffCalls = 0;
+  let engineCalls = 0;
+  const git = makeGit({
+    readDiff: () =>
+      Effect.sync(() => {
+        diffCalls += 1;
+        return { files: [] };
+      }),
+  });
+  const engine = Layer.succeed(ReviewEngine, {
+    transport: "cloud",
+    review: () =>
+      Effect.sync(() => {
+        engineCalls += 1;
+        return [];
+      }),
+  });
+
+  const error = await runReview({ scope: "working-tree" }).pipe(
+    Effect.provide(git),
+    Effect.provide(config),
+    Effect.provide(engine),
+    Effect.flip,
+    Effect.runPromise,
+  );
+
+  expect(error).toEqual(
+    new ReviewCloudPrivacyError({
+      mode: "local-only",
+      transport: "cloud",
+    }),
+  );
+  expect(diffCalls).toBe(0);
+  expect(engineCalls).toBe(0);
+});
+
+test("cloud-allowed invokes a cloud transport and records the decision", async () => {
+  let engineCalls = 0;
+  const git = makeGit({
+    readDiff: () =>
+      Effect.succeed({
+        files: [
+          gitTextFile(
+            "src/cloud.ts",
+            "working-tree",
+            "@@ -0,0 +1 @@\n+export const cloud = true;\n",
+          ),
+        ],
+      }),
+  });
+  const engine = Layer.succeed(ReviewEngine, {
+    transport: "cloud",
+    review: () =>
+      Effect.sync(() => {
+        engineCalls += 1;
+        return [];
+      }),
+  });
+
+  const report = await runReview({
+    scope: "working-tree",
+    configOverrides: { privacy: "cloud-allowed" },
+  }).pipe(
+    Effect.provide(git),
+    Effect.provide(config),
+    Effect.provide(engine),
+    Effect.runPromise,
+  );
+
+  expect(engineCalls).toBe(1);
+  expect(report.privacy).toEqual({
+    mode: "cloud-allowed",
+    transport: "cloud",
+    decision: "allowed",
+  });
+});
+
 test("runReview applies the resolved timeout to Git diff work", async () => {
   const git = makeGit({
     readDiff: () => Effect.never,
@@ -156,6 +259,7 @@ test("runReview applies the same resolved timeout to engine work", async () => {
       }),
   });
   const engine = Layer.succeed(ReviewEngine, {
+    transport: "local",
     review: () => Effect.never,
   });
 
@@ -189,6 +293,7 @@ test("runReview builds the normalized request before invoking the engine", async
   });
   let received: ReviewRequestV1 | undefined;
   const engine = Layer.succeed(ReviewEngine, {
+    transport: "local",
     review: (request) =>
       Effect.sync(() => {
         received = request;
@@ -248,8 +353,13 @@ test("runReview produces deterministic findings from added marker lines", async 
   );
 
   expect(report).toMatchObject({
-    schemaVersion: 4,
+    schemaVersion: 5,
     scope: "working-tree",
+    privacy: {
+      mode: "local-only",
+      transport: "local",
+      decision: "allowed",
+    },
     summary: {
       changedFiles: 1,
       reviewedFiles: 1,
@@ -402,6 +512,7 @@ test("runReview sends only budget-selected hunks and reports the same coverage",
   });
   let received: ReviewRequestV1 | undefined;
   const engine = Layer.succeed(ReviewEngine, {
+    transport: "local",
     review: (request) =>
       Effect.sync(() => {
         received = request;
@@ -498,6 +609,7 @@ test("runReview skips the engine when no hunk fits the request budget", async ()
     Effect.provide(config),
     Effect.provide(
       Layer.succeed(ReviewEngine, {
+        transport: "local",
         review: () =>
           Effect.sync(() => {
             engineCalls += 1;
@@ -540,6 +652,7 @@ test("runReview sends metadata-only files to the engine", async () => {
     Effect.provide(config),
     Effect.provide(
       Layer.succeed(ReviewEngine, {
+        transport: "local",
         review: (request) =>
           Effect.sync(() => {
             engineCalls += 1;
@@ -585,6 +698,7 @@ test("runReview propagates typed engine failures", async () => {
       }),
   });
   const engine = Layer.succeed(ReviewEngine, {
+    transport: "local",
     review: () => Effect.fail(failure),
   });
 

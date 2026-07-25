@@ -20,6 +20,7 @@ import {
   GitWorkingTreeUnavailableError,
 } from "../../src/git/git-service";
 import {
+  ReviewCloudPrivacyError,
   ReviewSelectionUnsupportedError,
   ReviewTimeoutError,
 } from "../../src/use-cases/run-review";
@@ -59,6 +60,13 @@ describe("renderReviewError", () => {
         model: "gpt-example",
       }),
       "Unsupported review selection: engine=openai, provider=openai, model=gpt-example. This build supports engine=fake, provider=fake, model=fake-reviewer-v1.",
+    ],
+    [
+      new ReviewCloudPrivacyError({
+        mode: "local-only",
+        transport: "cloud",
+      }),
+      "Cloud review is disabled by privacy=local-only. Re-run with `--privacy cloud-allowed` or set `review.privacy: cloud-allowed` in .reviewstuff.yaml after confirming repository data may be sent to the configured provider.",
     ],
   ])("renders config failures without causes or stack traces", (error, message) => {
     expect(renderReviewError(error)).toBe(message);

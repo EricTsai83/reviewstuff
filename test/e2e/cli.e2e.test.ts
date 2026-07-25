@@ -223,8 +223,13 @@ describe("reviewstuff binary", () => {
     expect(
       JSON.parse(await runCli(["review", "--json"], { cwd })),
     ).toMatchObject({
-      schemaVersion: 4,
+      schemaVersion: 5,
       scope: "working-tree",
+      privacy: {
+        mode: "local-only",
+        transport: "local",
+        decision: "allowed",
+      },
       summary: {
         changedFiles: 0,
         reviewedFiles: 0,
@@ -251,6 +256,7 @@ describe("reviewstuff binary", () => {
       [
         "review:",
         "  preset: quick",
+        "  privacy: cloud-allowed",
         "  engine: configured-engine",
         "  provider: configured-provider",
         "  model: configured-model",
@@ -266,6 +272,8 @@ describe("reviewstuff binary", () => {
           "review",
           "--preset",
           "standard",
+          "--privacy",
+          "local-only",
           "--engine",
           "fake",
           "--provider",
@@ -280,9 +288,17 @@ describe("reviewstuff binary", () => {
         ],
         { cwd },
       ),
-    ) as { schemaVersion: number };
+    ) as {
+      schemaVersion: number;
+      privacy: { mode: string; transport: string; decision: string };
+    };
 
-    expect(report.schemaVersion).toBe(4);
+    expect(report.schemaVersion).toBe(5);
+    expect(report.privacy).toEqual({
+      mode: "local-only",
+      transport: "local",
+      decision: "allowed",
+    });
   });
 
   test("invalid config does not expose rejected values or a stack trace", async () => {
