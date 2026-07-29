@@ -3,6 +3,12 @@ import { describe, expect, test } from "bun:test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
+import * as Duration from "effect/Duration";
+import {
+  gitCommandArguments,
+  gitCommandTimeoutMilliseconds,
+  gitDiffTimeoutMilliseconds,
+} from "../../src/git/git-command";
 import {
   GitCommandError,
   GitExecutionError,
@@ -31,7 +37,7 @@ const listStaged = [
   "--find-copies-harder",
   "--name-status",
   "-z",
-  "--diff-filter=ACDMRTUXB",
+  "--diff-filter=ACDMRTUX",
   "--",
 ] as const;
 const listUnstaged = [
@@ -39,7 +45,7 @@ const listUnstaged = [
   "--find-copies-harder",
   "--name-status",
   "-z",
-  "--diff-filter=ACDMRTUXB",
+  "--diff-filter=ACDMRTUX",
   "--",
 ] as const;
 const listUntracked = [
@@ -186,7 +192,7 @@ describe("GitService orchestration", () => {
     fixture.verify();
   });
 
-  test("validates repository and forces a stable English locale", async () => {
+  test("validates repository and pins the Git execution environment", async () => {
     const fixture = makeGitRunnerFixture();
     fixture.expectGit(
       detectRepository,
@@ -199,7 +205,25 @@ describe("GitService orchestration", () => {
     );
 
     expect(error).toBeInstanceOf(GitNotRepositoryError);
-    expect(fixture.requests[0]?.environment).toEqual({ LC_ALL: "C" });
+    // An inherited repository location must not redirect the command, and
+    // reviewing must not take optional index locks.
+    expect(fixture.requests[0]?.environment).toEqual({
+      LC_ALL: "C",
+      GIT_OPTIONAL_LOCKS: "0",
+      GIT_DIFF_OPTS: undefined,
+      GIT_DIR: undefined,
+      GIT_WORK_TREE: undefined,
+      GIT_COMMON_DIR: undefined,
+      GIT_INDEX_FILE: undefined,
+      GIT_OBJECT_DIRECTORY: undefined,
+      GIT_ALTERNATE_OBJECT_DIRECTORIES: undefined,
+      GIT_CEILING_DIRECTORIES: undefined,
+      GIT_NAMESPACE: undefined,
+    });
+    expect(fixture.requests[0]?.args).toEqual([
+      ...gitCommandArguments,
+      ...detectRepository,
+    ]);
     fixture.verify();
   });
 
@@ -368,6 +392,51 @@ describe("GitService orchestration", () => {
     fixture.verify();
   });
 
+  test("budgets whole-tree scans separately from metadata commands", async () => {
+    const fixture = makeGitRunnerFixture();
+    expectRepositoryPrelude(fixture, "M\0tracked.ts\0");
+    fixture.expectGit(listUnstaged, gitResult(""));
+    fixture.expectGit(listUntracked, gitResult(""));
+    fixture.expectGit(resolveHead, gitResult(`${"a".repeat(40)}\n`));
+    fixture.expectGit(
+      (args) => args[0] === "diff" && args.includes("--name-status"),
+      gitResult("M\0tracked.ts\0"),
+      "working-tree changes",
+    );
+    fixture.expectGit(
+      (args) => args[0] === "diff" && args.includes("tracked.ts"),
+      gitResult(modifiedPatch("tracked.ts")),
+      "tracked patch",
+    );
+
+    await readDiff(fixture.runner, "working-tree").pipe(Effect.runPromise);
+
+    // Whole-tree scans run copy detection or walk the working tree, so they get
+    // the diff budget; short metadata commands must stay on the 10s budget.
+    const timeoutFor = (
+      matches: (args: ReadonlyArray<string>) => boolean,
+    ): ReadonlyArray<Duration.Input> =>
+      fixture.requests
+        .filter((request) => matches(request.args ?? []))
+        .map((request) => request.timeout);
+
+    expect(timeoutFor((args) => args.includes("diff"))).toEqual([
+      gitDiffTimeoutMilliseconds,
+      gitDiffTimeoutMilliseconds,
+      gitDiffTimeoutMilliseconds,
+      gitDiffTimeoutMilliseconds,
+    ]);
+    expect(timeoutFor((args) => args.includes("ls-files"))).toEqual([
+      gitDiffTimeoutMilliseconds,
+    ]);
+    expect(timeoutFor((args) => args.includes("rev-parse"))).toEqual([
+      gitCommandTimeoutMilliseconds,
+      gitCommandTimeoutMilliseconds,
+      gitCommandTimeoutMilliseconds,
+    ]);
+    fixture.verify();
+  });
+
   test("fails before patch collection when conflicts exist", async () => {
     const fixture = makeGitRunnerFixture();
     expectRepositoryPrelude(fixture, "U\0z.ts\0");
@@ -383,6 +452,26 @@ describe("GitService orchestration", () => {
       throw new Error("Expected GitUnmergedPathsError");
     }
     expect(error.paths).toEqual(["b.ts", "z.ts"]);
+    fixture.verify();
+  });
+
+  test("keeps an unmerged path visible when a listing repeats it", async () => {
+    const fixture = makeGitRunnerFixture();
+    expectRepositoryPrelude(fixture);
+    // Git lists a conflicted path twice in one unstaged listing, and the
+    // per-path deduplication must not drop the unmerged entry.
+    fixture.expectGit(listUnstaged, gitResult("M\0c.ts\0U\0c.ts\0"));
+
+    const error = await readDiff(fixture.runner, "working-tree").pipe(
+      Effect.flip,
+      Effect.runPromise,
+    );
+
+    expect(error).toBeInstanceOf(GitUnmergedPathsError);
+    if (!(error instanceof GitUnmergedPathsError)) {
+      throw new Error("Expected GitUnmergedPathsError");
+    }
+    expect(error.paths).toEqual(["c.ts"]);
     fixture.verify();
   });
 

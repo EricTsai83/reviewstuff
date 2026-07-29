@@ -10,15 +10,40 @@ export interface GitDiffHunk {
   readonly patch: string;
 }
 
-export interface ParsedUnifiedDiff {
+export interface ParsedDiffRecord {
   readonly fileHeader: string;
   readonly hunks: ReadonlyArray<GitDiffHunk>;
   readonly binary: boolean;
+  /** Exact record text, including its file header, terminated by a newline. */
+  readonly patch: string;
+  /**
+   * Path the record reports a change for: the post-image path, or the
+   * pre-image path when the record deletes the file. `undefined` when the
+   * record carries no path shape this parser can attribute, which keeps
+   * attribution explicit instead of guessing.
+   */
+  readonly path: string | undefined;
 }
 
+const recordMarker = "diff --git ";
 const hunkHeaderPattern =
   /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@(?:.*)$/u;
 const noNewlineMarker = "\\ No newline at end of file";
+const devNull = "/dev/null";
+const octalEscapePattern = /^[0-7]{3}$/;
+const quoteByte = 0x22;
+const backslashByte = 0x5c;
+const simpleEscapeBytes: Readonly<Record<string, number>> = {
+  '"': 0x22,
+  "\\": 0x5c,
+  a: 0x07,
+  b: 0x08,
+  f: 0x0c,
+  n: 0x0a,
+  r: 0x0d,
+  t: 0x09,
+  v: 0x0b,
+};
 
 const invalidOutput = (
   operation: string,
@@ -33,6 +58,116 @@ const parseInteger = (value: string): number | undefined => {
   const parsed = Number(value);
   return Number.isSafeInteger(parsed) ? parsed : undefined;
 };
+
+/**
+ * Reverses the C-style quoting Git applies to paths that contain quotes,
+ * backslashes or control bytes. Unquoted tokens are returned unchanged.
+ */
+const unquotePath = (token: string): string | undefined => {
+  if (!token.startsWith('"')) {
+    return token;
+  }
+  if (token.length < 2 || !token.endsWith('"')) {
+    return undefined;
+  }
+
+  const source = Buffer.from(token.slice(1, -1), "utf8");
+  const bytes: Array<number> = [];
+
+  for (let index = 0; index < source.length; index += 1) {
+    const byte = source[index];
+    if (byte === undefined || byte === quoteByte) {
+      return undefined;
+    }
+    if (byte !== backslashByte) {
+      bytes.push(byte);
+      continue;
+    }
+
+    const escaped = source[index + 1];
+    if (escaped === undefined) {
+      return undefined;
+    }
+
+    const simple = simpleEscapeBytes[String.fromCharCode(escaped)];
+    if (simple !== undefined) {
+      bytes.push(simple);
+      index += 1;
+      continue;
+    }
+
+    const octal = source.toString("latin1", index + 1, index + 4);
+    if (!octalEscapePattern.test(octal)) {
+      return undefined;
+    }
+    bytes.push(Number.parseInt(octal, 8));
+    index += 3;
+  }
+
+  return Buffer.from(bytes).toString("utf8");
+};
+
+const prefixedPath = (
+  token: string,
+  prefix: "a/" | "b/",
+): string | undefined => {
+  if (token === devNull) {
+    return undefined;
+  }
+
+  const unquoted = unquotePath(token);
+  return unquoted !== undefined && unquoted.startsWith(prefix)
+    ? unquoted.slice(prefix.length)
+    : undefined;
+};
+
+const lineValue = (
+  lines: ReadonlyArray<string>,
+  prefix: string,
+): string | undefined => {
+  const line = lines.find((candidate) => candidate.startsWith(prefix));
+  return line === undefined ? undefined : line.slice(prefix.length);
+};
+
+const sidePath = (
+  lines: ReadonlyArray<string>,
+  side: "old" | "new",
+): string | undefined => {
+  const contentHeader = lineValue(lines, side === "old" ? "--- " : "+++ ");
+  if (contentHeader !== undefined) {
+    // Git terminates a content header with a tab when the path contains a
+    // space. A path that itself ends with a tab is quoted, so the escaped tab
+    // stays inside the quotes and only the separator is removed here.
+    const value = contentHeader.endsWith("\t")
+      ? contentHeader.slice(0, -1)
+      : contentHeader;
+
+    return prefixedPath(value, side === "old" ? "a/" : "b/");
+  }
+
+  const renameOrCopy = lineValue(
+    lines,
+    side === "old" ? "rename from " : "rename to ",
+  ) ??
+    lineValue(lines, side === "old" ? "copy from " : "copy to ");
+  if (renameOrCopy !== undefined) {
+    return unquotePath(renameOrCopy);
+  }
+
+  // A record without content or rename headers, such as a mode-only change,
+  // keeps both sides at one path, which Git prints as `a/<path> b/<path>`.
+  const marker = lines[0]?.slice(recordMarker.length) ?? "";
+  if ((marker.length - 5) % 2 !== 0) {
+    return undefined;
+  }
+  const pathLength = (marker.length - 5) / 2;
+  const path = marker.slice(2, 2 + pathLength);
+
+  return pathLength > 0 && marker === `a/${path} b/${path}` ? path : undefined;
+};
+
+const recordPath = (lines: ReadonlyArray<string>): string | undefined =>
+  sidePath(lines, "new") ?? sidePath(lines, "old");
 
 const parseHunk = (
   lines: ReadonlyArray<string>,
@@ -149,33 +284,40 @@ const validateFileHeader = (
   return hasCompletePair || hasEmptyFileChange;
 };
 
-export const parseUnifiedDiff = (
-  output: string,
+const parseRecord = (
+  lines: ReadonlyArray<string>,
   operation: string,
-): Effect.Effect<ParsedUnifiedDiff, GitInvalidOutputError> => {
-  if (!output.endsWith("\n")) {
-    return Effect.fail(invalidOutput(operation, output));
-  }
-
-  const lines = output.slice(0, -1).split("\n");
-  if (
-    !lines[0]?.startsWith("diff --git ") ||
-    lines.slice(1).some((line) => line.startsWith("diff --git "))
-  ) {
-    return Effect.fail(invalidOutput(operation, output));
-  }
-
+  output: string,
+): Effect.Effect<ParsedDiffRecord, GitInvalidOutputError> => {
+  const patch = `${lines.join("\n")}\n`;
+  const firstHunkIndex = lines.findIndex((line) => line.startsWith("@@"));
+  // Hunk content can start with `--- ` or `+++ `, so paths are only read from
+  // the record's header lines.
+  const path = recordPath(
+    firstHunkIndex === -1 ? lines : lines.slice(0, firstHunkIndex),
+  );
   const binary = lines.some((line) =>
     line.startsWith("Binary files ") || line === "GIT binary patch"
   );
   if (binary) {
-    return Effect.succeed({ fileHeader: output, hunks: [], binary: true });
+    return Effect.succeed({
+      fileHeader: patch,
+      hunks: [],
+      binary: true,
+      patch,
+      path,
+    });
   }
 
-  const firstHunkIndex = lines.findIndex((line) => line.startsWith("@@"));
   if (firstHunkIndex === -1) {
     return validateFileHeader(lines, false)
-      ? Effect.succeed({ fileHeader: output, hunks: [], binary: false })
+      ? Effect.succeed({
+        fileHeader: patch,
+        hunks: [],
+        binary: false,
+        patch,
+        path,
+      })
       : Effect.fail(invalidOutput(operation, output));
   }
 
@@ -196,6 +338,40 @@ export const parseUnifiedDiff = (
       fileHeader: `${fileHeaderLines.join("\n")}\n`,
       hunks,
       binary: false,
+      patch,
+      path,
     })),
+  );
+};
+
+/**
+ * Parses Git patch output into one record per `diff --git` boundary.
+ *
+ * A pathspec-limited diff can legitimately describe more than one record, so
+ * callers select the records that belong to the file they asked for.
+ */
+export const parseUnifiedDiff = (
+  output: string,
+  operation: string,
+): Effect.Effect<ReadonlyArray<ParsedDiffRecord>, GitInvalidOutputError> => {
+  if (!output.endsWith("\n")) {
+    return Effect.fail(invalidOutput(operation, output));
+  }
+
+  const lines = output.slice(0, -1).split("\n");
+  if (!lines[0]?.startsWith(recordMarker)) {
+    return Effect.fail(invalidOutput(operation, output));
+  }
+
+  const recordStarts = lines.flatMap((line, index) =>
+    line.startsWith(recordMarker) ? [index] : []
+  );
+
+  return Effect.forEach(recordStarts, (start, index) =>
+    parseRecord(
+      lines.slice(start, recordStarts[index + 1] ?? lines.length),
+      operation,
+      output,
+    )
   );
 };

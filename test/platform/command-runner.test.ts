@@ -110,6 +110,47 @@ describe("CommandRunner", () => {
     expect(result.exitCode).toBe(0);
   });
 
+  test("decodes a multi-byte sequence split across chunk boundaries", async () => {
+    const text = "審查中文";
+    const encoded = Buffer.from(text, "utf8");
+    const splitAt = 2;
+
+    const result = await runWithProcess(
+      makeProcess(
+        Stream.fromArray([
+          new Uint8Array(encoded.subarray(0, splitAt)),
+          new Uint8Array(encoded.subarray(splitAt)),
+        ]),
+        Effect.succeed(ChildProcessSpawner.ExitCode(0)),
+      ),
+    ).pipe(Effect.runPromise);
+
+    expect(result.stdout).toBe(text);
+  });
+
+  test("keeps a truncated trailing multi-byte sequence visible", async () => {
+    // Dropping the tail silently would hide that the output is incomplete.
+    const result = await runWithProcess(
+      makeProcess(
+        Stream.fromArray([new Uint8Array([0xe4, 0xb8, 0xad, 0xe4])]),
+        Effect.succeed(ChildProcessSpawner.ExitCode(0)),
+      ),
+    ).pipe(Effect.runPromise);
+
+    expect(result.stdout).toBe("中�");
+  });
+
+  test("decodes multi-byte output larger than one pipe read", async () => {
+    const text = "中".repeat(100_000);
+    const result = await run([
+      "-e",
+      `process.stdout.write("中".repeat(100000));`,
+    ], 4 * 1024 * 1024).pipe(Effect.runPromise);
+
+    expect(result.stdout).toBe(text);
+    expect(result.stdout).not.toContain("�");
+  });
+
   test("returns stdout, stderr, and a non-zero exit code", async () => {
     const result = await run([
       "-e",

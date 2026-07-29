@@ -1,4 +1,5 @@
 import * as Effect from "effect/Effect";
+import { gitCommandArguments } from "../../src/git/git-command";
 import type {
   CommandExecutionError,
   CommandRequest,
@@ -6,7 +7,16 @@ import type {
   Service,
 } from "../../src/platform/command-runner";
 
-const literalPathspecPrefix = "--literal-pathspecs";
+/**
+ * Matchers describe the operation-specific arguments, so the pinned prefix
+ * every Git command carries is stripped before matching.
+ */
+const withoutPinnedPrefix = (
+  args: ReadonlyArray<string>,
+): ReadonlyArray<string> =>
+  gitCommandArguments.every((argument, index) => args[index] === argument)
+    ? args.slice(gitCommandArguments.length)
+    : args;
 
 export type GitArgumentsMatcher =
   | ReadonlyArray<string>
@@ -69,9 +79,7 @@ export const makeGitRunnerFixture = () => {
     run: (request) => {
       requests.push(request);
       const fullArguments = request.args ?? [];
-      const args = fullArguments[0] === literalPathspecPrefix
-        ? fullArguments.slice(1)
-        : fullArguments;
+      const args = withoutPinnedPrefix(fullArguments);
       const expectation = expectations.find((candidate) =>
         !candidate.consumed && matches(candidate.matcher, args)
       );

@@ -3,7 +3,6 @@ import { GitInvalidOutputError } from "./git-errors";
 
 export type GitChangeStatus =
   | "A"
-  | "B"
   | "C"
   | "D"
   | "M"
@@ -66,7 +65,9 @@ export const parseNulSeparatedPaths = (
 export const parseChangeStatus = (
   value: string,
 ): { readonly status: GitChangeStatus; readonly score?: number } | undefined => {
-  if (!/^(?:[ABCDTUX]|M(?:\d{3})?|[RC]\d{3})$/.test(value)) {
+  // `B` ("pairing broken") requires `--break-rewrites`, which this codebase
+  // never passes, so it is not part of the accepted contract.
+  if (!/^(?:[ACDTUX]|M(?:\d{3})?|[RC]\d{3})$/.test(value)) {
     return undefined;
   }
 

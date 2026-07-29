@@ -95,6 +95,285 @@ describe("Git diff patch collection", () => {
     fixture.verify();
   });
 
+  test("reports a typechange once by merging its delete and create records", async () => {
+    const fixture = makeGitRunnerFixture();
+    const deleteRecord = [
+      "diff --git a/link.txt b/link.txt",
+      "deleted file mode 100644",
+      "index ce01362..0000000",
+      "--- a/link.txt",
+      "+++ /dev/null",
+      "@@ -1 +0,0 @@",
+      "-hello",
+      "",
+    ].join("\n");
+    const createHeader = [
+      "diff --git a/link.txt b/link.txt",
+      "new file mode 120000",
+      "index 0000000..78accb3",
+      "--- /dev/null",
+      "+++ b/link.txt",
+      "",
+    ].join("\n");
+    const createHunk = "@@ -0,0 +1 @@\n+target.txt\n";
+    fixture.expectGit(
+      (args) => args[0] === "diff" && args.includes("link.txt"),
+      gitResult(`${deleteRecord}${createHeader}${createHunk}`),
+    );
+
+    const collection = await collectDiffPatches({
+      runner: fixture.runner,
+      targets: [{
+        path: "link.txt",
+        pathspecs: ["link.txt"],
+        status: "T",
+      }],
+      source: "working-tree",
+      repositoryRoot,
+    }).pipe(Effect.runPromise);
+
+    expect(collection.files).toHaveLength(1);
+    const [file] = collection.files;
+    expect(file).toMatchObject({
+      kind: "text",
+      path: "link.txt",
+      status: "T",
+      patch: `${deleteRecord}${createHeader}${createHunk}`,
+    });
+    // The second record repeats its own header on each of its hunks, so any
+    // selected subset still reconstructs a valid multi-record diff.
+    expect(file?.kind === "text" ? file.hunks.map((hunk) => hunk.patch) : [])
+      .toEqual([
+        "@@ -1 +0,0 @@\n-hello\n",
+        `${createHeader}${createHunk}`,
+      ]);
+    fixture.verify();
+  });
+
+  test("repeats a later record header on every one of its hunks", async () => {
+    const fixture = makeGitRunnerFixture();
+    const deleteRecord = [
+      "diff --git a/swap.txt b/swap.txt",
+      "deleted file mode 100644",
+      "index ce01362..0000000",
+      "--- a/swap.txt",
+      "+++ /dev/null",
+      "@@ -1 +0,0 @@",
+      "-hello",
+      "",
+    ].join("\n");
+    const createHeader = [
+      "diff --git a/swap.txt b/swap.txt",
+      "new file mode 100644",
+      "index 0000000..3333333",
+      "--- /dev/null",
+      "+++ b/swap.txt",
+      "",
+    ].join("\n");
+    const firstCreateHunk = "@@ -0,0 +1 @@\n+first\n";
+    const secondCreateHunk = "@@ -0,0 +5 @@\n+second\n";
+    fixture.expectGit(
+      (args) => args[0] === "diff" && args.includes("swap.txt"),
+      gitResult(
+        `${deleteRecord}${createHeader}${firstCreateHunk}${secondCreateHunk}`,
+      ),
+    );
+
+    const collection = await collectDiffPatches({
+      runner: fixture.runner,
+      targets: [{
+        path: "swap.txt",
+        pathspecs: ["swap.txt"],
+        status: "T",
+      }],
+      source: "working-tree",
+      repositoryRoot,
+    }).pipe(Effect.runPromise);
+
+    const [file] = collection.files;
+    // The request budget can select the second hunk without the first, so both
+    // must carry the header that identifies the record they belong to.
+    expect(file?.kind === "text" ? file.hunks.map((hunk) => hunk.patch) : [])
+      .toEqual([
+        "@@ -1 +0,0 @@\n-hello\n",
+        `${createHeader}${firstCreateHunk}`,
+        `${createHeader}${secondCreateHunk}`,
+      ]);
+    fixture.verify();
+  });
+
+  test.each([
+    [
+      "leading",
+      [
+        "diff --git a/edge.txt b/edge.txt",
+        "deleted file mode 100644",
+        "index e69de29..0000000",
+        "",
+      ].join("\n"),
+      [
+        "diff --git a/edge.txt b/edge.txt",
+        "new file mode 120000",
+        "index 0000000..78accb3",
+        "--- /dev/null",
+        "+++ b/edge.txt",
+        "@@ -0,0 +1 @@",
+        "+target.txt",
+        "",
+      ].join("\n"),
+    ],
+    [
+      "trailing",
+      [
+        "diff --git a/edge.txt b/edge.txt",
+        "deleted file mode 120000",
+        "index 78accb3..0000000",
+        "--- a/edge.txt",
+        "+++ /dev/null",
+        "@@ -1 +0,0 @@",
+        "-target.txt",
+        "",
+      ].join("\n"),
+      [
+        "diff --git a/edge.txt b/edge.txt",
+        "new file mode 100644",
+        "index 0000000..e69de29",
+        "",
+      ].join("\n"),
+    ],
+  ])(
+    // An empty file becoming a symlink produces a header-only delete record;
+    // a symlink becoming an empty file produces a header-only create record.
+    "reconstructs a typechange with a %s header-only record",
+    async (_position, firstRecord, secondRecord) => {
+      const fixture = makeGitRunnerFixture();
+      fixture.expectGit(
+        (args) => args[0] === "diff" && args.includes("edge.txt"),
+        gitResult(`${firstRecord}${secondRecord}`),
+      );
+
+      const collection = await collectDiffPatches({
+        runner: fixture.runner,
+        targets: [{
+          path: "edge.txt",
+          pathspecs: ["edge.txt"],
+          status: "T",
+        }],
+        source: "working-tree",
+        repositoryRoot,
+      }).pipe(Effect.runPromise);
+
+      const [file] = collection.files;
+      if (file?.kind !== "text") {
+        throw new Error("Expected a text file");
+      }
+      // Selecting every hunk must reproduce both records, so no metadata is
+      // lost when one of them contributes no hunk of its own.
+      expect(
+        `${file.fileHeader}${file.hunks.map((hunk) => hunk.patch).join("")}`,
+      ).toBe(`${firstRecord}${secondRecord}`);
+      fixture.verify();
+    },
+  );
+
+  test("refuses to attribute a record that reports another path", async () => {
+    const fixture = makeGitRunnerFixture();
+    const output = addedPatch("other.ts");
+    fixture.expectGit(
+      (args) => args[0] === "diff" && args.includes("wanted.ts"),
+      gitResult(output),
+    );
+
+    const error = await collectDiffPatches({
+      runner: fixture.runner,
+      targets: [target("wanted.ts")],
+      source: "staged",
+      repositoryRoot,
+    }).pipe(Effect.flip, Effect.runPromise);
+
+    expect(error).toBeInstanceOf(GitInvalidOutputError);
+    fixture.verify();
+  });
+
+  test("collects only the copy record when the copy source also changed", async () => {
+    const fixture = makeGitRunnerFixture();
+    const copyRecord = [
+      "diff --git a/src.txt b/copy.txt",
+      "similarity index 100%",
+      "copy from src.txt",
+      "copy to copy.txt",
+      "",
+    ].join("\n");
+    const modifiedSourceRecord = [
+      "diff --git a/src.txt b/src.txt",
+      "index 35fbd83..1253dfb 100644",
+      "--- a/src.txt",
+      "+++ b/src.txt",
+      "@@ -1 +1,2 @@",
+      " aaa",
+      "+EXTRA",
+      "",
+    ].join("\n");
+    fixture.expectGit(
+      (args) => args[0] === "diff" && args.includes("copy.txt"),
+      gitResult(`${copyRecord}${modifiedSourceRecord}`),
+    );
+
+    const collection = await collectDiffPatches({
+      runner: fixture.runner,
+      targets: [{
+        path: "copy.txt",
+        pathspecs: ["src.txt", "copy.txt"],
+        status: "C",
+        score: 100,
+        previousPath: "src.txt",
+      }],
+      source: "staged",
+      repositoryRoot,
+    }).pipe(Effect.runPromise);
+
+    expect(collection.files).toEqual([{
+      kind: "text",
+      path: "copy.txt",
+      previousPath: "src.txt",
+      score: 100,
+      source: "staged",
+      status: "C",
+      patch: copyRecord,
+      fileHeader: copyRecord,
+      hunks: [],
+    }]);
+    fixture.verify();
+  });
+
+  test("fails when no record can be attributed to the requested path", async () => {
+    const fixture = makeGitRunnerFixture();
+    const output = `${addedPatch("other.ts")}${addedPatch("another.ts")}`;
+    fixture.expectGit(
+      (args) => args[0] === "diff" && args.includes("wanted.ts"),
+      gitResult(output),
+    );
+
+    const error = await collectDiffPatches({
+      runner: fixture.runner,
+      targets: [{
+        path: "wanted.ts",
+        pathspecs: ["missing.ts", "wanted.ts"],
+        status: "R",
+        previousPath: "missing.ts",
+      }],
+      source: "staged",
+      repositoryRoot,
+    }).pipe(Effect.flip, Effect.runPromise);
+
+    expect(error).toBeInstanceOf(GitInvalidOutputError);
+    if (!(error instanceof GitInvalidOutputError)) {
+      throw new Error("Expected GitInvalidOutputError");
+    }
+    expect(error.outputBytes).toBe(Buffer.byteLength(output));
+    fixture.verify();
+  });
+
   test("preserves binary identity and rename metadata", async () => {
     const fixture = makeGitRunnerFixture();
     fixture.expectGit(

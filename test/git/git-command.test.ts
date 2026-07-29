@@ -84,7 +84,7 @@ describe("Git command helpers", () => {
       fixture.runner,
       "read status",
       ["status"],
-      "/repo",
+      { workingDirectory: "/repo" },
     ).pipe(Effect.flip, Effect.runPromise);
 
     expect(error).toBeInstanceOf(GitCommandError);

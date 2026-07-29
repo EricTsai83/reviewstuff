@@ -126,8 +126,16 @@ const collectOutputStream = (
         ),
       ),
     ),
-    Stream.decodeText(),
-    Stream.runFold(() => "", (output, chunk) => output + chunk),
+    // Bytes are joined before decoding because a multi-byte UTF-8 sequence can
+    // span two chunks; decoding per chunk would drop or corrupt its tail.
+    Stream.runFold(
+      (): Array<Uint8Array> => [],
+      (chunks, chunk) => {
+        chunks.push(chunk);
+        return chunks;
+      },
+    ),
+    Effect.map((chunks) => Buffer.concat(chunks).toString("utf8")),
   );
 
 const runCommand = (

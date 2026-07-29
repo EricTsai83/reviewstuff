@@ -12,6 +12,7 @@ import {
 } from "./git-change-parser";
 import {
   executeGit,
+  gitDiffTimeoutMilliseconds,
   gitMetadataMaxOutputBytes,
   gitObjectMetadataMaxOutputBytes,
   requireGitSuccess,
@@ -80,7 +81,7 @@ const trackedChangeListingArguments = [
   "--find-copies-harder",
   "--name-status",
   "-z",
-  "--diff-filter=ACDMRTUXB",
+  "--diff-filter=ACDMRTUX",
   "--",
 ] as const;
 
@@ -104,7 +105,7 @@ const ensureReviewableWorkingTree = Effect.fn(
     runner,
     operation,
     inRepository(candidatePath, ["rev-parse", "--is-inside-work-tree"]),
-    gitMetadataMaxOutputBytes,
+    { maxOutputBytes: gitMetadataMaxOutputBytes },
   );
 
   if (workingTreeDetection.exitCode !== 0) {
@@ -157,7 +158,9 @@ const resolveRepositoryRoot = (
     inRepository(candidatePath, ["rev-parse", "--show-toplevel"]),
   ).pipe(
     Effect.flatMap((output) => {
-      const root = output.replace(/\r?\n$/, "");
+      // Only the terminating newline is removed: a repository path may itself
+      // legitimately end with a carriage return.
+      const root = output.replace(/\n$/, "");
 
       return root.startsWith("/")
         ? Effect.succeed(root)
@@ -184,6 +187,29 @@ const resolveRepository = Effect.fn("GitService.resolveRepository")(
 
 type TrackedChangeMode = "staged" | "unstaged";
 
+/**
+ * Invariant: one path contributes at most one change to a single scope
+ * collection, so it is collected, reported and counted exactly once.
+ *
+ * An unmerged listing can repeat a path, for example as `U` and `M` in the
+ * same unstaged listing, so `U` wins to keep conflict detection reliable.
+ * Otherwise the first change listed for a path wins.
+ */
+const dedupeChangesByPath = (
+  changes: ReadonlyArray<GitChange>,
+): ReadonlyArray<GitChange> => {
+  const keptByPath = new Map<string, GitChange>();
+
+  for (const change of changes) {
+    const kept = keptByPath.get(change.path);
+    if (kept === undefined || (kept.status !== "U" && change.status === "U")) {
+      keptByPath.set(change.path, change);
+    }
+  }
+
+  return [...keptByPath.values()];
+};
+
 const listTrackedChanges = (
   runner: CommandRunner.Service,
   repositoryRoot: string,
@@ -202,10 +228,15 @@ const listTrackedChanges = (
       ...modeArguments,
       ...trackedChangeListingArguments,
     ],
-    repositoryRoot,
+    {
+      workingDirectory: repositoryRoot,
+      timeoutMilliseconds: gitDiffTimeoutMilliseconds,
+    },
   ).pipe(
     Effect.flatMap((output) =>
-      parseNulSeparatedChanges(output, operation)
+      parseNulSeparatedChanges(output, operation).pipe(
+        Effect.map(dedupeChangesByPath),
+      )
     ),
   );
 };
@@ -225,9 +256,16 @@ const listWorkingTreeChanges = (
       reviewBase,
       ...trackedChangeListingArguments,
     ],
-    repositoryRoot,
+    {
+      workingDirectory: repositoryRoot,
+      timeoutMilliseconds: gitDiffTimeoutMilliseconds,
+    },
   ).pipe(
-    Effect.flatMap((output) => parseNulSeparatedChanges(output, operation)),
+    Effect.flatMap((output) =>
+      parseNulSeparatedChanges(output, operation).pipe(
+        Effect.map(dedupeChangesByPath),
+      )
+    ),
   );
 };
 
@@ -241,10 +279,20 @@ const listUntrackedFiles = (
     runner,
     operation,
     ["ls-files", "--others", "--exclude-standard", "-z", "--"],
-    repositoryRoot,
+    {
+      workingDirectory: repositoryRoot,
+      // Listing untracked files walks the whole working tree, so it needs the
+      // same larger budget as the whole-tree diff scans.
+      timeoutMilliseconds: gitDiffTimeoutMilliseconds,
+    },
   ).pipe(
     Effect.flatMap((output) =>
-      parseNulSeparatedPaths(output, operation)
+      parseNulSeparatedPaths(output, operation).pipe(
+        // Git reports an untracked directory it cannot look inside, such as an
+        // embedded repository, as a single trailing-slash entry. It is not a
+        // file, so neither `diff --no-index` nor `hash-object` can read it.
+        Effect.map((paths) => paths.filter((path) => !path.endsWith("/"))),
+      )
     ),
   );
 };
@@ -269,8 +317,10 @@ const resolveReviewBase = Effect.fn("GitService.resolveReviewBase")(
       runner,
       operation,
       ["rev-parse", "--verify", "--quiet", "HEAD^{commit}"],
-      gitObjectMetadataMaxOutputBytes,
-      repositoryRoot,
+      {
+        maxOutputBytes: gitObjectMetadataMaxOutputBytes,
+        workingDirectory: repositoryRoot,
+      },
     );
 
     if (headCommitVerification.exitCode === 0) {
@@ -326,11 +376,19 @@ const collectWorkingTreeDiff = Effect.fn(
     repositoryRoot,
     reviewBase,
   );
-  const untrackedPatchTargets = untrackedFiles.map((path) => ({
-    path,
-    pathspecs: [path],
-    status: "A" as const,
-  }));
+  // `git rm --cached <path>` leaves the path both tracked as a deletion and
+  // present on disk as untracked, so the tracked change is kept and the
+  // untracked duplicate is dropped.
+  const trackedPaths = new Set(
+    workingTreeChanges.map((change) => change.path),
+  );
+  const untrackedPatchTargets = untrackedFiles
+    .filter((path) => !trackedPaths.has(path))
+    .map((path) => ({
+      path,
+      pathspecs: [path],
+      status: "A" as const,
+    }));
   const [trackedDiff, untrackedDiff] = yield* Effect.all(
     [
       collectDiffPatches({
