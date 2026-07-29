@@ -19,6 +19,10 @@ import {
 export const gitConfigArguments = [
   "-c",
   "core.quotePath=false",
+  // A read-only review must not start git's filesystem-monitor daemon, which
+  // outlives the command, nor execute the monitor hook the user configured.
+  "-c",
+  "core.fsmonitor=false",
   "-c",
   "diff.noprefix=false",
   "-c",

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { symlink } from "node:fs/promises";
+import { chmod, symlink } from "node:fs/promises";
 import {
   makeRepository,
   makeTemporaryDirectory,
@@ -210,6 +210,92 @@ describe("reviewstuff against real Git working-tree shapes", () => {
       reviewedFiles: 1,
       skippedFiles: 0,
     });
+  });
+
+  test("reads real content when a path selects a textconv driver", async () => {
+    // The user's config defines the converter and `.gitattributes` selects the
+    // paths. A converted patch can be empty even though the file changed, which
+    // used to fail the whole review, and it replaces the content the reported
+    // line numbers refer to.
+    const cwd = await makeRepository();
+    // The converter lives outside the repository so it is not itself reviewed.
+    const tools = await makeTemporaryDirectory("reviewstuff-textconv-");
+    await Bun.write(`${tools}/convert.sh`, "#!/bin/sh\necho CONVERTED\n");
+    await chmod(`${tools}/convert.sh`, 0o755);
+    await runGit(cwd, ["config", "diff.demo.textconv", `${tools}/convert.sh`]);
+    await Bun.write(
+      `${cwd}/.gitattributes`,
+      "converted.ts diff=demo\nuntracked.ts diff=demo\n",
+    );
+    await Bun.write(`${cwd}/converted.ts`, "export const version = 1;\n");
+    await runGit(cwd, ["add", ".gitattributes", "converted.ts"]);
+    await runGit(cwd, ["commit", "--quiet", "-m", "add textconv fixture"]);
+    await Bun.write(
+      `${cwd}/converted.ts`,
+      "export const version = 1;\n// REVIEWSTUFF_FAKE_FINDING converted\n",
+    );
+    await Bun.write(
+      `${cwd}/untracked.ts`,
+      "// REVIEWSTUFF_FAKE_FINDING untracked\n",
+    );
+
+    const request = JSON.parse(
+      await runCli(["review", "--dry-run-request", "--json"], { cwd }),
+    ) as {
+      readonly context: {
+        readonly files: ReadonlyArray<{
+          readonly path: string;
+          readonly patch: string;
+        }>;
+      };
+    };
+
+    expect(request.context.files.map((file) => file.path)).toEqual([
+      "converted.ts",
+      "untracked.ts",
+    ]);
+    for (const file of request.context.files) {
+      expect(file.patch).toContain("REVIEWSTUFF_FAKE_FINDING");
+      expect(file.patch).not.toContain("CONVERTED");
+    }
+
+    const report = await review(cwd);
+
+    expect(report.summary).toMatchObject({
+      changedFiles: 2,
+      reviewedFiles: 2,
+      skippedFiles: 0,
+      findings: 2,
+    });
+  });
+
+  test("never runs the configured filesystem-monitor hook", async () => {
+    // `core.fsmonitor` either starts a daemon that outlives the command or, in
+    // hook form, executes a user-configured program on every scan. Neither
+    // belongs in a read-only review.
+    const cwd = await makeRepository();
+    // The hook and its log live outside the repository so neither is reviewed.
+    const tools = await makeTemporaryDirectory("reviewstuff-fsmonitor-");
+    const hookLog = `${tools}/fsmonitor-hook.log`;
+    await Bun.write(
+      `${tools}/fsmonitor-hook.sh`,
+      `#!/bin/sh\necho "ran $*" >> ${hookLog}\nexit 1\n`,
+    );
+    await chmod(`${tools}/fsmonitor-hook.sh`, 0o755);
+    await runGit(cwd, [
+      "config",
+      "core.fsmonitor",
+      `${tools}/fsmonitor-hook.sh`,
+    ]);
+    await Bun.write(
+      `${cwd}/watched.ts`,
+      "// REVIEWSTUFF_FAKE_FINDING watched\n",
+    );
+
+    const report = await review(cwd);
+
+    expect(reportedPaths(report)).toContain("watched.ts");
+    expect(await Bun.file(hookLog).exists()).toBe(false);
   });
 
   test("keeps diff context despite an inherited GIT_DIFF_OPTS", async () => {

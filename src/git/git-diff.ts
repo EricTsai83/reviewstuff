@@ -288,6 +288,16 @@ const readDiffPatch = ({
 const patchCollectionConcurrency = 4;
 const gitDiffExitCodes: ReadonlySet<number> = new Set([0]);
 const gitNoIndexDiffExitCodes: ReadonlySet<number> = new Set([0, 1]);
+/**
+ * Reads the file's real content instead of a `textconv` representation.
+ *
+ * `.gitattributes` selects a diff driver per path and the user's config defines
+ * its `textconv` command, so a converted patch can be empty even when the file
+ * changed, or can replace the content the reported line numbers refer to.
+ * `--no-ext-diff` does not cover this, and the driver name is chosen by the
+ * repository, so it cannot be pinned with `-c` either.
+ */
+const gitPatchContentArguments = ["--no-ext-diff", "--no-textconv"] as const;
 
 export const collectDiffPatches = ({
   runner,
@@ -305,7 +315,7 @@ export const collectDiffPatches = ({
           "diff",
           "--no-index",
           "--no-color",
-          "--no-ext-diff",
+          ...gitPatchContentArguments,
           "--unified=3",
           "--",
           "/dev/null",
@@ -330,7 +340,7 @@ export const collectDiffPatches = ({
         ...diffBaseArguments,
         "--find-copies-harder",
         "--no-color",
-        "--no-ext-diff",
+        ...gitPatchContentArguments,
         "--unified=3",
         "--",
         ...target.pathspecs,
