@@ -2,6 +2,20 @@ import type { ReviewFileCoverage } from "../domain/review-file";
 import type { ReviewReportV7 } from "../domain/report";
 
 const terminalControlCharacter = /[\u0000-\u001f\u007f-\u009f\u2028\u2029]/gu;
+/**
+ * `JSON.stringify` leaves C1 controls, U+2028 and U+2029 as literal characters.
+ * They are valid JSON but break line-oriented consumers and JavaScript `eval`
+ * of the output, so machine output escapes exactly what the terminal renderer
+ * escapes.
+ */
+const jsonUnsafeCharacter = /[\u007f-\u009f\u2028\u2029]/gu;
+
+export const escapeJsonText = (value: string): string =>
+  value.replace(
+    jsonUnsafeCharacter,
+    (character) =>
+      `\\u${character.charCodeAt(0).toString(16).padStart(4, "0")}`,
+  );
 
 export const escapeTerminalText = (value: string): string =>
   value.replace(
@@ -50,7 +64,7 @@ const renderBudget = (report: ReviewReportV7): string =>
   `Review workload: ${report.workload}. Request budget: ${report.budget.totalReservedTokens} of ${report.budget.maxTokens} tokens reserved (${report.budget.selectedRequestTokens} selected request, ${report.budget.fixedRequestOverheadTokens} fixed overhead, ${report.budget.outputReserveTokens} output reserve).`;
 
 export const renderJsonReport = (report: ReviewReportV7): string =>
-  JSON.stringify(report, undefined, 2);
+  escapeJsonText(JSON.stringify(report, undefined, 2));
 
 export const renderTerminalReport = (report: ReviewReportV7): string => {
   if (report.summary.changedFiles === 0) {

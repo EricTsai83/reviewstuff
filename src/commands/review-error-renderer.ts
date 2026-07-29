@@ -115,10 +115,26 @@ export const renderReviewError = (error: RunReviewError): string =>
         : `Review engine authentication failed for provider ${escapeTerminalText(engineError.provider)}.`,
     ReviewEngineConfigurationError: (engineError) =>
       `Invalid ${escapeTerminalText(engineError.engine)} configuration at ${escapeTerminalText(engineError.field)}: ${escapeTerminalText(engineError.message)}`,
-    ReviewEngineTransportError: (engineError) =>
-      engineError.statusCode === undefined
-        ? `Review engine transport failed for provider ${escapeTerminalText(engineError.provider)}.`
-        : `Review engine transport failed for provider ${escapeTerminalText(engineError.provider)} with HTTP status ${engineError.statusCode}.`,
+    ReviewEngineTransportError: (engineError) => {
+      const status = engineError.statusCode === undefined
+        ? ""
+        : ` with HTTP status ${engineError.statusCode}`;
+      const identifiers = [
+        ...(engineError.errorType === undefined
+          ? []
+          : [`type=${escapeTerminalText(engineError.errorType)}`]),
+        ...(engineError.errorCode === undefined
+          ? []
+          : [`code=${escapeTerminalText(engineError.errorCode)}`]),
+      ];
+      const reported = identifiers.length === 0
+        ? ""
+        : ` The provider reported ${identifiers.join(", ")}.`;
+
+      return `Review engine transport failed for provider ${escapeTerminalText(engineError.provider)}${status}.${reported}`;
+    },
+    ReviewEngineResponseTooLargeError: (engineError) =>
+      `Review engine provider ${escapeTerminalText(engineError.provider)} returned more than ${engineError.maxBytes} bytes; the response was refused after ${engineError.observedBytes} bytes.`,
     ReviewEngineTimeoutError: (engineError) =>
       `Review engine request to ${escapeTerminalText(engineError.provider)} timed out after ${Duration.format(Duration.millis(engineError.timeoutMilliseconds))}.`,
     ReviewEngineRefusalError: (engineError) =>

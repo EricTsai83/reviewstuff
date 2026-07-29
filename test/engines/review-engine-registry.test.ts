@@ -12,19 +12,32 @@ import {
 import { ReviewEngineAuthenticationError } from "../../src/engines/review-engine";
 
 test("registry metadata describes only the available implementations", () => {
-  expect(reviewEngineImplementations).toEqual([
+  // The table is the single source of engine metadata, including the model
+  // policy that used to live in a parallel switch.
+  expect(
+    reviewEngineImplementations.map((
+      { acquire: _acquire, ...metadata },
+    ) => metadata),
+  ).toEqual([
     {
       engine: "fake",
       provider: "fake",
       defaultModel: "fake-reviewer-v1",
       transport: "local",
+      acceptsAnyModel: false,
     },
     {
       engine: "openai",
       provider: "openai",
       transport: "cloud",
+      acceptsAnyModel: true,
     },
   ]);
+  expect(
+    reviewEngineImplementations.every(
+      (implementation) => typeof implementation.acquire === "function",
+    ),
+  ).toBe(true);
 });
 
 test("registry resolves the deterministic fake defaults", async () => {

@@ -1,5 +1,5 @@
 import type { ReviewRequestV1 } from "../review/review-request";
-import { escapeTerminalText } from "./report-renderer";
+import { escapeJsonText, escapeTerminalText } from "./report-renderer";
 
 const renderReadableRequestJson = (request: ReviewRequestV1): string =>
   JSON.stringify(request, undefined, 2)
@@ -8,7 +8,7 @@ const renderReadableRequestJson = (request: ReviewRequestV1): string =>
     .join("\n");
 
 export const renderJsonRequestPreview = (request: ReviewRequestV1): string =>
-  JSON.stringify(request, undefined, 2);
+  escapeJsonText(JSON.stringify(request, undefined, 2));
 
 export const renderTerminalRequestPreview = (
   request: ReviewRequestV1,

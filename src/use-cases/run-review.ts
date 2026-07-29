@@ -1,3 +1,4 @@
+import * as Clock from "effect/Clock";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import {
@@ -23,6 +24,7 @@ import {
 } from "../domain/report";
 import type { ReviewScope } from "../domain/scope";
 import {
+  ReviewEngineConfigurationError,
   type ReviewEngineError,
 } from "../engines/review-engine";
 import {
@@ -96,6 +98,26 @@ export const decideReviewPrivacy = (
 
   return { mode, transport, decision: "allowed" };
 };
+
+/**
+ * A cloud engine must reserve output tokens, and the failure has to name the
+ * key the user actually sets. The check lives here because this is the only
+ * layer that sees both the resolved config and the engine's transport.
+ */
+const requireCloudOutputReserve = (
+  resolved: ResolvedReview,
+): Effect.Effect<void, ReviewEngineConfigurationError> =>
+  resolved.engine.transport === "cloud" &&
+    resolved.config.requestBudget.outputReserveTokens < 1
+    ? Effect.fail(
+      new ReviewEngineConfigurationError({
+        engine: resolved.engine.engineId,
+        field: "review.requestBudget.outputReserveTokens",
+        message:
+          "Expected at least 1 reserved output token for a cloud review engine.",
+      }),
+    )
+    : Effect.void;
 
 const enforceReviewPrivacy = (
   decision: ReviewPrivacyDecision,
@@ -220,7 +242,19 @@ interface ResolvedReview {
   readonly engine: ResolvedReviewEngine;
   readonly git: GitService["Service"];
   readonly repository: { readonly root: string };
+  /**
+   * Budget the engine may still spend, always strictly smaller than the outer
+   * review deadline so a provider timeout surfaces as an engine error instead
+   * of the generic review timeout.
+   */
+  readonly remainingEngineBudget: Effect.Effect<number>;
 }
+
+/**
+ * Slice of the review deadline kept for mapping and rendering the engine's own
+ * timeout error after it fires.
+ */
+const engineTimeoutReserveMilliseconds = 250;
 
 const prepareReviewRequest = (
   resolved: ResolvedReview,
@@ -285,7 +319,24 @@ const withResolvedReview = <Success, Error>(
     const repository = yield* git.resolveRepository(repositoryPath);
     const config = yield* configService.load(repository, configOverrides);
     const engine = yield* engineRegistry.resolve(config);
-    return yield* effect({ config, engine, git, repository }).pipe(
+    const startedAt = yield* Clock.currentTimeMillis;
+    const remainingEngineBudget = Clock.currentTimeMillis.pipe(
+      Effect.map((now) =>
+        Math.max(
+          1,
+          config.timeoutMs - (now - startedAt) -
+            engineTimeoutReserveMilliseconds,
+        )
+      ),
+    );
+
+    return yield* effect({
+      config,
+      engine,
+      git,
+      repository,
+      remainingEngineBudget,
+    }).pipe(
       Effect.timeoutOrElse({
         duration: config.timeoutMs,
         orElse: () =>
@@ -327,6 +378,7 @@ export const runReview = (
           resolved.engine.transport,
         ),
       );
+      yield* requireCloudOutputReserve(resolved);
       const engine = yield* resolved.engine.acquire;
       const { diff, request, selection, redaction } = yield* prepareReviewRequest(
         resolved,
@@ -335,7 +387,7 @@ export const runReview = (
       const findings = selection.files.length > 0
         ? yield* engine.review(request, {
           concurrency: resolved.config.concurrency,
-          timeoutMilliseconds: resolved.config.timeoutMs,
+          timeoutMilliseconds: yield* resolved.remainingEngineBudget,
           maxOutputTokens:
             resolved.config.requestBudget.outputReserveTokens,
         })

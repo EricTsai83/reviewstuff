@@ -45,6 +45,9 @@ const privacyFlag = Flag.choice("privacy", [
 );
 const optionalNonEmptyFlag = (name: string, description: string) =>
   Flag.string(name).pipe(
+    // Trim first: a whitespace-only value is not a selection, and a padded one
+    // must not reach config resolution with its padding intact.
+    Flag.map((value) => value.trim()),
     Flag.filter((value) => value.length > 0, () => `${name} must not be empty`),
     Flag.optional,
     Flag.withDescription(description),

@@ -9,8 +9,10 @@ import {
 import {
   make as fakeReviewEngine,
   ReviewEngine,
+  ReviewEngineConfigurationError,
   type ReviewEngineExecution,
   ReviewEngineFailure,
+  ReviewEngineTimeoutError,
 } from "../../src/engines/review-engine";
 import {
   make as makeReviewEngineRegistry,
@@ -479,11 +481,14 @@ test("runReview builds the normalized request before invoking the engine", async
       model: "fake-reviewer-v1",
     },
   });
-  expect(receivedExecution).toEqual({
+  expect(receivedExecution).toMatchObject({
     concurrency: 1,
-    timeoutMilliseconds: 120_000,
     maxOutputTokens: 8_192,
   });
+  // The engine deadline is strictly inside the review deadline so a provider
+  // timeout surfaces as an engine error rather than the generic review timeout.
+  expect(receivedExecution?.timeoutMilliseconds).toBeLessThan(120_000);
+  expect(receivedExecution?.timeoutMilliseconds).toBeGreaterThan(119_000);
 });
 
 test("light reduces selected context without changing selection ordering", async () => {
@@ -541,18 +546,16 @@ test("light reduces selected context without changing selection ordering", async
   expect(received[1]?.context.files.map((file) => file.path)).toEqual([
     "src/a.ts",
   ]);
-  expect(executions).toEqual([
-    {
-      concurrency: 2,
-      timeoutMilliseconds: 120_000,
-      maxOutputTokens: 16_384,
-    },
-    {
-      concurrency: 2,
-      timeoutMilliseconds: 120_000,
-      maxOutputTokens: 8_192,
-    },
+  expect(executions.map(({ concurrency, maxOutputTokens }) => ({
+    concurrency,
+    maxOutputTokens,
+  }))).toEqual([
+    { concurrency: 2, maxOutputTokens: 16_384 },
+    { concurrency: 2, maxOutputTokens: 8_192 },
   ]);
+  for (const execution of executions) {
+    expect(execution.timeoutMilliseconds).toBeLessThan(120_000);
+  }
 });
 
 test("preview returns the exact redacted request without invoking the engine", async () => {
@@ -1249,4 +1252,86 @@ test("redacts a private key that spans two hunks of one file", async () => {
   // both halves must be redacted for the key to stay out of the payload.
   expect(JSON.stringify(received)).not.toContain(privateKeyBodyLine);
   expect(report.redaction.totalRedactions).toBeGreaterThanOrEqual(2);
+});
+
+test("an engine timeout is reported as an engine failure, not a review timeout", async () => {
+  const git = makeGit({
+    readDiff: () =>
+      Effect.succeed({
+        files: [
+          gitTextFile("src/slow.ts", "working-tree", "@@ -0,0 +1 @@\n+slow\n"),
+        ],
+      }),
+  });
+  let receivedBudget: number | undefined;
+  // A provider adapter enforces the budget it is handed; the outer review
+  // deadline must not fire first, or this error would be unreachable.
+  const engine = registryWithEngine({
+    transport: "local",
+    review: (_request, execution) =>
+      Effect.sync(() => {
+        receivedBudget = execution.timeoutMilliseconds;
+      }).pipe(
+        Effect.andThen(Effect.never),
+        Effect.timeoutOrElse({
+          duration: execution.timeoutMilliseconds,
+          orElse: () =>
+            Effect.fail(
+              new ReviewEngineTimeoutError({
+                provider: "fake",
+                timeoutMilliseconds: execution.timeoutMilliseconds,
+              }),
+            ),
+        }),
+      ),
+  });
+
+  const error = await runReview({
+    scope: "working-tree",
+    configOverrides: { timeoutMs: 1_000 },
+  }).pipe(
+    Effect.provide(Layer.mergeAll(git, config, engine)),
+    Effect.flip,
+    Effect.runPromise,
+  );
+
+  expect(error).toBeInstanceOf(ReviewEngineTimeoutError);
+  expect(receivedBudget).toBeLessThan(1_000);
+});
+
+test("a cloud engine refuses a zero output reserve with the config key", async () => {
+  const git = makeGit({
+    readDiff: () =>
+      Effect.succeed({
+        files: [
+          gitTextFile("src/a.ts", "working-tree", "@@ -0,0 +1 @@\n+a\n"),
+        ],
+      }),
+  });
+  const engine = registryWithEngine({
+    transport: "cloud",
+    review: () => Effect.succeed([]),
+  });
+
+  const error = await runReview({
+    scope: "working-tree",
+    configOverrides: {
+      privacy: "cloud-allowed",
+      requestBudget: {
+        maxTokens: 128_000,
+        fixedRequestOverheadTokens: 0,
+        outputReserveTokens: 0,
+      },
+    },
+  }).pipe(
+    Effect.provide(Layer.mergeAll(git, config, engine)),
+    Effect.flip,
+    Effect.runPromise,
+  );
+
+  expect(error).toBeInstanceOf(ReviewEngineConfigurationError);
+  if (!(error instanceof ReviewEngineConfigurationError)) {
+    throw new Error("Expected ReviewEngineConfigurationError");
+  }
+  expect(error.field).toBe("review.requestBudget.outputReserveTokens");
 });

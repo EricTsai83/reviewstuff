@@ -38,6 +38,14 @@ interface ReviewEngineImplementation {
   readonly engine: string;
   readonly provider: string;
   readonly transport: ReviewTransport;
+  /**
+   * Whether the entry accepts any model or only its default. Keeping the policy
+   * in the table means adding an engine does not mean editing a parallel switch.
+   */
+  readonly acceptsAnyModel: boolean;
+  readonly acquire: (
+    options: ReviewEngineRegistryOptions,
+  ) => Effect.Effect<ReviewEngine["Service"], ReviewEngineAuthenticationError>;
 }
 
 export const reviewEngineImplementations: ReadonlyArray<
@@ -48,11 +56,29 @@ export const reviewEngineImplementations: ReadonlyArray<
     provider: "fake",
     defaultModel: "fake-reviewer-v1",
     transport: "local",
+    acceptsAnyModel: false,
+    acquire: () => Effect.succeed(makeFakeReviewEngine),
   },
   {
     engine: "openai",
     provider: "openai",
     transport: "cloud",
+    acceptsAnyModel: true,
+    acquire: (options) => {
+      const apiKey = options.openAIApiKey;
+
+      return apiKey === undefined ||
+          Redacted.value(apiKey).trim().length === 0
+        ? Effect.fail(
+          new ReviewEngineAuthenticationError({ provider: "openai" }),
+        )
+        : Effect.succeed(
+          makeOpenAIResponsesReviewEngine(
+            { apiKey: Redacted.value(apiKey) },
+            options.openAITransport,
+          ),
+        );
+    },
   },
 ];
 
@@ -123,7 +149,7 @@ export const make = (
         const provider = selection.provider ?? implementation.provider;
         const model = selection.model ?? implementation.defaultModel;
         const providerMatches = provider === implementation.provider;
-        const modelMatches = engineId === "openai"
+        const modelMatches = implementation.acceptsAnyModel
           ? model !== undefined
           : model === implementation.defaultModel;
 
@@ -131,33 +157,8 @@ export const make = (
           return yield* unsupportedSelection(selection);
         }
 
-        if (engineId === "fake") {
-          return {
-            acquire: Effect.succeed(makeFakeReviewEngine),
-            engineId,
-            model,
-            provider,
-            transport: implementation.transport,
-          };
-        }
-
-        const apiKey = options.openAIApiKey;
-
         return {
-          acquire:
-            apiKey === undefined ||
-              Redacted.value(apiKey).trim().length === 0
-              ? Effect.fail(
-                new ReviewEngineAuthenticationError({
-                  provider: "openai",
-                }),
-              )
-              : Effect.succeed(
-                makeOpenAIResponsesReviewEngine(
-                  { apiKey: Redacted.value(apiKey) },
-                  options.openAITransport,
-                ),
-              ),
+          acquire: implementation.acquire(options),
           engineId,
           model,
           provider,

@@ -16,6 +16,7 @@ import {
   ReviewEngineIncompleteError,
   ReviewEngineInvalidOutputError,
   ReviewEngineRefusalError,
+  ReviewEngineResponseTooLargeError,
   ReviewEngineTimeoutError,
   ReviewEngineTransportError,
 } from "./review-engine";
@@ -23,6 +24,11 @@ import type { ReviewRequestV1 } from "../review/review-request";
 
 export const openAIResponsesEndpoint =
   "https://api.openai.com/v1/responses";
+/**
+ * Findings responses are small; anything larger is a malfunctioning or hostile
+ * provider, so the body is refused instead of buffered without a bound.
+ */
+export const openAIResponsesMaxResponseBytes = 4 * 1024 * 1024;
 
 export interface OpenAIResponsesReviewEngineConfig {
   readonly apiKey: string;
@@ -34,6 +40,23 @@ export interface OpenAIResponsesTransportRequest {
   readonly headers: Readonly<Record<string, string>>;
   readonly body: string;
   readonly signal: AbortSignal;
+  readonly maxResponseBytes: number;
+}
+
+/**
+ * Signals that a transport stopped reading a response at the byte limit. The
+ * engine maps it to a typed error; the partial body is deliberately dropped.
+ */
+export class OpenAIResponsesResponseLimitError extends Error {
+  readonly maxBytes: number;
+  readonly observedBytes: number;
+
+  constructor(maxBytes: number, observedBytes: number) {
+    super("The OpenAI response exceeded the read limit.");
+    this.name = "OpenAIResponsesResponseLimitError";
+    this.maxBytes = maxBytes;
+    this.observedBytes = observedBytes;
+  }
 }
 
 export interface OpenAIResponsesTransportResponse {
@@ -58,10 +81,32 @@ const OpenAIResponseEnvelopeSchema = Schema.Struct({
     "queued",
     "incomplete",
   ]),
-  incomplete_details: Schema.NullOr(
-    Schema.Struct({ reason: NonEmptyStringSchema }),
+  // Providers omit the field entirely for a completed response and send null
+  // for some terminal states, so both shapes must decode.
+  incomplete_details: Schema.optionalKey(
+    Schema.NullOr(Schema.Struct({ reason: NonEmptyStringSchema })),
+  ),
+  error: Schema.optionalKey(
+    Schema.NullOr(
+      Schema.Struct({
+        type: Schema.optionalKey(Schema.NullOr(Schema.String)),
+        code: Schema.optionalKey(Schema.NullOr(Schema.String)),
+      }),
+    ),
   ),
   output: Schema.Array(Schema.Unknown),
+});
+
+/** Only the provider's own error identifiers are read out of a body. */
+const OpenAIErrorIdentifiersSchema = Schema.Struct({
+  error: Schema.optionalKey(
+    Schema.NullOr(
+      Schema.Struct({
+        type: Schema.optionalKey(Schema.NullOr(Schema.String)),
+        code: Schema.optionalKey(Schema.NullOr(Schema.String)),
+      }),
+    ),
+  ),
 });
 
 const OpenAIOutputItemTypeSchema = Schema.Struct({
@@ -111,6 +156,46 @@ const decodeReviewOutput = Schema.decodeUnknownEffect(
   { onExcessProperty: "error" },
 );
 
+export const readBoundedResponseBody = async (
+  response: Response,
+  maxResponseBytes: number,
+): Promise<string> => {
+  const stream = response.body;
+  if (stream === null) {
+    return "";
+  }
+
+  const reader = stream.getReader();
+  const decoder = new TextDecoder();
+  let observedBytes = 0;
+  let body = "";
+
+  try {
+    for (;;) {
+      const chunk = await reader.read();
+      if (chunk.done) {
+        break;
+      }
+
+      observedBytes += chunk.value.byteLength;
+      if (observedBytes > maxResponseBytes) {
+        throw new OpenAIResponsesResponseLimitError(
+          maxResponseBytes,
+          observedBytes,
+        );
+      }
+
+      // Decoding incrementally keeps one chunk in memory instead of the whole
+      // body twice; the final flush emits any trailing partial sequence.
+      body += decoder.decode(chunk.value, { stream: true });
+    }
+  } finally {
+    await reader.cancel().catch(() => {});
+  }
+
+  return body + decoder.decode();
+};
+
 const defaultTransport: OpenAIResponsesTransport = async (request) => {
   const response = await fetch(request.url, {
     method: "POST",
@@ -121,7 +206,7 @@ const defaultTransport: OpenAIResponsesTransport = async (request) => {
 
   return {
     status: response.status,
-    body: await response.text(),
+    body: await readBoundedResponseBody(response, request.maxResponseBytes),
   };
 };
 
@@ -228,6 +313,40 @@ const parseJson = (
       }),
   });
 
+interface OpenAIErrorIdentifiers {
+  readonly errorType?: string;
+  readonly errorCode?: string;
+}
+
+const envelopeErrorIdentifiers = (
+  error: { readonly type?: string | null; readonly code?: string | null } | null
+    | undefined,
+): OpenAIErrorIdentifiers => ({
+  ...(typeof error?.type === "string" && error.type.length > 0
+    ? { errorType: error.type }
+    : {}),
+  ...(typeof error?.code === "string" && error.code.length > 0
+    ? { errorCode: error.code }
+    : {}),
+});
+
+/**
+ * Extracts only the provider's error identifiers from a body that failed before
+ * envelope decoding. A body that cannot be parsed contributes nothing, so no
+ * response text can leak into the error.
+ */
+const readErrorIdentifiers = (body: string): OpenAIErrorIdentifiers => {
+  try {
+    const decoded = Schema.decodeUnknownSync(OpenAIErrorIdentifiersSchema, {
+      onExcessProperty: "ignore",
+    })(JSON.parse(body) as unknown);
+
+    return envelopeErrorIdentifiers(decoded.error);
+  } catch {
+    return {};
+  }
+};
+
 const decodeEnvelope = (
   input: unknown,
 ): Effect.Effect<
@@ -300,15 +419,9 @@ const extractOutputText = (
       });
     }
 
-    if (outputTexts.length > 1) {
-      return yield* new ReviewEngineInvalidOutputError({
-        provider: "openai",
-        stage: "message",
-        cause: new Error("Expected exactly one output_text content item."),
-      });
-    }
-
-    const outputText = outputTexts[0] ?? "";
+    // A provider may split one JSON document across several output_text parts,
+    // so they are joined before parsing instead of rejected.
+    const outputText = outputTexts.join("");
 
     return outputText.trim().length === 0
       ? yield* new ReviewEngineEmptyOutputError({ provider: "openai" })
@@ -353,12 +466,19 @@ const review = (
           },
           body: buildRequestBody(request, execution),
           signal,
+          maxResponseBytes: openAIResponsesMaxResponseBytes,
         }),
       catch: (cause) =>
-        new ReviewEngineTransportError({
-          provider: "openai",
-          cause,
-        }),
+        cause instanceof OpenAIResponsesResponseLimitError
+          ? new ReviewEngineResponseTooLargeError({
+            provider: "openai",
+            maxBytes: cause.maxBytes,
+            observedBytes: cause.observedBytes,
+          })
+          : new ReviewEngineTransportError({
+            provider: "openai",
+            cause,
+          }),
     }).pipe(
       Effect.timeoutOrElse({
         duration: execution.timeoutMilliseconds,
@@ -383,6 +503,7 @@ const review = (
       return yield* new ReviewEngineTransportError({
         provider: "openai",
         statusCode: response.status,
+        ...readErrorIdentifiers(response.body),
         cause: undefined,
       });
     }
@@ -406,6 +527,7 @@ const review = (
     if (envelope.status !== "completed") {
       return yield* new ReviewEngineTransportError({
         provider: "openai",
+        ...envelopeErrorIdentifiers(envelope.error),
         cause: new Error(
           `OpenAI response ended with status ${envelope.status}.`,
         ),

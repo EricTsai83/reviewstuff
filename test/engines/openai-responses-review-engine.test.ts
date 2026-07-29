@@ -10,6 +10,7 @@ import {
   ReviewEngineIncompleteError,
   ReviewEngineInvalidOutputError,
   ReviewEngineRefusalError,
+  ReviewEngineResponseTooLargeError,
   ReviewEngineTimeoutError,
   ReviewEngineTransportError,
 } from "../../src/engines/review-engine";
@@ -366,4 +367,200 @@ test("aborts transport and returns a typed timeout", async () => {
     }),
   );
   expect(aborted).toBe(true);
+});
+
+test("decodes a completed response that omits incomplete_details", async () => {
+  const transport: Transport = async () => ({
+    status: 200,
+    body: JSON.stringify({
+      status: "completed",
+      output: [{
+        type: "message",
+        content: [{
+          type: "output_text",
+          text: JSON.stringify({ findings: [] }),
+        }],
+      }],
+    }),
+  });
+
+  expect(await runReview(transport)).toEqual([]);
+});
+
+test.each([
+  ["failed", "failed"],
+  ["in progress", "in_progress"],
+  ["queued", "queued"],
+])(
+  "reports a %s envelope with the provider's own identifiers",
+  async (_name, status) => {
+    const transport: Transport = async () => ({
+      status: 200,
+      body: JSON.stringify({
+        status,
+        incomplete_details: null,
+        error: { type: "server_error", code: "internal_error" },
+        output: [],
+      }),
+    });
+
+    const error = await runFailure(transport);
+
+    expect(error).toBeInstanceOf(ReviewEngineTransportError);
+    if (!(error instanceof ReviewEngineTransportError)) {
+      throw new Error("Expected ReviewEngineTransportError");
+    }
+    expect(error.errorType).toBe("server_error");
+    expect(error.errorCode).toBe("internal_error");
+  },
+);
+
+test("keeps a non-2xx body out of the error while reporting its identifiers", async () => {
+  const secretish = "org-private-diagnostic-text";
+  const transport: Transport = async () => ({
+    status: 500,
+    body: JSON.stringify({
+      error: {
+        type: "server_error",
+        code: "engine_overloaded",
+        message: secretish,
+      },
+    }),
+  });
+
+  const error = await runFailure(transport);
+
+  expect(error).toBeInstanceOf(ReviewEngineTransportError);
+  if (!(error instanceof ReviewEngineTransportError)) {
+    throw new Error("Expected ReviewEngineTransportError");
+  }
+  expect(error.statusCode).toBe(500);
+  expect(error.errorType).toBe("server_error");
+  expect(error.errorCode).toBe("engine_overloaded");
+  expect(JSON.stringify(error)).not.toContain(secretish);
+});
+
+test("parses findings split across several output_text parts", async () => {
+  const findings = JSON.stringify({
+    findings: [{
+      id: "finding-1",
+      ruleId: "openai-review",
+      severity: "medium",
+      category: "correctness",
+      confidence: 0.5,
+      message: "Split output.",
+      file: "src/example.ts",
+      line: 3,
+    }],
+  });
+  const transport: Transport = async () => ({
+    status: 200,
+    body: JSON.stringify({
+      status: "completed",
+      output: [{
+        type: "message",
+        content: [
+          { type: "output_text", text: findings.slice(0, 20) },
+          { type: "output_text", text: findings.slice(20) },
+        ],
+      }],
+    }),
+  });
+
+  expect(await runReview(transport)).toEqual([{
+    id: "finding-1",
+    ruleId: "openai-review",
+    severity: "medium",
+    category: "correctness",
+    confidence: 0.5,
+    message: "Split output.",
+    file: "src/example.ts",
+    line: 3,
+  }]);
+});
+
+test("the bounded reader stops at the limit and decodes split characters", async () => {
+  const streamed = (chunks: ReadonlyArray<Uint8Array>): Response =>
+    new Response(
+      new ReadableStream<Uint8Array>({
+        start(controller) {
+          for (const chunk of chunks) {
+            controller.enqueue(chunk);
+          }
+          controller.close();
+        },
+      }),
+    );
+  const encoded = Buffer.from("審查中文", "utf8");
+
+  // A multi-byte character split across chunks must survive the incremental
+  // decode, including the final flush.
+  expect(
+    await OpenAIResponsesReviewEngine.readBoundedResponseBody(
+      streamed([
+        new Uint8Array(encoded.subarray(0, 2)),
+        new Uint8Array(encoded.subarray(2)),
+      ]),
+      1_024,
+    ),
+  ).toBe("審查中文");
+
+  const oversized = OpenAIResponsesReviewEngine.readBoundedResponseBody(
+    streamed([new Uint8Array(700).fill(120), new Uint8Array(700).fill(120)]),
+    1_024,
+  );
+
+  await expect(oversized).rejects.toBeInstanceOf(
+    OpenAIResponsesReviewEngine.OpenAIResponsesResponseLimitError,
+  );
+});
+
+test("maps a response over the read limit to a bounded typed error", async () => {
+  let requestedLimit: number | undefined;
+  const transport: Transport = async (transportRequest) => {
+    requestedLimit = transportRequest.maxResponseBytes;
+
+    throw new OpenAIResponsesReviewEngine.OpenAIResponsesResponseLimitError(
+      1_024,
+      2_048,
+    );
+  };
+
+  const error = await runFailure(transport);
+
+  expect(requestedLimit).toBe(
+    OpenAIResponsesReviewEngine.openAIResponsesMaxResponseBytes,
+  );
+  expect(error).toBeInstanceOf(ReviewEngineResponseTooLargeError);
+  if (!(error instanceof ReviewEngineResponseTooLargeError)) {
+    throw new Error("Expected ReviewEngineResponseTooLargeError");
+  }
+  expect(error.maxBytes).toBe(1_024);
+  expect(error.observedBytes).toBe(2_048);
+});
+
+test("accepts an http localhost endpoint without weakening the HTTPS rule", async () => {
+  // A local mock provider is the one non-HTTPS endpoint allowed; the transport
+  // classification stays "cloud" so privacy enforcement is unaffected.
+  const engine = OpenAIResponsesReviewEngine.make(
+    { apiKey: "test-api-key", endpoint: "http://localhost:8080/v1/responses" },
+    fixtureTransport("completed"),
+  );
+
+  expect(engine.transport).toBe("cloud");
+  expect(await engine.review(request, execution).pipe(Effect.runPromise))
+    .toHaveLength(1);
+
+  const remoteHttp = await OpenAIResponsesReviewEngine.make(
+    { apiKey: "test-api-key", endpoint: "http://example.com/v1/responses" },
+    fixtureTransport("completed"),
+  ).review(request, execution).pipe(Effect.flip, Effect.runPromise);
+
+  expect(remoteHttp).toEqual(
+    new ReviewEngineConfigurationError({
+      engine: "openai-responses",
+      field: "endpoint",
+      message: "Expected an HTTPS URL.",
+    }),
+  );
 });

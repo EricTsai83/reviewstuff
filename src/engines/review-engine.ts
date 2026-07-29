@@ -39,7 +39,26 @@ export class ReviewEngineTransportError extends Data.TaggedError(
 )<{
   readonly provider: string;
   readonly statusCode?: number;
+  /**
+   * Provider-defined error identifiers copied from the response envelope. Only
+   * these two fields are allowlisted: the response body itself stays in `cause`
+   * and is never rendered or logged.
+   */
+  readonly errorType?: string;
+  readonly errorCode?: string;
   readonly cause: unknown;
+}> {}
+
+/**
+ * A provider response that exceeded the read limit. Only bounded counters are
+ * kept: the body itself is never part of the error.
+ */
+export class ReviewEngineResponseTooLargeError extends Data.TaggedError(
+  "ReviewEngineResponseTooLargeError",
+)<{
+  readonly provider: string;
+  readonly maxBytes: number;
+  readonly observedBytes: number;
 }> {}
 
 export class ReviewEngineTimeoutError extends Data.TaggedError(
@@ -91,6 +110,7 @@ export type ReviewEngineError =
   | ReviewEngineAuthenticationError
   | ReviewEngineConfigurationError
   | ReviewEngineTransportError
+  | ReviewEngineResponseTooLargeError
   | ReviewEngineTimeoutError
   | ReviewEngineRefusalError
   | ReviewEngineIncompleteError

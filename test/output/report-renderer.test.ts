@@ -263,3 +263,64 @@ test("terminal reports state redaction only when the payload carried it", () => 
     "Redacted 3 secret(s) before sending: api-key 2, private-key 1.",
   );
 });
+
+test("machine output escapes what the terminal renderer escapes", () => {
+  const report: ReviewReport = {
+    schemaVersion: 7,
+    scope: "working-tree",
+    privacy: { mode: "local-only", transport: "local", decision: "allowed" },
+    privacyEvidence: "recorded",
+    workload: "standard",
+    summary: {
+      changedFiles: 1,
+      reviewedFiles: 1,
+      truncatedFiles: 0,
+      skippedFiles: 0,
+      findings: 1,
+    },
+    coverage: {
+      schemaVersion: 2,
+      complete: true,
+      files: [{
+        path: "src/unsafe.ts",
+        source: "working-tree",
+        status: "reviewed",
+        selectedHunks: 1,
+        totalHunks: 1,
+      }],
+    },
+    budget: {
+      schemaVersion: 1,
+      unit: "tokens",
+      maxTokens: 128_000,
+      fixedRequestOverheadTokens: 100,
+      outputReserveTokens: 16_384,
+      selectedRequestTokens: 200,
+      totalReservedTokens: 16_684,
+      fitsBudget: true,
+    },
+    redaction: { schemaVersion: 1, totalRedactions: 0, reasons: [] },
+    findings: [{
+      id: "finding-1",
+      ruleId: "fake-marker",
+      severity: "medium",
+      category: "correctness",
+      confidence: 1,
+      // C1 control, line separator, and paragraph separator: valid JSON string
+      // characters that break line-oriented consumers if emitted literally.
+      message: "next\u0085line\u2028break\u2029end",
+      file: "src/unsafe.ts",
+      line: 1,
+    }],
+  };
+
+  const json = renderJsonReport(report);
+
+  expect(json).not.toContain("\u0085");
+  expect(json).not.toContain("\u2028");
+  expect(json).not.toContain("\u2029");
+  expect(json).toContain("next\\u0085line\\u2028break\\u2029end");
+  expect(JSON.parse(json)).toEqual(
+    JSON.parse(JSON.stringify(report)),
+  );
+});

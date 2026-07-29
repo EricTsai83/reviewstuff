@@ -388,6 +388,46 @@ describe("reviewstuff binary", () => {
     expect(patch).toContain("[REDACTED:private-key]");
   });
 
+  test("a zero output reserve fails pointing at the config key", async () => {
+    const cwd = await makeRepository();
+    await Bun.write(
+      `${cwd}/.reviewstuff.yaml`,
+      [
+        "review:",
+        "  privacy: cloud-allowed",
+        "  requestBudget:",
+        "    maxTokens: 128000",
+        "    fixedRequestOverheadTokens: 1024",
+        "    outputReserveTokens: 0",
+        "",
+      ].join("\n"),
+    );
+    await Bun.write(`${cwd}/changed.ts`, "export const changed = true;\n");
+
+    const result = await runCliExpectingFailure(
+      ["review", "--engine", "openai", "--model", "gpt-example"],
+      { cwd, env: { ...process.env, OPENAI_API_KEY: "test-key" } },
+    );
+
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toContain(
+      "review.requestBudget.outputReserveTokens",
+    );
+    expect(result.stderr).not.toContain("maxOutputTokens");
+  });
+
+  test("blank string flags are rejected instead of treated as values", async () => {
+    const cwd = await makeRepository();
+
+    const result = await runCliExpectingFailure(
+      ["review", "--model", "   "],
+      { cwd },
+    );
+
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toContain("model must not be empty");
+  });
+
   test("--staged reviews only the index", async () => {
     const cwd = await makeRepository();
     await Bun.write(
