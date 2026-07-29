@@ -1,5 +1,5 @@
 import type { ReviewFileCoverage } from "../domain/review-file";
-import type { ReviewReportV6 } from "../domain/report";
+import type { ReviewReportV7 } from "../domain/report";
 
 const terminalControlCharacter = /[\u0000-\u001f\u007f-\u009f\u2028\u2029]/gu;
 
@@ -32,13 +32,27 @@ const renderTruncatedFile = (
 ): string =>
   `- ${escapeTerminalText(file.path)} [${escapeTerminalText(file.source)}] — ${file.selectedHunks} of ${file.totalHunks} hunks selected (request budget)`;
 
-const renderBudget = (report: ReviewReportV6): string =>
+const renderRedaction = (report: ReviewReportV7): ReadonlyArray<string> => {
+  if (report.redaction.totalRedactions === 0) {
+    return [];
+  }
+
+  const reasons = report.redaction.reasons
+    .map((item) => `${item.reason} ${item.count}`)
+    .join(", ");
+
+  return [
+    `Redacted ${report.redaction.totalRedactions} secret(s) before sending: ${reasons}.`,
+  ];
+};
+
+const renderBudget = (report: ReviewReportV7): string =>
   `Review workload: ${report.workload}. Request budget: ${report.budget.totalReservedTokens} of ${report.budget.maxTokens} tokens reserved (${report.budget.selectedRequestTokens} selected request, ${report.budget.fixedRequestOverheadTokens} fixed overhead, ${report.budget.outputReserveTokens} output reserve).`;
 
-export const renderJsonReport = (report: ReviewReportV6): string =>
+export const renderJsonReport = (report: ReviewReportV7): string =>
   JSON.stringify(report, undefined, 2);
 
-export const renderTerminalReport = (report: ReviewReportV6): string => {
+export const renderTerminalReport = (report: ReviewReportV7): string => {
   if (report.summary.changedFiles === 0) {
     return ["No changes to review.", "", renderBudget(report)].join("\n");
   }
@@ -58,7 +72,12 @@ export const renderTerminalReport = (report: ReviewReportV6): string => {
         ].join("\n");
 
   if (report.coverage.complete) {
-    return [reviewSummaryText, "", renderBudget(report)].join("\n");
+    return [
+      reviewSummaryText,
+      "",
+      ...renderRedaction(report),
+      renderBudget(report),
+    ].join("\n");
   }
 
   const truncatedFiles = report.coverage.files.filter(
@@ -84,6 +103,7 @@ export const renderTerminalReport = (report: ReviewReportV6): string => {
     ...(skippedFiles.length === 0 ? [] : ["Skipped file(s):"]),
     ...skippedFiles.map(renderSkippedFile),
     "",
+    ...renderRedaction(report),
     renderBudget(report),
   ].join("\n");
 };

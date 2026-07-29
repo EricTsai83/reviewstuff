@@ -5,6 +5,7 @@ import * as FileSystem from "effect/FileSystem";
 import packageJson from "../../package.json";
 import {
   binaryPath,
+  largeTextContent,
   makeRepository,
   runCliProcess,
   runCli,
@@ -86,7 +87,7 @@ describe("reviewstuff binary", () => {
     expect(
       JSON.parse(await runCli(["review", "--json"], { cwd })),
     ).toMatchObject({
-      schemaVersion: 6,
+      schemaVersion: 7,
       scope: "working-tree",
       privacy: {
         mode: "local-only",
@@ -159,7 +160,7 @@ describe("reviewstuff binary", () => {
       budget: { maxTokens: number; outputReserveTokens: number };
     };
 
-    expect(report.schemaVersion).toBe(6);
+    expect(report.schemaVersion).toBe(7);
     expect(report.workload).toBe("standard");
     expect(report.budget).toMatchObject({
       maxTokens: 128_000,
@@ -182,7 +183,7 @@ describe("reviewstuff binary", () => {
     await runGit(cwd, ["commit", "--quiet", "-m", "add review config"]);
     await Bun.write(
       `${cwd}/large-context.ts`,
-      `export const context = "${"x".repeat(40_000)}";\n`,
+      largeTextContent(40_000, "context"),
     );
 
     const standard = JSON.parse(
@@ -343,6 +344,48 @@ describe("reviewstuff binary", () => {
       "tracked.ts",
       "untracked.ts",
     ]);
+  });
+
+  test("review reports what the sanitization boundary removed", async () => {
+    const cwd = await makeRepository();
+    await Bun.write(
+      `${cwd}/credentials.ts`,
+      [
+        "// REVIEWSTUFF_FAKE_FINDING credentials",
+        'export const apiKey = "sk-proj-A1b2C3d4E5f6G7h8I9j0K1l2";',
+        'export const pem = "-----BEGIN PRIVATE KEY-----";',
+        "",
+      ].join("\n"),
+    );
+
+    const terminal = await runCli(["review"], { cwd });
+    const report = JSON.parse(
+      await runCli(["review", "--json"], { cwd }),
+    ) as {
+      redaction: {
+        schemaVersion: number;
+        totalRedactions: number;
+        reasons: ReadonlyArray<{ reason: string; count: number }>;
+      };
+      privacyEvidence: string;
+    };
+    const request = JSON.parse(
+      await runCli(["review", "--dry-run-request", "--json"], { cwd }),
+    ) as { context: { files: ReadonlyArray<{ patch: string }> } };
+
+    expect(report.privacyEvidence).toBe("recorded");
+    expect(report.redaction.reasons).toEqual([
+      { reason: "api-key", count: 1 },
+      { reason: "private-key", count: 1 },
+    ]);
+    expect(report.redaction.totalRedactions).toBe(2);
+    expect(terminal).toContain(
+      "Redacted 2 secret(s) before sending: api-key 1, private-key 1.",
+    );
+    const patch = request.context.files[0]?.patch ?? "";
+    expect(patch).not.toContain("sk-proj-A1b2C3d4E5f6G7h8I9j0K1l2");
+    expect(patch).toContain("[REDACTED:api-key]");
+    expect(patch).toContain("[REDACTED:private-key]");
   });
 
   test("--staged reviews only the index", async () => {
@@ -508,7 +551,7 @@ describe("reviewstuff binary", () => {
     );
     await Bun.write(
       `${cwd}/large.txt`,
-      `REVIEWSTUFF_FAKE_FINDING\n${"x".repeat(600 * 1024)}`,
+      `REVIEWSTUFF_FAKE_FINDING\n${largeTextContent(600 * 1024, "oversized")}`,
     );
 
     const report = JSON.parse(
@@ -566,7 +609,7 @@ describe("request preview", () => {
     const repository = await makeRepository();
     await Bun.write(
       `${repository}/large-preview.ts`,
-      `export const preview = "${"x".repeat(40_000)}";\n`,
+      largeTextContent(40_000, "preview"),
     );
     const preview = (workloadArgs: ReadonlyArray<string>) =>
       runCli([

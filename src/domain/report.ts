@@ -8,6 +8,10 @@ import {
   ReviewedFileCoverageSchema,
   TruncatedFileCoverageSchema,
 } from "./review-file";
+import {
+  ReviewRedactionSummaryV1Schema,
+  validateReviewRedactionSummary,
+} from "./redaction";
 import { ReviewScopeSchema } from "./scope";
 import { ReviewAllowedPrivacyDecisionSchema } from "./privacy";
 import { ReviewWorkloadSchema } from "./workload";
@@ -98,6 +102,29 @@ export const ReviewReportV6Schema = Schema.Struct({
   findings: Schema.Array(ReviewFindingV1Schema),
 });
 
+/**
+ * `privacyEvidence` records whether the privacy decision was observed during
+ * the run or assumed while migrating a report that predates the field, so a
+ * migrated report never looks like it carries real privacy evidence.
+ */
+export const ReviewReportPrivacyEvidenceSchema = Schema.Literals([
+  "recorded",
+  "assumed-by-migration",
+]);
+
+export const ReviewReportV7Schema = Schema.Struct({
+  schemaVersion: Schema.Literal(7),
+  scope: ReviewScopeSchema,
+  privacy: ReviewAllowedPrivacyDecisionSchema,
+  privacyEvidence: ReviewReportPrivacyEvidenceSchema,
+  workload: ReviewWorkloadSchema,
+  summary: ReviewReportSummaryV4Schema,
+  coverage: ReviewCoverageV2Schema,
+  budget: ReviewBudgetEstimateV1Schema,
+  redaction: ReviewRedactionSummaryV1Schema,
+  findings: Schema.Array(ReviewFindingV1Schema),
+});
+
 export const ReviewReportV3Schema = Schema.Struct({
   schemaVersion: Schema.Literal(3),
   scope: ReviewScopeSchema,
@@ -128,19 +155,26 @@ export const ReviewReportV2Schema = Schema.Struct({
 export type ReviewReportSummaryV3 = typeof ReviewReportSummarySchema.Type;
 export type ReviewReportSummaryV4 = typeof ReviewReportSummaryV4Schema.Type;
 export type ReviewReportSummary = ReviewReportSummaryV4;
+export type ReviewReportPrivacyEvidence =
+  typeof ReviewReportPrivacyEvidenceSchema.Type;
+export type ReviewReportV7 = typeof ReviewReportV7Schema.Type;
 export type ReviewReportV6 = typeof ReviewReportV6Schema.Type;
 export type ReviewReportV5 = typeof ReviewReportV5Schema.Type;
 export type ReviewReportV4 = typeof ReviewReportV4Schema.Type;
 export type ReviewReportV3 = typeof ReviewReportV3Schema.Type;
 export type ReviewReportV2 = typeof ReviewReportV2Schema.Type;
-export type ReviewReport = ReviewReportV6;
+export type ReviewReport = ReviewReportV7;
 
 const invalidReviewReport = (reason: string): never => {
   throw new Error(`Invalid review report: ${reason}`);
 };
 
 const validateCurrentReportContents = <
-  Report extends ReviewReportV4 | ReviewReportV5 | ReviewReportV6,
+  Report extends
+    | ReviewReportV4
+    | ReviewReportV5
+    | ReviewReportV6
+    | ReviewReportV7,
 >(
   report: Report,
 ): Report => {
@@ -243,6 +277,24 @@ export const decodeReviewReportV6 = (input: unknown): ReviewReportV6 =>
     }),
   );
 
+const validateRedactionSummary = (report: ReviewReportV7): ReviewReportV7 => {
+  validateReviewRedactionSummary(
+    report.redaction,
+    (reason) => invalidReviewReport(`redaction summary ${reason}`),
+  );
+
+  return report;
+};
+
+export const decodeReviewReportV7 = (input: unknown): ReviewReportV7 =>
+  validateRedactionSummary(
+    validateCurrentReportContents(
+      Schema.decodeUnknownSync(ReviewReportV7Schema)(input, {
+        onExcessProperty: "error",
+      }),
+    ),
+  );
+
 export const decodeReviewReportV3 = (input: unknown): ReviewReportV3 =>
   Schema.decodeUnknownSync(ReviewReportV3Schema)(input, {
     onExcessProperty: "error",
@@ -320,47 +372,75 @@ export const migrateReviewReportV5 = (
     workload: "standard",
   });
 
+export const migrateReviewReportV6 = (
+  report: ReviewReportV6,
+  privacyEvidence: ReviewReportPrivacyEvidence = "recorded",
+): ReviewReportV7 =>
+  decodeReviewReportV7({
+    ...report,
+    schemaVersion: 7,
+    privacyEvidence,
+    // A report written before v7 carries no redaction evidence, so the summary
+    // is empty rather than claiming that nothing was redacted.
+    redaction: { schemaVersion: 1, totalRedactions: 0, reasons: [] },
+  });
+
 const readSchemaVersion = (input: unknown): unknown =>
   typeof input === "object" && input !== null && "schemaVersion" in input
     ? input.schemaVersion
     : undefined;
 
-export const decodeReviewReport = (input: unknown): ReviewReportV6 => {
+export const decodeReviewReport = (input: unknown): ReviewReportV7 => {
   const schemaVersion = readSchemaVersion(input);
 
+  if (schemaVersion === 7) {
+    return decodeReviewReportV7(input);
+  }
+
   if (schemaVersion === 6) {
-    return decodeReviewReportV6(input);
+    return migrateReviewReportV6(decodeReviewReportV6(input));
   }
 
   if (schemaVersion === 5) {
-    return migrateReviewReportV5(decodeReviewReportV5(input));
+    return migrateReviewReportV6(migrateReviewReportV5(decodeReviewReportV5(input)));
   }
 
+  // A report from before v5 carries no observed privacy decision, so the value
+  // the v4 migration fills in is marked as assumed instead of recorded.
   if (schemaVersion === 4) {
-    return migrateReviewReportV5(
-      migrateReviewReportV4(decodeReviewReportV4(input)),
+    return migrateReviewReportV6(
+      migrateReviewReportV5(
+        migrateReviewReportV4(decodeReviewReportV4(input)),
+      ),
+      "assumed-by-migration",
     );
   }
 
   if (schemaVersion === 3) {
-    return migrateReviewReportV5(
-      migrateReviewReportV4(
-        migrateReviewReportV3(decodeReviewReportV3(input)),
+    return migrateReviewReportV6(
+      migrateReviewReportV5(
+        migrateReviewReportV4(
+          migrateReviewReportV3(decodeReviewReportV3(input)),
+        ),
       ),
+      "assumed-by-migration",
     );
   }
 
   if (schemaVersion === 2) {
-    return migrateReviewReportV5(
-      migrateReviewReportV4(
-        migrateReviewReportV3(
-          migrateReviewReportV2(decodeReviewReportV2(input)),
+    return migrateReviewReportV6(
+      migrateReviewReportV5(
+        migrateReviewReportV4(
+          migrateReviewReportV3(
+            migrateReviewReportV2(decodeReviewReportV2(input)),
+          ),
         ),
       ),
+      "assumed-by-migration",
     );
   }
 
   throw new Error(
-    `Unsupported review report schema version: ${String(schemaVersion)}; supported versions are 2, 3, 4, 5, and 6`,
+    `Unsupported review report schema version: ${String(schemaVersion)}; supported versions are 2, 3, 4, 5, 6, and 7`,
   );
 };

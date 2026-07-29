@@ -487,8 +487,18 @@ test("runReview builds the normalized request before invoking the engine", async
 });
 
 test("light reduces selected context without changing selection ordering", async () => {
+  // Ordinary code lines, not one long opaque token: redaction now runs before
+  // the budget, and an oversized token would be replaced before it is measured.
   const patch = (name: string) =>
-    `@@ -0,0 +1 @@\n+export const ${name} = "${"x".repeat(15_000)}";\n`;
+    [
+      "@@ -0,0 +1,250 @@",
+      ...Array.from(
+        { length: 250 },
+        (_unused, index) =>
+          `+export const ${name}${index} = "review budget sample line ${index}";`,
+      ),
+      "",
+    ].join("\n");
   const git = makeGit({
     readDiff: () =>
       Effect.succeed({
@@ -720,7 +730,7 @@ test("runReview produces deterministic findings from added marker lines", async 
   );
 
   expect(report).toMatchObject({
-    schemaVersion: 6,
+    schemaVersion: 7,
     scope: "working-tree",
     privacy: {
       mode: "local-only",
@@ -1079,4 +1089,164 @@ test("runReview propagates typed engine failures", async () => {
   );
 
   expect(error).toBe(failure);
+});
+
+const gitTextFileWithHunks = (
+  path: string,
+  hunkPatches: ReadonlyArray<string>,
+) => ({
+  kind: "text" as const,
+  path,
+  source: "working-tree" as const,
+  status: "M" as const,
+  patch: hunkPatches.join(""),
+  fileHeader: `diff --git a/${path} b/${path}\n`,
+  hunks: hunkPatches.map((patch, index) => ({
+    header: patch.split("\n", 1)[0] ?? "",
+    oldStartLine: index + 1,
+    oldLineCount: 1,
+    newStartLine: index + 1,
+    newLineCount: 1,
+    patch,
+  })),
+});
+
+const privateKeyBodyLine =
+  "MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQDb7Yq8Kk1pQwR3";
+
+test("redaction runs before the budget so the sent payload stays inside it", async () => {
+  const secret = "sk-proj-A1b2C3d4E5f6G7h8I9j0K1l2";
+  const git = makeGit({
+    readDiff: () =>
+      Effect.succeed({
+        files: [
+          gitTextFileWithHunks("src/secrets.ts", [
+            `@@ -1 +1,2 @@\n+const key = "${secret}";\n`,
+            `@@ -10 +10,2 @@\n+const other = "${secret}";\n`,
+          ]),
+        ],
+      }),
+  });
+  let received: ReviewRequestV1 | undefined;
+  const engine = registryWithEngine({
+    transport: "local",
+    review: (request) =>
+      Effect.sync(() => {
+        received = request;
+        return [];
+      }),
+  });
+
+  const report = await runReview({ scope: "working-tree" }).pipe(
+    Effect.provide(Layer.mergeAll(git, config, engine)),
+    Effect.runPromise,
+  );
+
+  if (received === undefined) {
+    throw new Error("Expected the engine to receive a request");
+  }
+  // The budget measured the redacted payload, so its selected estimate still
+  // covers what was actually sent.
+  const sentFileTokens = fallbackReviewRequestEstimator.estimate(
+    JSON.stringify(received.context.files),
+  );
+  expect(sentFileTokens).toBeLessThanOrEqual(
+    report.budget.selectedRequestTokens,
+  );
+  expect(report.budget.totalReservedTokens).toBeLessThanOrEqual(
+    report.budget.maxTokens,
+  );
+  expect(report.budget.fitsBudget).toBe(true);
+  expect(report.redaction).toEqual({
+    schemaVersion: 1,
+    totalRedactions: 2,
+    reasons: [{ reason: "api-key", count: 2 }],
+  });
+});
+
+test.each([1_500, 3_000, 6_000, 12_000, 128_000])(
+  "a secret never reaches the engine at a %d token budget",
+  async (maxTokens) => {
+    const secret = "sk-proj-A1b2C3d4E5f6G7h8I9j0K1l2";
+    const filler = (index: number) =>
+      `@@ -${index} +${index},2 @@\n+export const filler${index} = "review budget sample line ${index}";\n`;
+    const git = makeGit({
+      readDiff: () =>
+        Effect.succeed({
+          files: [
+            gitTextFileWithHunks("src/mixed.ts", [
+              ...Array.from({ length: 20 }, (_unused, index) => filler(index)),
+              `@@ -99 +99,2 @@\n+const key = "${secret}";\n`,
+            ]),
+          ],
+        }),
+    });
+    const received: Array<ReviewRequestV1> = [];
+    const engine = registryWithEngine({
+      transport: "local",
+      review: (request) =>
+        Effect.sync(() => {
+          received.push(request);
+          return [];
+        }),
+    });
+
+    const report = await runReview({
+      scope: "working-tree",
+      configOverrides: {
+        requestBudget: {
+          maxTokens,
+          fixedRequestOverheadTokens: 0,
+          outputReserveTokens: 512,
+        },
+      },
+    }).pipe(
+      Effect.provide(Layer.mergeAll(git, config, engine)),
+      Effect.runPromise,
+    );
+
+    // Whether the budget keeps or drops the hunk holding the secret, the secret
+    // itself is never part of the request, and the summary only counts what the
+    // payload still contains.
+    for (const request of received) {
+      expect(JSON.stringify(request)).not.toContain(secret);
+    }
+    expect(report.budget.totalReservedTokens).toBeLessThanOrEqual(maxTokens);
+    expect(report.redaction.totalRedactions).toBe(
+      JSON.stringify(received[0] ?? {}).includes("[REDACTED:api-key]") ? 1 : 0,
+    );
+  },
+);
+
+test("redacts a private key that spans two hunks of one file", async () => {
+  const git = makeGit({
+    readDiff: () =>
+      Effect.succeed({
+        files: [
+          gitTextFileWithHunks("src/key.pem", [
+            `@@ -1 +1,3 @@\n+-----BEGIN PRIVATE KEY-----\n+${privateKeyBodyLine}\n`,
+            `@@ -10 +10,3 @@\n+${privateKeyBodyLine}\n+-----END PRIVATE KEY-----\n`,
+          ]),
+        ],
+      }),
+  });
+  let received: ReviewRequestV1 | undefined;
+  const engine = registryWithEngine({
+    transport: "local",
+    review: (request) =>
+      Effect.sync(() => {
+        received = request;
+        return [];
+      }),
+  });
+
+  const report = await runReview({ scope: "working-tree" }).pipe(
+    Effect.provide(Layer.mergeAll(git, config, engine)),
+    Effect.runPromise,
+  );
+
+  // The first hunk has no end marker and the second has no begin marker, so
+  // both halves must be redacted for the key to stay out of the payload.
+  expect(JSON.stringify(received)).not.toContain(privateKeyBodyLine);
+  expect(report.redaction.totalRedactions).toBeGreaterThanOrEqual(2);
 });

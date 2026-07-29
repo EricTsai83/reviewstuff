@@ -8,6 +8,7 @@ import {
   decodeReviewReportV4,
   decodeReviewReportV5,
   decodeReviewReportV6,
+  decodeReviewReportV7,
 } from "../../src/domain/report";
 
 const readFixture = async (name: string): Promise<unknown> =>
@@ -17,15 +18,57 @@ const readFixture = async (name: string): Promise<unknown> =>
     ).text(),
   );
 
-test("current report fixture passes the strict v6 decode boundary", async () => {
-  const fixture = await readFixture("review-report-v6.json");
+test("current report fixture passes the strict v7 decode boundary", async () => {
+  const fixture = await readFixture("review-report-v7.json");
 
   expect(JSON.stringify(decodeReviewReport(fixture))).toBe(
     JSON.stringify(fixture),
   );
-  expect(JSON.stringify(decodeReviewReportV6(fixture))).toBe(
+  expect(JSON.stringify(decodeReviewReportV7(fixture))).toBe(
     JSON.stringify(fixture),
   );
+});
+
+test("v7 rejects a redaction summary that contradicts its reasons", async () => {
+  const report = decodeReviewReportV7(
+    await readFixture("review-report-v7.json"),
+  );
+
+  expect(() =>
+    decodeReviewReportV7({
+      ...report,
+      redaction: { ...report.redaction, totalRedactions: 99 },
+    })
+  ).toThrow("redaction summary total does not match reasons");
+  expect(() =>
+    decodeReviewReportV7({
+      ...report,
+      redaction: {
+        schemaVersion: 1,
+        totalRedactions: 2,
+        reasons: [
+          { reason: "api-key", count: 1 },
+          { reason: "api-key", count: 1 },
+        ],
+      },
+    })
+  ).toThrow("redaction summary duplicate reason");
+});
+
+test("previous v6 fixture migrates with recorded privacy and no redaction evidence", async () => {
+  const fixture = await readFixture("review-report-v6.json");
+  const migrated = decodeReviewReport(fixture);
+
+  expect(migrated.schemaVersion).toBe(7);
+  // v6 recorded a real privacy decision, so the marker stays "recorded"; the
+  // report predates redaction evidence, so the summary is empty.
+  expect(migrated.privacyEvidence).toBe("recorded");
+  expect(migrated.redaction).toEqual({
+    schemaVersion: 1,
+    totalRedactions: 0,
+    reasons: [],
+  });
+  expect(() => decodeReviewReportV7(fixture)).toThrow();
 });
 
 test("v6 rejects invalid workload, privacy, and contradictory values", async () => {
@@ -101,7 +144,7 @@ test("previous v5 fixture defaults workload to standard when migrated", async ()
   const migrated = decodeReviewReport(fixture);
 
   expect(migrated).toMatchObject({
-    schemaVersion: 6,
+    schemaVersion: 7,
     workload: "standard",
     privacy: {
       mode: "cloud-allowed",
@@ -118,7 +161,7 @@ test("v4 fixture migrates through v5 to the current report", async () => {
   const migrated = decodeReviewReport(fixture);
 
   expect(migrated).toMatchObject({
-    schemaVersion: 6,
+    schemaVersion: 7,
     workload: "standard",
     privacy: {
       mode: "local-only",
@@ -135,7 +178,7 @@ test("v3 fixture migrates through v4 to the current report", async () => {
   const migrated = decodeReviewReport(fixture);
 
   expect(migrated).toMatchObject({
-    schemaVersion: 6,
+    schemaVersion: 7,
     workload: "standard",
     privacy: { mode: "local-only", transport: "local", decision: "allowed" },
     summary: { truncatedFiles: 0 },
@@ -149,7 +192,15 @@ test("v3 fixture migrates through v4 to the current report", async () => {
 test("v2 fixtures still migrate through v3 and v4 to the current report", async () => {
   const migrated = decodeReviewReport(await readFixture("review-report-v2.json"));
 
-  expect(migrated.schemaVersion).toBe(6);
+  expect(migrated.schemaVersion).toBe(7);
+  // A pre-v5 report has no observed privacy decision, so the migrated value is
+  // marked as assumed rather than presented as evidence.
+  expect(migrated.privacyEvidence).toBe("assumed-by-migration");
+  expect(migrated.redaction).toEqual({
+    schemaVersion: 1,
+    totalRedactions: 0,
+    reasons: [],
+  });
   expect(migrated.findings[0]).toMatchObject({
     severity: "medium",
     category: "correctness",
@@ -158,8 +209,8 @@ test("v2 fixtures still migrate through v3 and v4 to the current report", async 
 });
 
 test("unknown report versions are refused instead of guessed", () => {
-  expect(() => decodeReviewReport({ schemaVersion: 7 })).toThrow(
-    "Unsupported review report schema version: 7",
+  expect(() => decodeReviewReport({ schemaVersion: 8 })).toThrow(
+    "Unsupported review report schema version: 8",
   );
 });
 

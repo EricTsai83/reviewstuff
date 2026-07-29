@@ -7,13 +7,14 @@ import {
 
 test("terminal reports escape control characters in untrusted fields", () => {
   const report: ReviewReport = {
-    schemaVersion: 6,
+    schemaVersion: 7,
     scope: "working-tree",
     privacy: {
       mode: "local-only",
       transport: "local",
       decision: "allowed",
     },
+    privacyEvidence: "recorded",
     workload: "standard",
     summary: {
       changedFiles: 1,
@@ -45,6 +46,7 @@ test("terminal reports escape control characters in untrusted fields", () => {
       totalReservedTokens: 18_944,
       fitsBudget: true,
     },
+    redaction: { schemaVersion: 1, totalRedactions: 0, reasons: [] },
     findings: [
       {
         id: "finding-1",
@@ -83,13 +85,14 @@ test("terminal reports escape control characters in untrusted fields", () => {
 
 test("terminal reports incomplete coverage and skip reasons", () => {
   const report: ReviewReport = {
-    schemaVersion: 6,
+    schemaVersion: 7,
     scope: "working-tree",
     privacy: {
       mode: "local-only",
       transport: "local",
       decision: "allowed",
     },
+    privacyEvidence: "recorded",
     workload: "light",
     summary: {
       changedFiles: 3,
@@ -136,6 +139,7 @@ test("terminal reports incomplete coverage and skip reasons", () => {
       totalReservedTokens: 18_688,
       fitsBudget: true,
     },
+    redaction: { schemaVersion: 1, totalRedactions: 0, reasons: [] },
     findings: [],
   };
 
@@ -156,13 +160,14 @@ test("terminal reports incomplete coverage and skip reasons", () => {
 
 test("terminal reports files skipped by the request budget", () => {
   const report: ReviewReport = {
-    schemaVersion: 6,
+    schemaVersion: 7,
     scope: "staged",
     privacy: {
       mode: "local-only",
       transport: "local",
       decision: "allowed",
     },
+    privacyEvidence: "recorded",
     workload: "standard",
     summary: {
       changedFiles: 1,
@@ -193,10 +198,68 @@ test("terminal reports files skipped by the request budget", () => {
       totalReservedTokens: 900,
       fitsBudget: true,
     },
+    redaction: { schemaVersion: 1, totalRedactions: 0, reasons: [] },
     findings: [],
   };
 
   expect(renderTerminalReport(report)).toContain(
     "src/oversized.ts [staged] — 0 of 1 hunks selected (request budget)",
+  );
+});
+
+test("terminal reports state redaction only when the payload carried it", () => {
+  const base: ReviewReport = {
+    schemaVersion: 7,
+    scope: "working-tree",
+    privacy: { mode: "cloud-allowed", transport: "cloud", decision: "allowed" },
+    privacyEvidence: "recorded",
+    workload: "standard",
+    summary: {
+      changedFiles: 1,
+      reviewedFiles: 1,
+      truncatedFiles: 0,
+      skippedFiles: 0,
+      findings: 0,
+    },
+    coverage: {
+      schemaVersion: 2,
+      complete: true,
+      files: [{
+        path: "src/keys.ts",
+        source: "working-tree",
+        status: "reviewed",
+        selectedHunks: 1,
+        totalHunks: 1,
+      }],
+    },
+    budget: {
+      schemaVersion: 1,
+      unit: "tokens",
+      maxTokens: 128_000,
+      fixedRequestOverheadTokens: 100,
+      outputReserveTokens: 16_384,
+      selectedRequestTokens: 200,
+      totalReservedTokens: 16_684,
+      fitsBudget: true,
+    },
+    redaction: { schemaVersion: 1, totalRedactions: 0, reasons: [] },
+    findings: [],
+  };
+
+  expect(renderTerminalReport(base)).not.toContain("Redacted");
+  expect(
+    renderTerminalReport({
+      ...base,
+      redaction: {
+        schemaVersion: 1,
+        totalRedactions: 3,
+        reasons: [
+          { reason: "api-key", count: 2 },
+          { reason: "private-key", count: 1 },
+        ],
+      },
+    }),
+  ).toContain(
+    "Redacted 3 secret(s) before sending: api-key 2, private-key 1.",
   );
 });

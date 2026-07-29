@@ -18,8 +18,8 @@ import {
   type ReviewFileCoverage,
 } from "../domain/review-file";
 import {
-  decodeReviewReportV6,
-  type ReviewReportV6,
+  decodeReviewReportV7,
+  type ReviewReportV7,
 } from "../domain/report";
 import type { ReviewScope } from "../domain/scope";
 import {
@@ -42,7 +42,12 @@ import {
   type ReviewSelectionV1,
   selectReviewHunks,
 } from "../review/review-budget";
-import { redactReviewRequestV1 } from "../review/review-redaction";
+import type { ReviewRedactionSummaryV1 } from "../domain/redaction";
+import {
+  countReviewRedactions,
+  redactReviewFileContents,
+  redactReviewRequestV1,
+} from "../review/review-redaction";
 import {
   buildReviewRequestV1,
   type ReviewRequestV1,
@@ -165,7 +170,8 @@ const buildReviewReport = (
   findings: ReadonlyArray<ReviewFindingV1>,
   privacy: ReviewAllowedPrivacyDecision,
   workload: ResolvedReviewConfig["workload"],
-): ReviewReportV6 => {
+  redaction: ReviewRedactionSummaryV1,
+): ReviewReportV7 => {
   const coverageFiles = buildCoverageFiles(diff, selection);
   const reviewedFiles = coverageFiles.filter((file) =>
     file.status === "reviewed"
@@ -177,10 +183,12 @@ const buildReviewReport = (
     file.status === "skipped"
   ).length;
 
-  return decodeReviewReportV6({
-    schemaVersion: 6,
+  return decodeReviewReportV7({
+    schemaVersion: 7,
     scope,
     privacy,
+    // The decision was observed during this run, not assumed by a migration.
+    privacyEvidence: "recorded",
     workload,
     summary: {
       changedFiles: coverageFiles.length,
@@ -195,6 +203,7 @@ const buildReviewReport = (
       files: coverageFiles,
     },
     budget: selection.estimate,
+    redaction,
     findings,
   });
 };
@@ -203,6 +212,7 @@ interface PreparedReviewRequest {
   readonly diff: GitDiff;
   readonly request: ReviewRequestV1;
   readonly selection: ReviewSelectionV1;
+  readonly redaction: ReviewRedactionSummaryV1;
 }
 
 interface ResolvedReview {
@@ -218,20 +228,26 @@ const prepareReviewRequest = (
 ): Effect.Effect<PreparedReviewRequest, GitError> =>
   Effect.gen(function* () {
     const diff = yield* resolved.git.readDiff(resolved.repository, scope);
-    const reviewableFiles = textFiles(diff);
-    const selection = selectReviewHunks({
-      files: reviewableFiles.map(({ path, source, fileHeader, hunks }) => ({
+    // Redaction runs before selection so the budget measures the bytes that are
+    // actually sent, and so a secret in a dropped hunk never reaches the engine.
+    const reviewableFiles = redactReviewFileContents(
+      textFiles(diff).map(({ path, source, fileHeader, hunks }) => ({
         path,
         source,
         fileHeader,
         hunks: hunks.map(({ patch }) => ({ patch })),
       })),
+    );
+    const selection = selectReviewHunks({
+      files: reviewableFiles,
       policy: effectiveBudgetPolicy(
         scope,
         resolved.config,
         resolved.engine.model,
       ),
     });
+    // The request tree pass stays the single outbound boundary: it also covers
+    // paths and the prompt envelope, which selection does not touch.
     const { request } = redactReviewRequestV1(
       buildReviewRequestV1({
         repository: { scope },
@@ -240,7 +256,12 @@ const prepareReviewRequest = (
       }),
     );
 
-    return { diff, request, selection };
+    return {
+      diff,
+      request,
+      selection,
+      redaction: countReviewRedactions(request),
+    };
   });
 
 const withResolvedReview = <Success, Error>(
@@ -293,7 +314,7 @@ export const previewReviewRequest = (
 export const runReview = (
   input: RunReviewInput,
 ): Effect.Effect<
-  ReviewReportV6,
+  ReviewReportV7,
   RunReviewError,
   GitService | ConfigService | ReviewEngineRegistry
 > =>
@@ -307,7 +328,7 @@ export const runReview = (
         ),
       );
       const engine = yield* resolved.engine.acquire;
-      const { diff, request, selection } = yield* prepareReviewRequest(
+      const { diff, request, selection, redaction } = yield* prepareReviewRequest(
         resolved,
         input.scope,
       );
@@ -327,6 +348,7 @@ export const runReview = (
         findings,
         privacy,
         resolved.config.workload,
+        redaction,
       );
     }),
   );

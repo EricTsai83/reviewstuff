@@ -667,7 +667,14 @@ describe("GitService temporary repository integration", () => {
     await Bun.write(`${repository}/empty.txt`, "");
     await Bun.write(
       `${repository}/large.txt`,
-      `large\n${"x".repeat(600 * 1024)}`,
+      // Ordinary source lines: one huge token would be redacted before the
+      // request budget measures it, so the file would no longer be skipped.
+      `large\n${
+        Array.from(
+          { length: 12_000 },
+          (_unused, index) => `export const large${index} = "sample line ${index}";`,
+        ).join("\n")
+      }\n`,
     );
     await runGit(repository, ["add", "--", "included.ts"]).pipe(
       Effect.runPromise,

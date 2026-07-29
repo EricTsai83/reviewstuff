@@ -161,3 +161,26 @@ export const makeRepository = async (): Promise<string> => {
 
   return cwd;
 };
+
+/**
+ * Long file content built from ordinary short tokens.
+ *
+ * A single huge run of one character is replaced by the redaction boundary
+ * before the request budget measures it, so fixtures that exercise oversized
+ * content must look like real source instead.
+ */
+export const largeTextContent = (
+  minimumCharacters: number,
+  prefix = "sample",
+): string => {
+  const lines: Array<string> = [];
+  let characters = 0;
+
+  for (let index = 0; characters < minimumCharacters; index += 1) {
+    const line = `export const ${prefix}${index} = "review budget sample line ${index}";`;
+    lines.push(line);
+    characters += line.length + 1;
+  }
+
+  return `${lines.join("\n")}\n`;
+};
