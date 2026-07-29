@@ -8,7 +8,9 @@
 agent-mode example。
 
 **In:** quickstart、provider setup、configuration reference、`config show` effective value/source 說明、
-install/update guidance、troubleshooting、NDJSON recipe、docs smoke harness。
+install/update guidance、troubleshooting（含 Gatekeeper 首次執行行為——standalone binary 通常無法
+staple ticket，首次驗證需連線，離線時的預期行為要照 041 實測結果記載）、NDJSON recipe、
+docs smoke harness。
 **Out:** marketing site、unsupported platform instructions、非 v1 commands。
 
 **Steps:** 以實際 `--help`與 schema生成/核對 examples；所有無 credentials commands進 smoke；live/provider/Apple命令標 prerequisite、

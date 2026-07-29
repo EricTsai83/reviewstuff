@@ -14,5 +14,6 @@ review use-case。
 failure injection tests for truncated/corrupt/rename failure。
 
 **Accept:** contract 不暴露 platform types；partial write 不成為 latest；repo 外零讀寫；load 有 byte cap；tests 使用
-temporary repo。
+temporary repo；並行 process 下 latest pointer 為 last-writer-wins（刻意選擇，atomic rename 保證不
+corruption，不引入 lock），此語意寫進 contract 註解與測試。
 

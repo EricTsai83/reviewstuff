@@ -2,7 +2,12 @@
 
 [← Plan index](./README.md)
 
-**Depends on:** 024。 **Learning:** observable conservative input policy。
+**Depends on:** 023。 **Learning:** observable conservative input policy。
+
+> 排序說明：本 plan 先於 024 執行。central selection policy 與 coverage reason 基礎設施先就位，
+> 024 的 `.reviewstuffignore` exclusion 直接掛在同一 policy 上，避免 024 先自建一套 exclusion
+> 路徑再被本 plan 重構。另外 oversized-file 造成整個 review 失敗是現存 bug，在真實 repo dogfood
+> 時會先撞上，愈早修愈好。
 
 **Working state:** binary、media、generated、lock、build output 都由單一 selection policy 判斷並回報 stable reason；
 不在 Git adapter 或 engine 各自靜默略過。
@@ -19,7 +24,8 @@
 失敗，而不是 skip 該檔案。本 plan 必須：(1) 在收 patch 前用目前未接線的 `readGitObjectSize`
 （`src/git/git-command.ts`；untracked 檔另以 filesystem size 檢查，對應 `GitExecutionError` 的
 `file-inspection` failure）做大小預檢，超限產出 `file-too-large` skip；(2) 讓 per-file 輸出上限不再是
-全 review 的失敗路徑。另外定義 coverage 語意：政策性排除（binary/media hard exclude）與資源性
+全 review 的失敗路徑。size 預檢不得對每個檔案各起一個 subprocess——大 diff 下延遲會線性放大；
+用 `git cat-file --batch-check` 一次查完 tracked objects，untracked 檔用 filesystem stat。另外定義 coverage 語意：政策性排除（binary/media hard exclude）與資源性
 skip（budget/size）分開，政策性排除不應永久把 `coverage.complete` 標為 false——目前任何含 binary
 變更的 review 都會顯示 "Review coverage incomplete"。
 

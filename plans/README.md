@@ -57,20 +57,23 @@ service skeleton、flag 或空目錄。
 | [x] DONE | 016 | [Implement The OpenAI Responses Adapter](./016-implement-the-openai-responses-adapter.md) | Safe cloud dogfood |
 | [x] DONE | 017 | [Select And Run The OpenAI Engine](./017-select-and-run-the-openai-engine.md) | Safe cloud dogfood |
 | [x] DONE | 026 | [Add The Light Review Workload](./026-add-light-review-workload.md) | Safe cloud dogfood |
+| [ ] TODO | 050 | [Harden Git Diff Collection](./050-harden-git-diff-collection.md) | Hardening hotfix |
+| [ ] TODO | 051 | [Harden Secret Redaction](./051-harden-secret-redaction.md) | Hardening hotfix |
+| [ ] TODO | 052 | [Harden Cloud Engine Transport](./052-harden-cloud-engine-transport.md) | Hardening hotfix |
 | [ ] TODO | 048 | [Explain Effective Configuration Sources](./048-explain-effective-configuration-sources.md) | Real repository UX |
 | [ ] TODO | 019 | [Review An Exact Committed Range](./019-review-an-exact-committed-range.md) | Real repository UX |
 | [ ] TODO | 020 | [Review A Branch Using Merge-base Semantics](./020-review-a-branch-using-merge-base-semantics.md) | Real repository UX |
 | [ ] TODO | 021 | [Compose Committed And Uncommitted Scopes](./021-compose-committed-and-uncommitted-scopes.md) | Real repository UX |
 | [ ] TODO | 022 | [Infer A Default Branch Scope Conservatively](./022-infer-a-default-branch-scope-conservatively.md) | Real repository UX |
 | [ ] TODO | 023 | [Filter Review Paths Explicitly](./023-filter-review-paths-explicitly.md) | Real repository UX |
-| [ ] TODO | 024 | [Apply `.reviewstuffignore` As Exclusion-only Policy](./024-apply-reviewstuffignore-as-exclusion-only-policy.md) | Real repository UX |
 | [ ] TODO | 025 | [Centralize File Skip Policy](./025-centralize-file-skip-policy.md) | Real repository UX |
+| [ ] TODO | 024 | [Apply `.reviewstuffignore` As Exclusion-only Policy](./024-apply-reviewstuffignore-as-exclusion-only-policy.md) | Real repository UX |
+| [ ] TODO | 032 | [Define The Review Exit-code Contract](./032-define-the-review-exit-code-contract.md) | Durable automation beta |
 | [ ] TODO | 027 | [Define The Persisted Review Session Schema](./027-define-the-persisted-review-session-schema.md) | Durable automation beta |
 | [ ] TODO | 028 | [Store And Load Sessions Atomically](./028-store-and-load-sessions-atomically.md) | Durable automation beta |
 | [ ] TODO | 029 | [Persist Successful Review Sessions](./029-persist-successful-review-sessions.md) | Durable automation beta |
 | [ ] TODO | 030 | [Query Stored Findings](./030-query-stored-findings.md) | Durable automation beta |
 | [ ] TODO | 031 | [Replay A Deterministic Repair Prompt](./031-replay-a-deterministic-repair-prompt.md) | Durable automation beta |
-| [ ] TODO | 032 | [Define The Review Exit-code Contract](./032-define-the-review-exit-code-contract.md) | Durable automation beta |
 | [ ] TODO | 033 | [Stream Review Events As NDJSON](./033-stream-review-events-as-ndjson.md) | Durable automation beta |
 | [ ] TODO | 034 | [Aggregate A Minimal Doctor Report](./034-aggregate-a-minimal-doctor-report.md) | Durable automation beta |
 | [ ] TODO | 035 | [Add A Sandboxed Codex CLI Engine](./035-add-a-sandboxed-codex-cli-engine.md) | Durable automation beta |
@@ -97,8 +100,9 @@ service skeleton、flag 或空目錄。
 | Baseline closure | 005 | 現有 deterministic review pipeline 正式關閉 |
 | Repository config foundation | 018、049 | selected Git root、`--dir` 與 strict repository YAML config |
 | Safe cloud dogfood | 007–017、026 | 有 budget、privacy、redaction、preview 的 OpenAI review 與 light workload |
-| Real repository UX | 048、019–025 | effective config provenance、commit/branch scopes、filters、skip policy |
-| Durable automation beta | 027–037 | sessions、queries、exit-code contract、NDJSON、doctor、Codex CLI、provider reliability |
+| Hardening hotfix | 050–052 | git 解析對真實 repo robust、redaction 對不完整 secret 形狀有效、engine transport 有界且可診斷 |
+| Real repository UX | 048、019–023、025、024 | effective config provenance、commit/branch scopes、filters、skip policy |
+| Durable automation beta | 032、027–031、033–037 | exit-code contract、sessions、queries、NDJSON、doctor、Codex CLI、provider reliability |
 | Supported macOS v1 | 038–047 | report polish、CI、signed artifact、Homebrew/npm、docs、readiness gate |
 
 ## Plan completion checklist

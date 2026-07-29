@@ -10,7 +10,7 @@
 base selection、working-tree composition、remote fetching。
 
 **Steps:** separate exact-range and branch-range variants；resolve base/merge-base once；fixture divergent history、
-missing merge base、detached HEAD；document difference from `--since`。
+missing merge base、detached HEAD；document difference from `--from`（019 exact range）並保持兩 flag 互斥。
 
 **Accept:** base branch tip 前進不會誤納 upstream-only commits；invalid/ref errors typed；Git commands bounded；
 CLI flags incompatibility 在 engine call 前失敗。

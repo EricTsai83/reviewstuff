@@ -65,11 +65,15 @@ interface ResolvedReviewConfigSnapshot {
 }
 ```
 
-具體名稱可在實作時依現有 module vocabulary 微調，但必須保留三個 invariants：
+具體名稱可在實作時依現有 module vocabulary 微調，但必須保留四個 invariants：
 
 1. review execution 與 `config show` 使用同一個 snapshot；
 2. 每個 resolved field 恰有一個來源；
-3. provenance 只描述來源，不保存 credentials、environment values 或 rejected raw payload。
+3. provenance 只描述來源，不保存 credentials、environment values 或 rejected raw payload；
+4. optional 欄位（`engine`/`provider`/`model`）的 value 與 source 必須在型別上耦合——上方
+   mapped-type 草稿做不到（optional key 的 source 可與 value 各自缺席，「value 存在 ⟺ source
+   存在」無法 compile-time 強制）。實作時擇一：每個 key 都必填並加 `NotSet` source variant，
+   或改用 `{ value, source }` pair 讓兩者不可能分離。
 
 `requestBudget` 若由 workload 提供，來源是 `WorkloadDefault`；若 config 或 CLI 明確覆寫完整
 budget，來源改為該 explicit layer。不得看到 `workload: light` 就推測 budget，effective value
@@ -116,7 +120,10 @@ value/source。加入新 config 欄位時，必須同步更新 source coverage �
 ## Implementation Slices
 
 1. Resolution slice：建立 snapshot/provenance types，讓現有 review execution 消費
-   `snapshot.config`，並以 pure tests 固定每個 precedence/source pairing。
+   `snapshot.config`，並以 pure tests 固定每個 precedence/source pairing。注意：現有
+   `resolveReviewConfig`（`src/config/config-service.ts`）是 spread merge
+   （`...configured, ...overrides`），無法產生 per-field 來源，必須改寫成逐欄位 resolution——
+   這是本 slice 的主要工作量，改寫後 effective values 必須與現行完全一致。
 2. Report slice：建立 `EffectiveConfigReportV1` 與 secret-safe mapping/fixtures。
 3. CLI slice：加入 `config show` human/JSON renderer 與 source CLI/e2e tests。
 
