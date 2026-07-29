@@ -58,7 +58,7 @@ service skeleton、flag 或空目錄。
 | [x] DONE | 017 | [Select And Run The OpenAI Engine](./017-select-and-run-the-openai-engine.md) | Safe cloud dogfood |
 | [x] DONE | 026 | [Add The Light Review Workload](./026-add-light-review-workload.md) | Safe cloud dogfood |
 | [x] DONE | 050 | [Harden Git Diff Collection](./050-harden-git-diff-collection.md) | Hardening hotfix |
-| [ ] TODO | 051 | [Harden Secret Redaction](./051-harden-secret-redaction.md) | Hardening hotfix |
+| [x] DONE | 051 | [Harden Secret Redaction](./051-harden-secret-redaction.md) | Hardening hotfix |
 | [ ] TODO | 052 | [Harden Cloud Engine Transport](./052-harden-cloud-engine-transport.md) | Hardening hotfix |
 | [ ] TODO | 048 | [Explain Effective Configuration Sources](./048-explain-effective-configuration-sources.md) | Real repository UX |
 | [ ] TODO | 019 | [Review An Exact Committed Range](./019-review-an-exact-committed-range.md) | Real repository UX |

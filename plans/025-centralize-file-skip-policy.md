@@ -29,6 +29,11 @@
 skip（budget/size）分開，政策性排除不應永久把 `coverage.complete` 標為 false——目前任何含 binary
 變更的 review 都會顯示 "Review coverage incomplete"。
 
+**注意（050 之後新增的同類失敗路徑）：** `selectTargetRecords`（`src/git/git-diff.ts`）在「多個 diff record
+但沒有一個 record 的 path 對得上 target」時丟 `GitInvalidOutputError`，讓整個 review 失敗。這與上面的
+oversized-file 是同一類「單一檔案的問題升級成全 review 失敗」，本 plan 把 per-file 輸出上限改成 skip 時
+應一併納入，給它自己的 coverage reason，否則會留下一條沒被 central policy 覆蓋的整體失敗路徑。
+
 **Accept:** 每個 scope file 恰有一個 final status；override 不繞過 containment/hard cap；rename/delete 不 crash；
 human/JSON/request coverage counts 一致；oversized file 產生 `file-too-large` skip 而非整體失敗；
 `coverage.complete` 的語意在 human/JSON 輸出中對 policy exclusion 與 resource skip 有明確且一致的定義。
