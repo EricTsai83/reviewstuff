@@ -1,0 +1,735 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta
+    name="description"
+    content="當程式用子行程讀取 git 輸出時，使用者的 gitconfig、環境變數與 .gitattributes 都是它的輸入。本文說明如何用 -c、unset 與 CLI 旗標三種手段釘住執行環境，以及哪些設定不該釘。"
+  >
+  <title>你在解析另一個程式的輸出時，使用者的設定就是你的輸入</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --clay: #d97757;
+      --slate: #141413;
+      --ivory: #faf9f5;
+      --oat: #e3dacc;
+      --white: #ffffff;
+      --paper: #f8f6f1;
+      --gray-100: #f0eee6;
+      --gray-300: #d1cfc5;
+      --gray-500: #87867f;
+      --gray-700: #3d3d3a;
+      --warning: #c78e3f;
+      --space-sm: 8px;
+      --space-md: 12px;
+      --space-lg: 16px;
+      --space-xl: 24px;
+      --space-2xl: 32px;
+      --space-3xl: 48px;
+      --radius-sm: 4px;
+      --radius-md: 8px;
+      --content-width: 68ch;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: var(--ivory);
+      color: var(--slate);
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 16px;
+      font-weight: 430;
+      line-height: 1.55;
+      letter-spacing: 0;
+    }
+
+    main {
+      max-width: var(--content-width);
+      margin: 0 auto;
+      padding: var(--space-3xl) var(--space-xl);
+    }
+
+    article {
+      background: transparent;
+      border: 0;
+      border-radius: 0;
+      box-shadow: none;
+      padding: 0;
+    }
+
+    h1 {
+      max-width: none;
+      margin: 0 0 var(--space-lg);
+      font-size: 1.8rem;
+      line-height: 1.18;
+      text-wrap: balance;
+      overflow-wrap: normal;
+    }
+
+    h2 {
+      margin: var(--space-2xl) 0 var(--space-md);
+      font-size: 1.22rem;
+      line-height: 1.25;
+      text-wrap: balance;
+    }
+
+    h3 {
+      margin: var(--space-xl) 0 var(--space-sm);
+      font-size: 1rem;
+      line-height: 1.35;
+    }
+
+    p,
+    ul,
+    ol,
+    .deck,
+    .callout,
+    table,
+    pre {
+      max-width: var(--content-width);
+    }
+
+    p,
+    ul,
+    ol {
+      margin: 0 0 var(--space-lg);
+    }
+
+    li {
+      margin-bottom: var(--space-sm);
+    }
+
+    table,
+    pre {
+      width: 100%;
+    }
+
+    .deck {
+      color: var(--gray-700);
+      font-size: 1.05rem;
+      line-height: 1.6;
+    }
+
+    a {
+      color: var(--clay);
+      text-decoration: underline;
+      text-underline-offset: 2px;
+    }
+
+    p code,
+    li code,
+    td code,
+    th code {
+      padding: 1px 4px;
+      border: 1px solid var(--oat);
+      border-radius: var(--radius-sm);
+      background: var(--gray-100);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.9em;
+      overflow-wrap: anywhere;
+    }
+
+    table {
+      margin: var(--space-lg) 0 var(--space-xl);
+      border-collapse: collapse;
+      font-size: 0.95rem;
+    }
+
+    th,
+    td {
+      padding: 8px 10px;
+      border: 1px solid var(--oat);
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th {
+      background: var(--gray-100);
+      font-weight: 650;
+    }
+
+    .callout {
+      margin: var(--space-lg) 0 var(--space-xl);
+      padding: var(--space-md) var(--space-lg);
+      border: 1px solid var(--oat);
+      border-left: 3px solid var(--clay);
+      border-radius: var(--radius-sm);
+      background: var(--gray-100);
+    }
+
+    .callout p {
+      margin: 0;
+    }
+
+    .callout p + p {
+      margin-top: var(--space-sm);
+    }
+
+    .callout.warning {
+      border-left-color: var(--warning);
+    }
+
+    .callout-title {
+      font-weight: 650;
+    }
+
+    pre {
+      position: relative;
+      width: 100%;
+      margin: var(--space-lg) 0 var(--space-xl);
+      border: 1px solid #26241f;
+      border-radius: var(--radius-md);
+      background: #11110f;
+      color: #d8d4ca;
+      overflow: hidden;
+    }
+
+    pre code {
+      display: block;
+      border: 0;
+      background: transparent;
+      padding: 18px 64px 18px 22px;
+      color: inherit;
+      overflow-x: auto;
+      white-space: pre;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.875rem;
+      font-weight: 400;
+      line-height: 1.62;
+      scrollbar-width: none;
+    }
+
+    pre code::-webkit-scrollbar {
+      width: 0;
+      height: 0;
+    }
+
+    pre .label {
+      display: none;
+    }
+
+    .copy-code {
+      position: absolute;
+      top: 9px;
+      right: 9px;
+      z-index: 1;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 30px;
+      height: 30px;
+      padding: 0;
+      border: 1px solid rgba(250, 249, 245, 0.14);
+      border-radius: var(--radius-sm);
+      background: rgba(250, 249, 245, 0.06);
+      color: rgba(250, 249, 245, 0.72);
+      cursor: pointer;
+    }
+
+    .copy-code:hover,
+    .copy-code:focus-visible {
+      border-color: rgba(250, 249, 245, 0.28);
+      background: rgba(250, 249, 245, 0.12);
+      color: var(--ivory);
+      outline: none;
+    }
+
+    .copy-code.copied {
+      border-color: rgba(143, 184, 106, 0.42);
+      background: rgba(143, 184, 106, 0.14);
+      color: #b8d99a;
+    }
+
+    .copy-code svg {
+      width: 13px;
+      height: 13px;
+      stroke: currentColor;
+      stroke-width: 1.8;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      fill: none;
+      pointer-events: none;
+    }
+
+    .code-scrollbar {
+      position: absolute;
+      right: 0;
+      bottom: 0;
+      left: 0;
+      height: 3px;
+      border-radius: 999px;
+      background: rgba(250, 249, 245, 0.1);
+      cursor: pointer;
+    }
+
+    .code-scrollbar.hidden {
+      display: none;
+    }
+
+    .code-scrollbar-thumb {
+      height: 100%;
+      border-radius: inherit;
+      background: rgba(255, 148, 110, 0.82);
+      transform: translateX(0);
+      cursor: grab;
+    }
+
+    .code-scrollbar-thumb:active {
+      cursor: grabbing;
+    }
+
+    pre code .k { color: #ff946e; font-weight: 400; }
+    pre code .s { color: #8fb86a; }
+    pre code .n,
+    pre code .p { color: #d8d4ca; }
+    pre code .c { color: #858177; font-style: italic; }
+    pre code .f { color: #cfc6a2; }
+    pre code .t { color: #cfc6a2; font-weight: 400; }
+    pre code .o { color: #ff946e; }
+    pre.language-shell { background: #11110f; }
+    pre code .sh-command { color: #ff946e; font-weight: 400; }
+    pre code .sh-flag { color: #cfc6a2; font-weight: 400; }
+    pre code .sh-string { color: #8fb86a; }
+    pre code .sh-var { color: #cfc6a2; }
+    pre code .sh-comment { color: #858177; font-style: italic; }
+    pre code .sh-prompt { color: #ff946e; font-weight: 400; }
+
+    .flow-figure {
+      margin: var(--space-xl) 0 var(--space-2xl);
+    }
+
+    .flow-figure svg {
+      display: block;
+      width: 100%;
+      height: auto;
+    }
+
+    .flow-figure svg.flow-mobile {
+      display: none;
+    }
+
+    .flow-figure figcaption {
+      margin-top: var(--space-md);
+      color: var(--gray-700);
+      font-size: 0.9rem;
+    }
+
+    .sources {
+      margin-top: var(--space-2xl);
+      padding-top: var(--space-lg);
+      border-top: 1px solid var(--oat);
+      font-size: 0.9rem;
+    }
+
+    @media (max-width: 640px) {
+      body { font-size: 15px; }
+      h1 { font-size: 1.65rem; }
+      main { padding: var(--space-xl); }
+      pre code { font-size: 0.8125rem; line-height: 1.5; }
+      p code,
+      li code,
+      td code { font-size: 0.9em; }
+      table,
+      .deck,
+      .sources { font-size: 0.875rem; }
+      .flow-figure svg.flow-desktop { display: none; }
+      .flow-figure svg.flow-mobile { display: block; }
+      .table-scroll { overflow-x: auto; }
+      .table-scroll table { min-width: 30rem; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <article>
+      <h1>你在解析另一個程式的輸出時，使用者的設定就是你的輸入</h1>
+      <p class="deck">一個號稱唯讀的工具，只要用子行程讀 <code>git diff</code> 的輸出，它的真正輸入就不只是 repository：使用者的 <code>~/.gitconfig</code>、繼承來的環境變數、以及 repo 裡的 <code>.gitattributes</code> 都會改變那份輸出的形狀，甚至讓工具在別人的機器上留下背景行程。本文把「釘住執行環境」整理成可套用的判斷方法：三個影響管道各自要用不同手段封住，而且不是每個設定都該封。</p>
+
+      <h2>實務情境：一條看起來很單純的唯讀管線</h2>
+      <p>假設你在寫一個本機的程式碼審查 CLI。使用者在 repository 裡執行一個命令，工具做四件事：列出有變更的檔案、逐檔讀出 patch、把 patch 解析成 hunk、依 token 預算挑選 hunk 後送給模型。四個步驟都是唯讀的，沒有任何 <code>git add</code> 或 <code>git commit</code>。</p>
+      <p>這種管線有四個前置條件，缺一個，後面的討論就不成立：</p>
+      <ul>
+        <li><strong>你在解析輸出，而不只是看 exit code。</strong>你依賴 stdout 的<em>結構</em>：哪一行是 <code>diff --git</code>、context 行的第一個字元是空白、<code>@@</code> 的數字要對得上實際行數。</li>
+        <li><strong>那個結構由使用者可寫的設定決定。</strong>git 有數十個影響 diff 輸出外觀的設定鍵，全部都在使用者的控制之下。</li>
+        <li><strong>你對外聲稱唯讀。</strong>使用者相信跑這個命令不會動到他們的 repository。</li>
+        <li><strong>錯誤代價高。</strong>解析失敗會中斷整個審查；更糟的是解析「成功」但語意錯了，錯誤內容會被送到下游（模型、報表、行號標註）。</li>
+      </ul>
+      <p>本文所有實測都在 git 2.39.0 的臨時 repository 上完成，並以這條管線當作唯一的貫穿例子。</p>
+
+      <h2>直覺做法為什麼不夠</h2>
+      <p>直覺的寫法是「把該加的旗標加上就好」：<code>--no-color</code> 避免 ANSI escape、<code>--no-ext-diff</code> 擋掉外部 diff 程式、<code>--unified=3</code> 固定 context 行數，然後假設 <em>exit code 為 0 且 stdout 非空 = 輸出可解析</em>。</p>
+      <p>這個假設在使用者的真實機器上會以兩種方式破掉，而它們的偵測難度差很多。</p>
+
+      <h3>吵的破法：輸出形狀變了，parser 直接失敗</h3>
+      <p>如果使用者設了 <code>diff.suppressBlankEmpty=true</code>，空白的 context 行不再是「一個空白字元」，而是真正的空字串：</p>
+      <pre class="language-shell"><span class="label">Shell</span><code><span class="sh-prompt">$</span> <span class="sh-command">git</span> <span class="sh-flag">-c</span> diff.suppressBlankEmpty=true diff HEAD -- f.txt \
+    <span class="sh-command">|</span> sed <span class="sh-flag">-n</span> <span class="sh-string">'5,9p'</span> | sed <span class="sh-string">'s/^/[/;s/$/]/'</span>
+<span class="sh-command">[@@</span> <span class="sh-flag">-1,3</span> +1,4 @@]
+<span class="sh-command">[</span> a]
+<span class="sh-command">[]</span>                 <span class="sh-comment"># ← 原本應該是 "[ ]"</span>
+<span class="sh-command">[</span> b]
+<span class="sh-command">[+c]</span></code></pre>
+      <p>嚴格的 parser 會拒絕這一行，因為它的第一個字元不是 <code>' '</code>、<code>'+'</code>、<code>'-'</code> 之一。同一類的還有 <code>diff.submodule=log</code>：submodule 指標變更會變成一段 commit log，整個 record 連 <code>diff --git</code> 這一行都沒有，parser 找不到 record 邊界。</p>
+      <p>這類問題雖然造成整體失敗，但至少<strong>會叫</strong>。你會拿到一個明確的 parse 錯誤，加一條 pin 就修好。</p>
+
+      <h3>靜默的破法：輸出仍然合法，但語意已經錯了</h3>
+      <p>textconv 是最好的例子。它的設定分成兩半：使用者的 gitconfig 定義轉換命令，repo 的 <code>.gitattributes</code> 指定哪些路徑要套用。</p>
+      <pre class="language-shell"><span class="label">Shell</span><code><span class="sh-prompt">$</span> <span class="sh-command">git</span> config diff.mydriver.textconv ./conv.sh   <span class="sh-comment"># 使用者設定</span>
+<span class="sh-prompt">$</span> <span class="sh-command">cat</span> .gitattributes                            <span class="sh-comment"># repo 內容</span>
+<span class="sh-command">doc.bin</span> <span class="sh-var">diff=mydriver</span>
+
+<span class="sh-prompt">$</span> <span class="sh-command">git</span> diff HEAD <span class="sh-flag">--no-color</span> <span class="sh-flag">--no-ext-diff</span> <span class="sh-flag">--unified=3</span> -- doc.bin
+<span class="sh-comment">                   # ← 空輸出，但檔案真的改了</span>
+
+<span class="sh-prompt">$</span> <span class="sh-command">git</span> diff HEAD <span class="sh-flag">--no-color</span> <span class="sh-flag">--no-ext-diff</span> <span class="sh-flag">--no-textconv</span> \
+    <span class="sh-flag">--unified=3</span> <span class="sh-command">--</span> doc.bin
+<span class="sh-command">diff</span> <span class="sh-flag">--git</span> a/doc.bin b/doc.bin
+<span class="sh-command">@@</span> <span class="sh-flag">-1,2</span> +1,3 @@
+ <span class="sh-command">secret-real-line-1</span>
+ <span class="sh-command">secret-real-line-2</span>
+<span class="sh-command">+secret-real-line-3</span></code></pre>
+      <p>轉換器把新舊兩個版本都變成同一段文字，於是 git 認為「沒有差異」而輸出空字串。注意這裡有兩件事同時發生：<code>--no-ext-diff</code> <strong>沒有</strong>擋住它（那是另一套機制），而列舉步驟用的 <code>--name-status</code> 不讀內容，所以它照樣回報這個檔案是 <code>M</code>。</p>
+      <p>結果是管線內部自相矛盾：列舉說有變更、patch 卻是空的。在我們的實作裡，tracked 檔案的空 patch 被視為「檔案在列舉與讀取之間消失了」，整個審查以 exit 1 收場：</p>
+      <pre class="language-shell"><span class="label">Shell</span><code><span class="sh-prompt">$</span> <span class="sh-command">reviewstuff</span> review <span class="sh-flag">--json</span>
+<span class="sh-command">Changed</span> file became unavailable while reading the diff: doc.txt [working-tree].
+<span class="sh-var">exit=1</span></code></pre>
+      <p>而如果轉換結果<em>有</em>差異，情況更隱蔽：管線會成功跑完，但送給模型的是轉換器的輸出，於是回報的行號指向轉換後的文字，不是使用者檔案裡的行。沒有任何錯誤訊息告訴你這件事。順帶一提，git 會對每個 blob 版本各跑一次轉換器（一個檔案兩次呼叫），大 diff 下就是額外的 2N 個子行程，直接吃掉你為 diff 設定的時間預算。</p>
+
+      <div class="callout warning">
+        <p><span class="callout-title">容易誤判的相鄰旗標：</span><code>--no-ext-diff</code> 停用的是 external diff driver，<code>--no-textconv</code> 停用的是 textconv filter。兩者是不同機制，加了前者不會關掉後者。</p>
+      </div>
+
+      <h3>第三種破法：唯讀命令產生持久副作用</h3>
+      <p>不是所有問題都出在輸出。列舉未追蹤檔案的 <code>git ls-files --others</code> 在 <code>core.fsmonitor=true</code>（很多人為了加速 <code>git status</code> 會開）之下會啟動 git 的檔案系統監控 daemon：</p>
+      <pre class="language-shell"><span class="label">Shell</span><code><span class="sh-prompt">$</span> <span class="sh-command">pgrep</span> <span class="sh-flag">-f</span> <span class="sh-string">"fsmonitor--daemon"</span> | wc <span class="sh-flag">-l</span>
+<span class="sh-command">0</span>
+
+<span class="sh-prompt">$</span> <span class="sh-var">GIT_OPTIONAL_LOCKS=0</span> <span class="sh-command">git</span> <span class="sh-flag">-c</span> core.fsmonitor=true \
+    <span class="sh-command">ls-files</span> <span class="sh-flag">--others</span> <span class="sh-flag">--exclude-standard</span> <span class="sh-flag">-z</span>
+<span class="sh-command">untracked.txt</span>
+
+<span class="sh-prompt">$</span> <span class="sh-command">pgrep</span> <span class="sh-flag">-fl</span> <span class="sh-string">"fsmonitor--daemon"</span>
+<span class="sh-command">17162</span> git fsmonitor--daemon run <span class="sh-flag">--detach</span> <span class="sh-flag">--ipc-threads=8</span>
+<span class="sh-comment">      # ← 命令結束後仍存活</span></code></pre>
+      <p>一個 <code>--detach</code> 的背景行程留在使用者的 repository 上，而且 <code>GIT_OPTIONAL_LOCKS=0</code> 完全管不到它（那個環境變數只管 index lock）。<code>core.fsmonitor</code> 還有另一種用法：指向一個 hook 腳本（Watchman 整合）。這時 git 會<strong>執行那支程式</strong>，我們的實測顯示兩個命令共觸發了四次呼叫。也就是說，審查期間會跑使用者配置的外部程式；如果那支程式卡住，你的掃描就跟著卡住。</p>
+
+      <h2>心智模型：三個影響管道，三種手段</h2>
+      <p>把上面的例子歸納一下，會發現使用者的設定是透過三個不同的管道流進 git 的，而<strong>每個管道只有特定手段能封住</strong>。這是整個 pattern 的核心，也是最容易做錯的地方。</p>
+
+            <figure class="flow-figure">
+        <svg id="mermaid-ms6horgm-my-svg" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" class="flowchart flow-desktop" viewBox="0 0 675.234375 326" aria-roledescription="flowchart-v2" role="img" aria-labelledby="mermaid-ms6horgm-title mermaid-ms6horgm-desc"><title id="mermaid-ms6horgm-title">使用者設定影響 git 輸出的三個管道</title><desc id="mermaid-ms6horgm-desc">gitconfig 用 -c 釘住、環境變數用 unset、per-path attribute 只能用 CLI 旗標，三者匯入同一個 git 子行程後才交給嚴格 parser。</desc><style>#mermaid-ms6horgm-my-svg{font-family:ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;font-size:16px;fill:#141413;}@keyframes edge-animation-frame{from{stroke-dashoffset:0;}}@keyframes dash{to{stroke-dashoffset:0;}}#mermaid-ms6horgm-my-svg .edge-animation-slow{stroke-dasharray:9,5!important;stroke-dashoffset:900;animation:dash 50s linear infinite;stroke-linecap:round;}#mermaid-ms6horgm-my-svg .edge-animation-fast{stroke-dasharray:9,5!important;stroke-dashoffset:900;animation:dash 20s linear infinite;stroke-linecap:round;}#mermaid-ms6horgm-my-svg .error-icon{fill:#FAF9F5;}#mermaid-ms6horgm-my-svg .error-text{fill:#05060a;stroke:#05060a;}#mermaid-ms6horgm-my-svg .edge-thickness-normal{stroke-width:1px;}#mermaid-ms6horgm-my-svg .edge-thickness-thick{stroke-width:3.5px;}#mermaid-ms6horgm-my-svg .edge-pattern-solid{stroke-dasharray:0;}#mermaid-ms6horgm-my-svg .edge-thickness-invisible{stroke-width:0;fill:none;}#mermaid-ms6horgm-my-svg .edge-pattern-dashed{stroke-dasharray:3;}#mermaid-ms6horgm-my-svg .edge-pattern-dotted{stroke-dasharray:2;}#mermaid-ms6horgm-my-svg .marker{fill:#D97757;stroke:#D97757;}#mermaid-ms6horgm-my-svg .marker.cross{stroke:#D97757;}#mermaid-ms6horgm-my-svg svg{font-family:ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;font-size:16px;}#mermaid-ms6horgm-my-svg p{margin:0;}#mermaid-ms6horgm-my-svg .label{font-family:ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;color:#141413;}#mermaid-ms6horgm-my-svg .cluster-label text{fill:#05060a;}#mermaid-ms6horgm-my-svg .cluster-label span{color:#05060a;}#mermaid-ms6horgm-my-svg .cluster-label span p{background-color:transparent;}#mermaid-ms6horgm-my-svg .label text,#mermaid-ms6horgm-my-svg span{fill:#141413;color:#141413;}#mermaid-ms6horgm-my-svg .node rect,#mermaid-ms6horgm-my-svg .node circle,#mermaid-ms6horgm-my-svg .node ellipse,#mermaid-ms6horgm-my-svg .node polygon,#mermaid-ms6horgm-my-svg .node path{fill:#FFFFFF;stroke:#E3DACC;stroke-width:1px;}#mermaid-ms6horgm-my-svg .rough-node .label text,#mermaid-ms6horgm-my-svg .node .label text,#mermaid-ms6horgm-my-svg .image-shape .label,#mermaid-ms6horgm-my-svg .icon-shape .label{text-anchor:middle;}#mermaid-ms6horgm-my-svg .node .katex path{fill:#000;stroke:#000;stroke-width:1px;}#mermaid-ms6horgm-my-svg .rough-node .label,#mermaid-ms6horgm-my-svg .node .label,#mermaid-ms6horgm-my-svg .image-shape .label,#mermaid-ms6horgm-my-svg .icon-shape .label{text-align:center;}#mermaid-ms6horgm-my-svg .node.clickable{cursor:pointer;}#mermaid-ms6horgm-my-svg .root .anchor path{fill:#D97757!important;stroke-width:0;stroke:#D97757;}#mermaid-ms6horgm-my-svg .arrowheadPath{fill:rgba(255, 255, 255, 0);}#mermaid-ms6horgm-my-svg .edgePath .path{stroke:#D97757;stroke-width:1px;}#mermaid-ms6horgm-my-svg .flowchart-link{stroke:#D97757;fill:none;}#mermaid-ms6horgm-my-svg .edgeLabel{background-color:#F0EEE6;text-align:center;}#mermaid-ms6horgm-my-svg .edgeLabel p{background-color:#F0EEE6;}#mermaid-ms6horgm-my-svg .edgeLabel rect{opacity:0.5;background-color:#F0EEE6;fill:#F0EEE6;}#mermaid-ms6horgm-my-svg .labelBkg{background-color:rgba(240, 238, 230, 0.5);}#mermaid-ms6horgm-my-svg .cluster rect{fill:#FAF9F5;stroke:hsl(48, 0%, 87.0588235294%);stroke-width:1px;}#mermaid-ms6horgm-my-svg .cluster text{fill:#05060a;}#mermaid-ms6horgm-my-svg .cluster span{color:#05060a;}#mermaid-ms6horgm-my-svg div.mermaidTooltip{position:absolute;text-align:center;max-width:200px;padding:2px;font-family:ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;font-size:12px;background:#FAF9F5;border:1px solid hsl(48, 0%, 87.0588235294%);border-radius:2px;pointer-events:none;z-index:100;}#mermaid-ms6horgm-my-svg .flowchartTitleText{text-anchor:middle;font-size:18px;fill:#141413;}#mermaid-ms6horgm-my-svg rect.text{fill:none;stroke-width:0;}#mermaid-ms6horgm-my-svg .icon-shape,#mermaid-ms6horgm-my-svg .image-shape{background-color:#F0EEE6;text-align:center;}#mermaid-ms6horgm-my-svg .icon-shape p,#mermaid-ms6horgm-my-svg .image-shape p{background-color:#F0EEE6;padding:2px;}#mermaid-ms6horgm-my-svg .icon-shape .label rect,#mermaid-ms6horgm-my-svg .image-shape .label rect{opacity:0.5;background-color:#F0EEE6;fill:#F0EEE6;}#mermaid-ms6horgm-my-svg .label-icon{display:inline-block;height:1em;overflow:visible;vertical-align:-0.125em;}#mermaid-ms6horgm-my-svg .node .label-icon path{fill:currentColor;stroke:revert;stroke-width:revert;}#mermaid-ms6horgm-my-svg .node .neo-node{stroke:#E3DACC;}#mermaid-ms6horgm-my-svg [data-look="neo"].node rect,#mermaid-ms6horgm-my-svg [data-look="neo"].cluster rect,#mermaid-ms6horgm-my-svg [data-look="neo"].node polygon{stroke:url(#mermaid-ms6horgm-my-svg-gradient);filter:drop-shadow( 1px 2px 2px rgba(185,185,185,1));}#mermaid-ms6horgm-my-svg [data-look="neo"].swimlane.cluster rect{filter:none;}#mermaid-ms6horgm-my-svg [data-look="neo"].node path{stroke:url(#mermaid-ms6horgm-my-svg-gradient);stroke-width:1px;}#mermaid-ms6horgm-my-svg [data-look="neo"].node .outer-path{filter:drop-shadow( 1px 2px 2px rgba(185,185,185,1));}#mermaid-ms6horgm-my-svg [data-look="neo"].node .neo-line path{stroke:#E3DACC;filter:none;}#mermaid-ms6horgm-my-svg [data-look="neo"].node circle{stroke:url(#mermaid-ms6horgm-my-svg-gradient);filter:drop-shadow( 1px 2px 2px rgba(185,185,185,1));}#mermaid-ms6horgm-my-svg [data-look="neo"].node circle .state-start{fill:#000000;}#mermaid-ms6horgm-my-svg [data-look="neo"].icon-shape .icon{fill:url(#mermaid-ms6horgm-my-svg-gradient);filter:drop-shadow( 1px 2px 2px rgba(185,185,185,1));}#mermaid-ms6horgm-my-svg [data-look="neo"].icon-shape .icon-neo path{stroke:url(#mermaid-ms6horgm-my-svg-gradient);filter:drop-shadow( 1px 2px 2px rgba(185,185,185,1));}#mermaid-ms6horgm-my-svg :root{--mermaid-font-family:"trebuchet ms",verdana,arial,sans-serif;}</style><g><marker id="mermaid-ms6horgm-my-svg_flowchart-v2-pointEnd" class="marker flowchart-v2" viewBox="0 0 10 10" refX="5" refY="5" markerUnits="userSpaceOnUse" markerWidth="8" markerHeight="8" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" class="arrowMarkerPath" style="stroke-width: 1; stroke-dasharray: 1, 0;"/></marker><marker id="mermaid-ms6horgm-my-svg_flowchart-v2-pointStart" class="marker flowchart-v2" viewBox="0 0 10 10" refX="4.5" refY="5" markerUnits="userSpaceOnUse" markerWidth="8" markerHeight="8" orient="auto"><path d="M 0 5 L 10 10 L 10 0 z" class="arrowMarkerPath" style="stroke-width: 1; stroke-dasharray: 1, 0;"/></marker><marker id="mermaid-ms6horgm-my-svg_flowchart-v2-pointEnd-margin" class="marker flowchart-v2" viewBox="0 0 11.5 14" refX="11.5" refY="7" markerUnits="userSpaceOnUse" markerWidth="10.5" markerHeight="14" orient="auto"><path d="M 0 0 L 11.5 7 L 0 14 z" class="arrowMarkerPath" style="stroke-width: 0; stroke-dasharray: 1, 0;"/></marker><marker id="mermaid-ms6horgm-my-svg_flowchart-v2-pointStart-margin" class="marker flowchart-v2" viewBox="0 0 11.5 14" refX="1" refY="7" markerUnits="userSpaceOnUse" markerWidth="11.5" markerHeight="14" orient="auto"><polygon points="0,7 11.5,14 11.5,0" class="arrowMarkerPath" style="stroke-width: 0; stroke-dasharray: 1, 0;"/></marker><marker id="mermaid-ms6horgm-my-svg_flowchart-v2-circleEnd" class="marker flowchart-v2" viewBox="0 0 10 10" refX="11" refY="5" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" orient="auto"><circle cx="5" cy="5" r="5" class="arrowMarkerPath" style="stroke-width: 1; stroke-dasharray: 1, 0;"/></marker><marker id="mermaid-ms6horgm-my-svg_flowchart-v2-circleStart" class="marker flowchart-v2" viewBox="0 0 10 10" refX="-1" refY="5" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" orient="auto"><circle cx="5" cy="5" r="5" class="arrowMarkerPath" style="stroke-width: 1; stroke-dasharray: 1, 0;"/></marker><marker id="mermaid-ms6horgm-my-svg_flowchart-v2-circleEnd-margin" class="marker flowchart-v2" viewBox="0 0 10 10" refY="5" refX="12.25" markerUnits="userSpaceOnUse" markerWidth="14" markerHeight="14" orient="auto"><circle cx="5" cy="5" r="5" class="arrowMarkerPath" style="stroke-width: 0; stroke-dasharray: 1, 0;"/></marker><marker id="mermaid-ms6horgm-my-svg_flowchart-v2-circleStart-margin" class="marker flowchart-v2" viewBox="0 0 10 10" refX="-2" refY="5" markerUnits="userSpaceOnUse" markerWidth="14" markerHeight="14" orient="auto"><circle cx="5" cy="5" r="5" class="arrowMarkerPath" style="stroke-width: 0; stroke-dasharray: 1, 0;"/></marker><marker id="mermaid-ms6horgm-my-svg_flowchart-v2-crossEnd" class="marker cross flowchart-v2" viewBox="0 0 11 11" refX="12" refY="5.2" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" orient="auto"><path d="M 1,1 l 9,9 M 10,1 l -9,9" class="arrowMarkerPath" style="stroke-width: 2; stroke-dasharray: 1, 0;"/></marker><marker id="mermaid-ms6horgm-my-svg_flowchart-v2-crossStart" class="marker cross flowchart-v2" viewBox="0 0 11 11" refX="-1" refY="5.2" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" orient="auto"><path d="M 1,1 l 9,9 M 10,1 l -9,9" class="arrowMarkerPath" style="stroke-width: 2; stroke-dasharray: 1, 0;"/></marker><marker id="mermaid-ms6horgm-my-svg_flowchart-v2-crossEnd-margin" class="marker cross flowchart-v2" viewBox="0 0 15 15" refX="17.7" refY="7.5" markerUnits="userSpaceOnUse" markerWidth="12" markerHeight="12" orient="auto"><path d="M 1,1 L 14,14 M 1,14 L 14,1" class="arrowMarkerPath" style="stroke-width: 2.5;"/></marker><marker id="mermaid-ms6horgm-my-svg_flowchart-v2-crossStart-margin" class="marker cross flowchart-v2" viewBox="0 0 15 15" refX="-3.5" refY="7.5" markerUnits="userSpaceOnUse" markerWidth="12" markerHeight="12" orient="auto"><path d="M 1,1 L 14,14 M 1,14 L 14,1" class="arrowMarkerPath" style="stroke-width: 2.5; stroke-dasharray: 1, 0;"/></marker><g class="root"><g class="clusters"/><g class="edgePaths"><path d="M154.43,47L171.708,47C188.987,47,223.544,47,259.005,61.419C294.466,75.838,330.83,104.676,349.012,119.095L367.195,133.515" id="mermaid-ms6horgm-my-svg-L_Config_Git_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" data-edge="true" data-et="edge" data-id="mermaid-ms6horgm-L_Config_Git_0" data-points="W3sieCI6MTU0LjQyOTY4NzUsInkiOjQ3fSx7IngiOjI1OC4xMDE1NjI1LCJ5Ijo0N30seyJ4IjozNzAuMzI4NTk2NDQzOTY1NSwieSI6MTM2fV0=" data-look="classic" marker-end="url(#mermaid-ms6horgm-my-svg_flowchart-v2-pointEnd)"/><path d="M154.273,163L171.578,163C188.883,163,223.492,163,253.642,163C283.792,163,309.482,163,322.327,163L335.172,163" id="mermaid-ms6horgm-my-svg-L_Env_Git_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" data-edge="true" data-et="edge" data-id="mermaid-ms6horgm-L_Env_Git_0" data-points="W3sieCI6MTU0LjI3MzQzNzUsInkiOjE2M30seyJ4IjoyNTguMTAxNTYyNSwieSI6MTYzfSx7IngiOjMzOS4xNzE4NzUsInkiOjE2M31d" data-look="classic" marker-end="url(#mermaid-ms6horgm-my-svg_flowchart-v2-pointEnd)"/><path d="M177.031,279L190.543,279C204.055,279,231.078,279,262.772,264.581C294.466,250.162,330.83,221.324,349.012,206.905L367.195,192.485" id="mermaid-ms6horgm-my-svg-L_Attr_Git_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" data-edge="true" data-et="edge" data-id="mermaid-ms6horgm-L_Attr_Git_0" data-points="W3sieCI6MTc3LjAzMTI1LCJ5IjoyNzl9LHsieCI6MjU4LjEwMTU2MjUsInkiOjI3OX0seyJ4IjozNzAuMzI4NTk2NDQzOTY1NSwieSI6MTkwfV0=" data-look="classic" marker-end="url(#mermaid-ms6horgm-my-svg_flowchart-v2-pointEnd)"/><path d="M469.578,163L473.745,163C477.911,163,486.245,163,493.911,163C501.578,163,508.578,163,512.078,163L515.578,163" id="mermaid-ms6horgm-my-svg-L_Git_Parser_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" data-edge="true" data-et="edge" data-id="mermaid-ms6horgm-L_Git_Parser_0" data-points="W3sieCI6NDY5LjU3ODEyNSwieSI6MTYzfSx7IngiOjQ5NC41NzgxMjUsInkiOjE2M30seyJ4Ijo1MTkuNTc4MTI1LCJ5IjoxNjN9XQ==" data-look="classic" marker-end="url(#mermaid-ms6horgm-my-svg_flowchart-v2-pointEnd)"/></g><g class="edgeLabels"><g class="edgeLabel" transform="translate(258.1015625, 47)"><g class="label" data-id="mermaid-ms6horgm-L_Config_Git_0" transform="translate(0, -10)"><g><rect class="background" x="-47.8828125" y="-1" width="95.765625" height="22"/><text y="-10.1" text-anchor="middle"><tspan class="text-outer-tspan row" x="0" y="-0.1em" dy="1.1em" text-anchor="middle"><tspan font-style="normal" class="text-inner-tspan" font-weight="normal">-c</tspan><tspan font-style="normal" class="text-inner-tspan" font-weight="normal"> key=value</tspan></tspan></text></g></g></g><g class="edgeLabel" transform="translate(258.1015625, 163)"><g class="label" data-id="mermaid-ms6horgm-L_Env_Git_0" transform="translate(0, -10)"><g><rect class="background" x="-56.0703125" y="-1" width="112.140625" height="22"/><text y="-10.1" text-anchor="middle"><tspan class="text-outer-tspan row" x="0" y="-0.1em" dy="1.1em" text-anchor="middle"><tspan font-style="normal" class="text-inner-tspan" font-weight="normal">unset</tspan><tspan font-style="normal" class="text-inner-tspan" font-weight="normal"> 或固定值</tspan></tspan></text></g></g></g><g class="edgeLabel" transform="translate(258.1015625, 279)"><g class="label" data-id="mermaid-ms6horgm-L_Attr_Git_0" transform="translate(0, -10)"><g><rect class="background" x="-31.921875" y="-1" width="63.84375" height="22"/><text y="-10.1" text-anchor="middle"><tspan class="text-outer-tspan row" x="0" y="-0.1em" dy="1.1em" text-anchor="middle"><tspan font-style="normal" class="text-inner-tspan" font-weight="normal">CLI</tspan><tspan font-style="normal" class="text-inner-tspan" font-weight="normal"> 旗標</tspan></tspan></text></g></g></g><g class="edgeLabel"><g class="label" data-id="mermaid-ms6horgm-L_Git_Parser_0" transform="translate(0, 0)"><text y="-10.1" text-anchor="middle"><tspan class="text-outer-tspan row" x="0" y="-0.1em" dy="1.1em" text-anchor="middle"/></text></g></g><g><rect class="background" style="stroke: none"/></g></g><g class="nodes"><g class="node default" id="mermaid-ms6horgm-my-svg-flowchart-Config-0" data-look="classic" transform="translate(92.515625, 47)"><rect class="basic label-container" x="-61.9140625" y="-39" width="123.828125" height="78"/><g class="label" transform="translate(-31.9140625, -24)"><rect/><foreignObject width="63.828125" height="48"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="nodeLabel"><p>gitconfig<br />設定檔</p></span></div></foreignObject></g></g><g class="node default" id="mermaid-ms6horgm-my-svg-flowchart-Git-1" data-look="classic" transform="translate(404.375, 163)"><rect class="basic label-container" x="-65.203125" y="-27" width="130.40625" height="54"/><g class="label" transform="translate(-35.203125, -12)"><rect/><foreignObject width="70.40625" height="24"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="nodeLabel"><p>git 子行程</p></span></div></foreignObject></g></g><g class="node default" id="mermaid-ms6horgm-my-svg-flowchart-Env-2" data-look="classic" transform="translate(92.515625, 163)"><rect class="basic label-container" x="-61.7578125" y="-27" width="123.515625" height="54"/><g class="label" transform="translate(-31.7578125, -12)"><rect/><foreignObject width="63.515625" height="24"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="nodeLabel"><p>環境變數</p></span></div></foreignObject></g></g><g class="node default" id="mermaid-ms6horgm-my-svg-flowchart-Attr-4" data-look="classic" transform="translate(92.515625, 279)"><rect class="basic label-container" x="-84.515625" y="-39" width="169.03125" height="78"/><g class="label" transform="translate(-54.515625, -24)"><rect/><foreignObject width="109.03125" height="48"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="nodeLabel"><p>.gitattributes<br />per-path driver</p></span></div></foreignObject></g></g><g class="node default" id="mermaid-ms6horgm-my-svg-flowchart-Parser-7" data-look="classic" transform="translate(593.40625, 163)"><rect class="basic label-container" x="-73.828125" y="-39" width="147.65625" height="78"/><g class="label" transform="translate(-43.828125, -24)"><rect/><foreignObject width="87.65625" height="48"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="nodeLabel"><p>strict parser<br />形狀可預測</p></span></div></foreignObject></g></g></g></g></g><defs><filter id="mermaid-ms6horgm-my-svg-drop-shadow" height="130%" width="130%"><feDropShadow dx="4" dy="4" stdDeviation="0" flood-opacity="0.06" flood-color="#000000"/></filter></defs><defs><filter id="mermaid-ms6horgm-my-svg-drop-shadow-small" height="150%" width="150%"><feDropShadow dx="2" dy="2" stdDeviation="0" flood-opacity="0.06" flood-color="#000000"/></filter></defs><linearGradient id="mermaid-ms6horgm-my-svg-gradient" gradientUnits="objectBoundingBox" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" stop-color="#E3DACC" stop-opacity="1"/><stop offset="100%" stop-color="hsl(48, 0%, 82.1568627451%)" stop-opacity="1"/></linearGradient></svg>
+            <svg id="mermaid-ms6i86kt-my-svg" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" class="flowchart flow-mobile" viewBox="0 0 299.78515625 582" aria-roledescription="flowchart-v2" role="img" aria-labelledby="mermaid-ms6i86kt-title mermaid-ms6i86kt-desc"><title id="mermaid-ms6i86kt-title">使用者設定影響 git 輸出的三個管道（直式）</title><desc id="mermaid-ms6i86kt-desc">設定檔用 -c 釘住、環境變數用 unset、per-path attribute 只能用 CLI 旗標，三者匯入同一個 git 子行程後才交給嚴格 parser。</desc><style>#mermaid-ms6i86kt-my-svg{font-family:ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;font-size:16px;fill:#141413;}@keyframes edge-animation-frame{from{stroke-dashoffset:0;}}@keyframes dash{to{stroke-dashoffset:0;}}#mermaid-ms6i86kt-my-svg .edge-animation-slow{stroke-dasharray:9,5!important;stroke-dashoffset:900;animation:dash 50s linear infinite;stroke-linecap:round;}#mermaid-ms6i86kt-my-svg .edge-animation-fast{stroke-dasharray:9,5!important;stroke-dashoffset:900;animation:dash 20s linear infinite;stroke-linecap:round;}#mermaid-ms6i86kt-my-svg .error-icon{fill:#FAF9F5;}#mermaid-ms6i86kt-my-svg .error-text{fill:#05060a;stroke:#05060a;}#mermaid-ms6i86kt-my-svg .edge-thickness-normal{stroke-width:1px;}#mermaid-ms6i86kt-my-svg .edge-thickness-thick{stroke-width:3.5px;}#mermaid-ms6i86kt-my-svg .edge-pattern-solid{stroke-dasharray:0;}#mermaid-ms6i86kt-my-svg .edge-thickness-invisible{stroke-width:0;fill:none;}#mermaid-ms6i86kt-my-svg .edge-pattern-dashed{stroke-dasharray:3;}#mermaid-ms6i86kt-my-svg .edge-pattern-dotted{stroke-dasharray:2;}#mermaid-ms6i86kt-my-svg .marker{fill:#D97757;stroke:#D97757;}#mermaid-ms6i86kt-my-svg .marker.cross{stroke:#D97757;}#mermaid-ms6i86kt-my-svg svg{font-family:ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;font-size:16px;}#mermaid-ms6i86kt-my-svg p{margin:0;}#mermaid-ms6i86kt-my-svg .label{font-family:ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;color:#141413;}#mermaid-ms6i86kt-my-svg .cluster-label text{fill:#05060a;}#mermaid-ms6i86kt-my-svg .cluster-label span{color:#05060a;}#mermaid-ms6i86kt-my-svg .cluster-label span p{background-color:transparent;}#mermaid-ms6i86kt-my-svg .label text,#mermaid-ms6i86kt-my-svg span{fill:#141413;color:#141413;}#mermaid-ms6i86kt-my-svg .node rect,#mermaid-ms6i86kt-my-svg .node circle,#mermaid-ms6i86kt-my-svg .node ellipse,#mermaid-ms6i86kt-my-svg .node polygon,#mermaid-ms6i86kt-my-svg .node path{fill:#FFFFFF;stroke:#E3DACC;stroke-width:1px;}#mermaid-ms6i86kt-my-svg .rough-node .label text,#mermaid-ms6i86kt-my-svg .node .label text,#mermaid-ms6i86kt-my-svg .image-shape .label,#mermaid-ms6i86kt-my-svg .icon-shape .label{text-anchor:middle;}#mermaid-ms6i86kt-my-svg .node .katex path{fill:#000;stroke:#000;stroke-width:1px;}#mermaid-ms6i86kt-my-svg .rough-node .label,#mermaid-ms6i86kt-my-svg .node .label,#mermaid-ms6i86kt-my-svg .image-shape .label,#mermaid-ms6i86kt-my-svg .icon-shape .label{text-align:center;}#mermaid-ms6i86kt-my-svg .node.clickable{cursor:pointer;}#mermaid-ms6i86kt-my-svg .root .anchor path{fill:#D97757!important;stroke-width:0;stroke:#D97757;}#mermaid-ms6i86kt-my-svg .arrowheadPath{fill:rgba(255, 255, 255, 0);}#mermaid-ms6i86kt-my-svg .edgePath .path{stroke:#D97757;stroke-width:1px;}#mermaid-ms6i86kt-my-svg .flowchart-link{stroke:#D97757;fill:none;}#mermaid-ms6i86kt-my-svg .edgeLabel{background-color:#F0EEE6;text-align:center;}#mermaid-ms6i86kt-my-svg .edgeLabel p{background-color:#F0EEE6;}#mermaid-ms6i86kt-my-svg .edgeLabel rect{opacity:0.5;background-color:#F0EEE6;fill:#F0EEE6;}#mermaid-ms6i86kt-my-svg .labelBkg{background-color:rgba(240, 238, 230, 0.5);}#mermaid-ms6i86kt-my-svg .cluster rect{fill:#FAF9F5;stroke:hsl(48, 0%, 87.0588235294%);stroke-width:1px;}#mermaid-ms6i86kt-my-svg .cluster text{fill:#05060a;}#mermaid-ms6i86kt-my-svg .cluster span{color:#05060a;}#mermaid-ms6i86kt-my-svg div.mermaidTooltip{position:absolute;text-align:center;max-width:200px;padding:2px;font-family:ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;font-size:12px;background:#FAF9F5;border:1px solid hsl(48, 0%, 87.0588235294%);border-radius:2px;pointer-events:none;z-index:100;}#mermaid-ms6i86kt-my-svg .flowchartTitleText{text-anchor:middle;font-size:18px;fill:#141413;}#mermaid-ms6i86kt-my-svg rect.text{fill:none;stroke-width:0;}#mermaid-ms6i86kt-my-svg .icon-shape,#mermaid-ms6i86kt-my-svg .image-shape{background-color:#F0EEE6;text-align:center;}#mermaid-ms6i86kt-my-svg .icon-shape p,#mermaid-ms6i86kt-my-svg .image-shape p{background-color:#F0EEE6;padding:2px;}#mermaid-ms6i86kt-my-svg .icon-shape .label rect,#mermaid-ms6i86kt-my-svg .image-shape .label rect{opacity:0.5;background-color:#F0EEE6;fill:#F0EEE6;}#mermaid-ms6i86kt-my-svg .label-icon{display:inline-block;height:1em;overflow:visible;vertical-align:-0.125em;}#mermaid-ms6i86kt-my-svg .node .label-icon path{fill:currentColor;stroke:revert;stroke-width:revert;}#mermaid-ms6i86kt-my-svg .node .neo-node{stroke:#E3DACC;}#mermaid-ms6i86kt-my-svg [data-look="neo"].node rect,#mermaid-ms6i86kt-my-svg [data-look="neo"].cluster rect,#mermaid-ms6i86kt-my-svg [data-look="neo"].node polygon{stroke:url(#mermaid-ms6i86kt-my-svg-gradient);filter:drop-shadow( 1px 2px 2px rgba(185,185,185,1));}#mermaid-ms6i86kt-my-svg [data-look="neo"].swimlane.cluster rect{filter:none;}#mermaid-ms6i86kt-my-svg [data-look="neo"].node path{stroke:url(#mermaid-ms6i86kt-my-svg-gradient);stroke-width:1px;}#mermaid-ms6i86kt-my-svg [data-look="neo"].node .outer-path{filter:drop-shadow( 1px 2px 2px rgba(185,185,185,1));}#mermaid-ms6i86kt-my-svg [data-look="neo"].node .neo-line path{stroke:#E3DACC;filter:none;}#mermaid-ms6i86kt-my-svg [data-look="neo"].node circle{stroke:url(#mermaid-ms6i86kt-my-svg-gradient);filter:drop-shadow( 1px 2px 2px rgba(185,185,185,1));}#mermaid-ms6i86kt-my-svg [data-look="neo"].node circle .state-start{fill:#000000;}#mermaid-ms6i86kt-my-svg [data-look="neo"].icon-shape .icon{fill:url(#mermaid-ms6i86kt-my-svg-gradient);filter:drop-shadow( 1px 2px 2px rgba(185,185,185,1));}#mermaid-ms6i86kt-my-svg [data-look="neo"].icon-shape .icon-neo path{stroke:url(#mermaid-ms6i86kt-my-svg-gradient);filter:drop-shadow( 1px 2px 2px rgba(185,185,185,1));}#mermaid-ms6i86kt-my-svg :root{--mermaid-font-family:"trebuchet ms",verdana,arial,sans-serif;}</style><g><marker id="mermaid-ms6i86kt-my-svg_flowchart-v2-pointEnd" class="marker flowchart-v2" viewBox="0 0 10 10" refX="5" refY="5" markerUnits="userSpaceOnUse" markerWidth="8" markerHeight="8" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" class="arrowMarkerPath" style="stroke-width: 1; stroke-dasharray: 1, 0;"/></marker><marker id="mermaid-ms6i86kt-my-svg_flowchart-v2-pointStart" class="marker flowchart-v2" viewBox="0 0 10 10" refX="4.5" refY="5" markerUnits="userSpaceOnUse" markerWidth="8" markerHeight="8" orient="auto"><path d="M 0 5 L 10 10 L 10 0 z" class="arrowMarkerPath" style="stroke-width: 1; stroke-dasharray: 1, 0;"/></marker><marker id="mermaid-ms6i86kt-my-svg_flowchart-v2-pointEnd-margin" class="marker flowchart-v2" viewBox="0 0 11.5 14" refX="11.5" refY="7" markerUnits="userSpaceOnUse" markerWidth="10.5" markerHeight="14" orient="auto"><path d="M 0 0 L 11.5 7 L 0 14 z" class="arrowMarkerPath" style="stroke-width: 0; stroke-dasharray: 1, 0;"/></marker><marker id="mermaid-ms6i86kt-my-svg_flowchart-v2-pointStart-margin" class="marker flowchart-v2" viewBox="0 0 11.5 14" refX="1" refY="7" markerUnits="userSpaceOnUse" markerWidth="11.5" markerHeight="14" orient="auto"><polygon points="0,7 11.5,14 11.5,0" class="arrowMarkerPath" style="stroke-width: 0; stroke-dasharray: 1, 0;"/></marker><marker id="mermaid-ms6i86kt-my-svg_flowchart-v2-circleEnd" class="marker flowchart-v2" viewBox="0 0 10 10" refX="11" refY="5" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" orient="auto"><circle cx="5" cy="5" r="5" class="arrowMarkerPath" style="stroke-width: 1; stroke-dasharray: 1, 0;"/></marker><marker id="mermaid-ms6i86kt-my-svg_flowchart-v2-circleStart" class="marker flowchart-v2" viewBox="0 0 10 10" refX="-1" refY="5" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" orient="auto"><circle cx="5" cy="5" r="5" class="arrowMarkerPath" style="stroke-width: 1; stroke-dasharray: 1, 0;"/></marker><marker id="mermaid-ms6i86kt-my-svg_flowchart-v2-circleEnd-margin" class="marker flowchart-v2" viewBox="0 0 10 10" refY="5" refX="12.25" markerUnits="userSpaceOnUse" markerWidth="14" markerHeight="14" orient="auto"><circle cx="5" cy="5" r="5" class="arrowMarkerPath" style="stroke-width: 0; stroke-dasharray: 1, 0;"/></marker><marker id="mermaid-ms6i86kt-my-svg_flowchart-v2-circleStart-margin" class="marker flowchart-v2" viewBox="0 0 10 10" refX="-2" refY="5" markerUnits="userSpaceOnUse" markerWidth="14" markerHeight="14" orient="auto"><circle cx="5" cy="5" r="5" class="arrowMarkerPath" style="stroke-width: 0; stroke-dasharray: 1, 0;"/></marker><marker id="mermaid-ms6i86kt-my-svg_flowchart-v2-crossEnd" class="marker cross flowchart-v2" viewBox="0 0 11 11" refX="12" refY="5.2" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" orient="auto"><path d="M 1,1 l 9,9 M 10,1 l -9,9" class="arrowMarkerPath" style="stroke-width: 2; stroke-dasharray: 1, 0;"/></marker><marker id="mermaid-ms6i86kt-my-svg_flowchart-v2-crossStart" class="marker cross flowchart-v2" viewBox="0 0 11 11" refX="-1" refY="5.2" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" orient="auto"><path d="M 1,1 l 9,9 M 10,1 l -9,9" class="arrowMarkerPath" style="stroke-width: 2; stroke-dasharray: 1, 0;"/></marker><marker id="mermaid-ms6i86kt-my-svg_flowchart-v2-crossEnd-margin" class="marker cross flowchart-v2" viewBox="0 0 15 15" refX="17.7" refY="7.5" markerUnits="userSpaceOnUse" markerWidth="12" markerHeight="12" orient="auto"><path d="M 1,1 L 14,14 M 1,14 L 14,1" class="arrowMarkerPath" style="stroke-width: 2.5;"/></marker><marker id="mermaid-ms6i86kt-my-svg_flowchart-v2-crossStart-margin" class="marker cross flowchart-v2" viewBox="0 0 15 15" refX="-3.5" refY="7.5" markerUnits="userSpaceOnUse" markerWidth="12" markerHeight="12" orient="auto"><path d="M 1,1 L 14,14 M 1,14 L 14,1" class="arrowMarkerPath" style="stroke-width: 2.5; stroke-dasharray: 1, 0;"/></marker><g class="root"><g class="clusters"/><g class="edgePaths"><path d="M55.837,86L51.566,90.167C47.294,94.333,38.75,102.667,34.479,117.5C30.207,132.333,30.207,153.667,30.207,175C30.207,196.333,30.207,217.667,30.207,239C30.207,260.333,30.207,281.667,30.207,303C30.207,324.333,30.207,345.667,35.601,360.117C40.995,374.568,51.782,382.135,57.176,385.919L62.569,389.703" id="mermaid-ms6i86kt-my-svg-L_Config_Git_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" data-edge="true" data-et="edge" data-id="mermaid-ms6i86kt-L_Config_Git_0" data-points="W3sieCI6NTUuODM3MjE5MjM4MjgxMjUsInkiOjg2fSx7IngiOjMwLjIwNzAzMTI1LCJ5IjoxMTF9LHsieCI6MzAuMjA3MDMxMjUsInkiOjE3NX0seyJ4IjozMC4yMDcwMzEyNSwieSI6MjM5fSx7IngiOjMwLjIwNzAzMTI1LCJ5IjozMDN9LHsieCI6MzAuMjA3MDMxMjUsInkiOjM2N30seyJ4Ijo2NS44NDQwNTA0ODA3NjkyMywieSI6MzkyfV0=" data-look="classic" marker-end="url(#mermaid-ms6i86kt-my-svg_flowchart-v2-pointEnd)"/><path d="M126.056,214L122.435,218.167C118.815,222.333,111.573,230.667,107.953,245.5C104.332,260.333,104.332,281.667,104.332,303C104.332,324.333,104.332,345.667,104.332,359.833C104.332,374,104.332,381,104.332,384.5L104.332,388" id="mermaid-ms6i86kt-my-svg-L_Env_Git_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" data-edge="true" data-et="edge" data-id="mermaid-ms6i86kt-L_Env_Git_0" data-points="W3sieCI6MTI2LjA1NTk2OTIzODI4MTI1LCJ5IjoyMTR9LHsieCI6MTA0LjMzMjAzMTI1LCJ5IjoyMzl9LHsieCI6MTA0LjMzMjAzMTI1LCJ5IjozMDN9LHsieCI6MTA0LjMzMjAzMTI1LCJ5IjozNjd9LHsieCI6MTA0LjMzMjAzMTI1LCJ5IjozOTJ9XQ==" data-look="classic" marker-end="url(#mermaid-ms6i86kt-my-svg_flowchart-v2-pointEnd)"/><path d="M215.559,342L215.559,346.167C215.559,350.333,215.559,358.667,207.25,366.718C198.942,374.769,182.325,382.537,174.016,386.422L165.708,390.306" id="mermaid-ms6i86kt-my-svg-L_Attr_Git_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" data-edge="true" data-et="edge" data-id="mermaid-ms6i86kt-L_Attr_Git_0" data-points="W3sieCI6MjE1LjU1ODU5Mzc1LCJ5IjozNDJ9LHsieCI6MjE1LjU1ODU5Mzc1LCJ5IjozNjd9LHsieCI6MTYyLjA4NDI4NDg1NTc2OTIzLCJ5IjozOTJ9XQ==" data-look="classic" marker-end="url(#mermaid-ms6i86kt-my-svg_flowchart-v2-pointEnd)"/><path d="M104.332,446L104.332,450.167C104.332,454.333,104.332,462.667,104.332,470.333C104.332,478,104.332,485,104.332,488.5L104.332,492" id="mermaid-ms6i86kt-my-svg-L_Git_Parser_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" data-edge="true" data-et="edge" data-id="mermaid-ms6i86kt-L_Git_Parser_0" data-points="W3sieCI6MTA0LjMzMjAzMTI1LCJ5Ijo0NDZ9LHsieCI6MTA0LjMzMjAzMTI1LCJ5Ijo0NzF9LHsieCI6MTA0LjMzMjAzMTI1LCJ5Ijo0OTZ9XQ==" data-look="classic" marker-end="url(#mermaid-ms6i86kt-my-svg_flowchart-v2-pointEnd)"/><path d="M134.896,86L139.071,90.167C143.246,94.333,151.596,102.667,155.771,111C159.945,119.333,159.945,127.667,159.945,131.833L159.945,136" id="mermaid-ms6i86kt-my-svg-L_Config_Env_0" class="edge-thickness-invisible edge-pattern-solid" data-edge="true" data-et="edge" data-id="mermaid-ms6i86kt-L_Config_Env_0" data-points="W3sieCI6MTM0Ljg5NjQ4NDM3NSwieSI6ODZ9LHsieCI6MTU5Ljk0NTMxMjUsInkiOjExMX0seyJ4IjoxNTkuOTQ1MzEyNSwieSI6MTM2fV0=" data-look="classic"/><path d="M193.835,214L197.455,218.167C201.076,222.333,208.317,230.667,211.938,239C215.559,247.333,215.559,255.667,215.559,259.833L215.559,264" id="mermaid-ms6i86kt-my-svg-L_Env_Attr_0" class="edge-thickness-invisible edge-pattern-solid" data-edge="true" data-et="edge" data-id="mermaid-ms6i86kt-L_Env_Attr_0" data-points="W3sieCI6MTkzLjgzNDY1NTc2MTcxODc1LCJ5IjoyMTR9LHsieCI6MjE1LjU1ODU5Mzc1LCJ5IjoyMzl9LHsieCI6MjE1LjU1ODU5Mzc1LCJ5IjoyNjR9XQ==" data-look="classic"/></g><g class="edgeLabels"><g class="edgeLabel"><g class="label" data-id="mermaid-ms6i86kt-L_Config_Git_0" transform="translate(0, 0)"><text y="-10.1" text-anchor="middle"><tspan class="text-outer-tspan row" x="0" y="-0.1em" dy="1.1em" text-anchor="middle"/></text></g></g><g><rect class="background" style="stroke: none"/></g><g class="edgeLabel"><g class="label" data-id="mermaid-ms6i86kt-L_Env_Git_0" transform="translate(0, 0)"><text y="-10.1" text-anchor="middle"><tspan class="text-outer-tspan row" x="0" y="-0.1em" dy="1.1em" text-anchor="middle"/></text></g></g><g><rect class="background" style="stroke: none"/></g><g class="edgeLabel"><g class="label" data-id="mermaid-ms6i86kt-L_Attr_Git_0" transform="translate(0, 0)"><text y="-10.1" text-anchor="middle"><tspan class="text-outer-tspan row" x="0" y="-0.1em" dy="1.1em" text-anchor="middle"/></text></g></g><g><rect class="background" style="stroke: none"/></g><g class="edgeLabel"><g class="label" data-id="mermaid-ms6i86kt-L_Git_Parser_0" transform="translate(0, 0)"><text y="-10.1" text-anchor="middle"><tspan class="text-outer-tspan row" x="0" y="-0.1em" dy="1.1em" text-anchor="middle"/></text></g></g><g><rect class="background" style="stroke: none"/></g><g class="edgeLabel"><g class="label" data-id="mermaid-ms6i86kt-L_Config_Env_0" transform="translate(0, 0)"><text y="-10.1" text-anchor="middle"><tspan class="text-outer-tspan row" x="0" y="-0.1em" dy="1.1em" text-anchor="middle"/></text></g></g><g><rect class="background" style="stroke: none"/></g><g class="edgeLabel"><g class="label" data-id="mermaid-ms6i86kt-L_Env_Attr_0" transform="translate(0, 0)"><text y="-10.1" text-anchor="middle"><tspan class="text-outer-tspan row" x="0" y="-0.1em" dy="1.1em" text-anchor="middle"/></text></g></g><g><rect class="background" style="stroke: none"/></g></g><g class="nodes"><g class="node default" id="mermaid-ms6i86kt-my-svg-flowchart-Config-0" data-look="classic" transform="translate(95.8203125, 47)"><rect class="basic label-container" x="-87.8203125" y="-39" width="175.640625" height="78"/><g class="label" transform="translate(-57.8203125, -24)"><rect/><foreignObject width="115.640625" height="48"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="nodeLabel"><p>gitconfig 設定檔<br />→ -c key=value</p></span></div></foreignObject></g></g><g class="node default" id="mermaid-ms6i86kt-my-svg-flowchart-Git-1" data-look="classic" transform="translate(104.33203125, 419)"><rect class="basic label-container" x="-65.203125" y="-27" width="130.40625" height="54"/><g class="label" transform="translate(-35.203125, -12)"><rect/><foreignObject width="70.40625" height="24"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="nodeLabel"><p>git 子行程</p></span></div></foreignObject></g></g><g class="node default" id="mermaid-ms6i86kt-my-svg-flowchart-Env-2" data-look="classic" transform="translate(159.9453125, 175)"><rect class="basic label-container" x="-93.25" y="-39" width="186.5" height="78"/><g class="label" transform="translate(-63.25, -24)"><rect/><foreignObject width="126.5" height="48"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="nodeLabel"><p>環境變數<br />→ unset 或固定值</p></span></div></foreignObject></g></g><g class="node default" id="mermaid-ms6i86kt-my-svg-flowchart-Attr-4" data-look="classic" transform="translate(215.55859375, 303)"><rect class="basic label-container" x="-76.2265625" y="-39" width="152.453125" height="78"/><g class="label" transform="translate(-46.2265625, -24)"><rect/><foreignObject width="92.453125" height="48"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="nodeLabel"><p>.gitattributes<br />→ CLI 旗標</p></span></div></foreignObject></g></g><g class="node default" id="mermaid-ms6i86kt-my-svg-flowchart-Parser-7" data-look="classic" transform="translate(104.33203125, 535)"><rect class="basic label-container" x="-73.828125" y="-39" width="147.65625" height="78"/><g class="label" transform="translate(-43.828125, -24)"><rect/><foreignObject width="87.65625" height="48"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="nodeLabel"><p>strict parser<br />形狀可預測</p></span></div></foreignObject></g></g></g></g></g><defs><filter id="mermaid-ms6i86kt-my-svg-drop-shadow" height="130%" width="130%"><feDropShadow dx="4" dy="4" stdDeviation="0" flood-opacity="0.06" flood-color="#000000"/></filter></defs><defs><filter id="mermaid-ms6i86kt-my-svg-drop-shadow-small" height="150%" width="150%"><feDropShadow dx="2" dy="2" stdDeviation="0" flood-opacity="0.06" flood-color="#000000"/></filter></defs><linearGradient id="mermaid-ms6i86kt-my-svg-gradient" gradientUnits="objectBoundingBox" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" stop-color="#E3DACC" stop-opacity="1"/><stop offset="100%" stop-color="hsl(48, 0%, 82.1568627451%)" stop-opacity="1"/></linearGradient></svg>
+  <figcaption>三個管道要用三種不同手段；選錯手段那條管道就關不掉。</figcaption>
+      </figure>
+
+      <h3>管道一：設定檔 → 用 <code>-c key=value</code></h3>
+      <p>system、global、repo-local 三層 gitconfig 都可以改輸出形狀。命令列的 <code>-c</code> 優先於全部設定檔，也優先於 <code>GIT_CONFIG_PARAMETERS</code>：</p>
+      <pre class="language-shell"><span class="label">Shell</span><code><span class="sh-prompt">$</span> <span class="sh-command">export</span> <span class="sh-var">GIT_CONFIG_PARAMETERS="'diff.noprefix=true'"</span>
+
+<span class="sh-prompt">$</span> <span class="sh-command">git</span> diff -- f.txt | head <span class="sh-flag">-1</span>
+<span class="sh-command">diff</span> <span class="sh-flag">--git</span> f.txt f.txt          <span class="sh-comment"># 設定生效，前綴消失</span>
+
+<span class="sh-prompt">$</span> <span class="sh-command">git</span> <span class="sh-flag">-c</span> diff.noprefix=false diff -- f.txt | head <span class="sh-flag">-1</span>
+<span class="sh-command">diff</span> <span class="sh-flag">--git</span> a/f.txt b/f.txt      <span class="sh-comment"># -c 贏</span></code></pre>
+      <p>這一點很重要，因為 <code>a/</code>、<code>b/</code> 前綴是我們判斷「這個 record 講的是哪個路徑」的依據；前綴被拿掉，路徑歸屬就會失敗。</p>
+
+      <h3>管道二：環境變數 → 只能 unset 或設成固定值</h3>
+      <p>有些行為完全不存在對應的設定鍵，因此 <code>-c</code> 無能為力。<code>GIT_DIFF_OPTS</code> 就是這樣，而且它會蓋掉你在命令列明確指定的旗標：</p>
+      <pre class="language-shell"><span class="label">Shell</span><code><span class="sh-prompt">$</span> <span class="sh-command">git</span> diff <span class="sh-flag">--unified=3</span> -- ctx.txt | grep <span class="sh-string">'@@'</span>
+<span class="sh-command">@@</span> <span class="sh-flag">-3,4</span> +3,4 @@ b
+
+<span class="sh-prompt">$</span> <span class="sh-var">GIT_DIFF_OPTS=--unified=0</span> <span class="sh-command">\</span>
+    <span class="sh-command">git</span> diff <span class="sh-flag">--unified=3</span> -- ctx.txt | grep <span class="sh-string">'@@'</span>
+<span class="sh-command">@@</span> <span class="sh-flag">-6</span> +6 @@ e                    <span class="sh-comment"># context 行全部消失</span></code></pre>
+      <p>同一個管道還有 <code>GIT_DIR</code>、<code>GIT_WORK_TREE</code>、<code>GIT_INDEX_FILE</code> 這類會把命令導向<em>另一個</em> repository 的變數——當你的 CLI 提供「指定 repository 路徑」的選項時，繼承來的這些變數會讓工具實際讀到別的地方。處理方式是在建立子行程時把它們明確移除，而不是信任呼叫者的環境。</p>
+
+      <h3>管道三：per-path attribute → 只能用 CLI 旗標</h3>
+      <p>textconv 屬於這個管道：<code>.gitattributes</code>（repo 內容）決定哪些路徑套用哪個 driver，driver 的實際命令則在使用者設定裡。你無法用 <code>-c</code> 關掉它，因為要關的鍵是 <code>diff.&lt;driver&gt;.textconv</code>，而 <code>&lt;driver&gt;</code> 的名字是 repo 自己取的，你事前無法列舉。唯一能全面停用的方式是 CLI 旗標 <code>--no-textconv</code>。</p>
+
+      <div class="callout">
+        <p><span class="callout-title">判斷順序：</span>先問「這個行為是被 config key、環境變數，還是 per-path attribute 觸發的」，再決定手段。把三者混為一談，就會出現「我明明加了 <code>-c</code>，怎麼還是被影響」這種找不到原因的狀況。</p>
+      </div>
+
+      <h2>每一條 pin 對應一個症狀</h2>
+      <p>Pin 清單很容易長成一堆看不出用途的字串。維護它的辦法是讓每一條都能回答「移除它會看到什麼症狀」，並記錄哪些看似相關的手段擋不住它。</p>
+      <div class="table-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th>手段</th>
+            <th>管道</th>
+            <th>移除後觀察到的症狀</th>
+            <th>擋不住它的手段</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>-c diff.suppressBlankEmpty=false</code></td>
+            <td>設定檔</td>
+            <td>空白 context 行變空字串，parser 拒絕整份 patch</td>
+            <td>任何 CLI 旗標</td>
+          </tr>
+          <tr>
+            <td><code>-c diff.submodule=short</code></td>
+            <td>設定檔</td>
+            <td>submodule 變更沒有 <code>diff --git</code> 行，找不到 record 邊界</td>
+            <td><code>--no-ext-diff</code></td>
+          </tr>
+          <tr>
+            <td><code>-c diff.noprefix=false</code>、<code>-c diff.srcPrefix=a/</code>、<code>-c diff.dstPrefix=b/</code>、<code>-c diff.mnemonicPrefix=false</code></td>
+            <td>設定檔</td>
+            <td><code>a/</code>、<code>b/</code> 前綴被改寫或移除，record 無法歸屬到路徑</td>
+            <td>任何 CLI 旗標</td>
+          </tr>
+          <tr>
+            <td><code>-c core.fsmonitor=false</code></td>
+            <td>設定檔</td>
+            <td>唯讀命令留下 <code>--detach</code> daemon，或執行使用者的 hook 程式</td>
+            <td><code>GIT_OPTIONAL_LOCKS=0</code></td>
+          </tr>
+          <tr>
+            <td><code>--no-textconv</code></td>
+            <td>per-path attribute</td>
+            <td>patch 變空或內容被替換，行號指向轉換後的文字</td>
+            <td><code>-c</code>、<code>--no-ext-diff</code></td>
+          </tr>
+          <tr>
+            <td>unset <code>GIT_DIFF_OPTS</code></td>
+            <td>環境變數</td>
+            <td>明確指定的 <code>--unified=3</code> 被覆蓋，context 行消失</td>
+            <td><code>-c</code>（不是 config key）</td>
+          </tr>
+          <tr>
+            <td>unset <code>GIT_DIR</code>、<code>GIT_WORK_TREE</code>、<code>GIT_INDEX_FILE</code></td>
+            <td>環境變數</td>
+            <td>命令作用在繼承環境指定的 repository，而不是使用者選定的那個</td>
+            <td><code>-c</code>、CLI 旗標</td>
+          </tr>
+          <tr>
+            <td><code>GIT_OPTIONAL_LOCKS=0</code></td>
+            <td>環境變數</td>
+            <td>掃描 untracked 檔案時把快取寫回 index，唯讀操作變成寫入</td>
+            <td><code>-c</code>（可用 <code>core.untrackedCache=false</code>，但已被此變數覆蓋）</td>
+          </tr>
+        </tbody>
+      </table>
+      </div>
+      <p>表格最後一列示範了另一個實用結論：<strong>pin 之間會互相覆蓋，重複的要拿掉</strong>。我們實測 <code>core.untrackedCache=true</code> 搭配 <code>GIT_OPTIONAL_LOCKS=0</code> 跑 <code>ls-files --others</code>，index 檔案的 mtime 與大小完全沒變（2226 bytes → 2226 bytes）；把環境變數拿掉後改跑 <code>git status</code>，index 立刻長到 2589 bytes。既然環境變數已經封住這條路，就不必再加 <code>core.untrackedCache=false</code>——多餘的 pin 會讓清單失去「每條都在防一個具體症狀」的可讀性。</p>
+
+      <h3>在程式裡怎麼放</h3>
+      <p>把三種手段集中在建立子行程的那一層，而不是散在各個呼叫點。設定與環境屬於「每個命令都一樣」的部分，可以做成常數前綴；per-path 旗標只加在真正讀內容的命令上：</p>
+      <pre class="language-typescript"><span class="label">TypeScript</span><code><span class="c">// 每個 git 命令都帶的設定 pin</span>
+<span class="k">const</span> gitConfigArguments <span class="o">=</span> <span class="o">[</span>
+  <span class="s">"-c"</span><span class="o">,</span> <span class="s">"core.quotePath=false"</span><span class="o">,</span>
+  <span class="s">"-c"</span><span class="o">,</span> <span class="s">"core.fsmonitor=false"</span><span class="o">,</span>
+  <span class="s">"-c"</span><span class="o">,</span> <span class="s">"diff.noprefix=false"</span><span class="o">,</span>
+  <span class="s">"-c"</span><span class="o">,</span> <span class="s">"diff.mnemonicPrefix=false"</span><span class="o">,</span>
+  <span class="s">"-c"</span><span class="o">,</span> <span class="s">"diff.srcPrefix=a/"</span><span class="o">,</span>
+  <span class="s">"-c"</span><span class="o">,</span> <span class="s">"diff.dstPrefix=b/"</span><span class="o">,</span>
+  <span class="s">"-c"</span><span class="o">,</span> <span class="s">"diff.relative=false"</span><span class="o">,</span>
+  <span class="s">"-c"</span><span class="o">,</span> <span class="s">"diff.suppressBlankEmpty=false"</span><span class="o">,</span>
+  <span class="s">"-c"</span><span class="o">,</span> <span class="s">"diff.submodule=short"</span><span class="o">,</span>
+<span class="o">]</span> <span class="k">as</span> <span class="k">const</span><span class="o">;</span>
+
+<span class="c">// 環境：固定值用字串，要移除的用 undefined</span>
+<span class="k">const</span> gitCommandEnvironment <span class="o">=</span> <span class="o">{</span>
+  <span class="t">LC_ALL</span><span class="o">:</span> <span class="s">"C"</span><span class="o">,</span>
+  <span class="t">GIT_OPTIONAL_LOCKS</span><span class="o">:</span> <span class="s">"0"</span><span class="o">,</span>
+  <span class="t">GIT_DIFF_OPTS</span><span class="o">:</span> <span class="n">undefined</span><span class="o">,</span>
+  <span class="t">GIT_DIR</span><span class="o">:</span> <span class="n">undefined</span><span class="o">,</span>
+  <span class="t">GIT_WORK_TREE</span><span class="o">:</span> <span class="n">undefined</span><span class="o">,</span>
+  <span class="t">GIT_INDEX_FILE</span><span class="o">:</span> <span class="n">undefined</span><span class="o">,</span>
+<span class="o">}</span> <span class="k">as</span> <span class="k">const</span><span class="o">;</span></code></pre>
+      <div class="callout">
+        <p><span class="callout-title">per-path 旗標放在哪裡：</span>設定與環境屬於每個命令都一樣的部分，因此做成常數前綴；<code>--no-textconv</code> 只加在真正讀內容的命令上（讀 tracked patch 的 <code>diff</code> 與讀 untracked 檔案的 <code>diff --no-index</code>），列舉用的 <code>--name-status</code> 不讀內容所以不需要。</p>
+      </div>
+
+      <p>用 <code>undefined</code> 表示「移除」需要下層真的支援：Node 的 <code>child_process</code> 在組合環境時會跳過值為 <code>undefined</code> 的鍵，所以 <code>{ ...process.env, GIT_DIR: undefined }</code> 的效果是子行程完全看不到 <code>GIT_DIR</code>，而不是看到空字串。如果你的 spawn 封裝會把 <code>undefined</code> 轉成 <code>""</code>，這個寫法就是錯的——空字串對某些 git 變數而言是有意義的值。</p>
+
+      <h2>怎麼確認自己 pin 對了：每條 pin 都要有一個會失敗的 fixture</h2>
+      <p>Pin 清單最大的風險是「以為有效」。驗證方法很機械：為每條 pin 建一個臨時 repository fixture，重現該設定，斷言流程能跑完；然後<strong>把那條 pin 移掉重跑，測試必須變紅</strong>。我們在加入 <code>diff.submodule</code> 與 <code>--no-textconv</code> 時就是這樣確認的——如果拿掉 pin 測試仍然綠燈，那條 pin 防的不是你以為的東西。</p>
+      <p>副作用類的 pin 不能只看輸出，要找可觀察的指標：</p>
+      <ul>
+        <li><strong>是否寫入</strong>：比對命令前後 <code>.git/index</code> 的 mtime 與大小。</li>
+        <li><strong>是否留下行程</strong>：命令結束後 <code>pgrep</code> 目標 daemon。</li>
+        <li><strong>是否執行外部程式</strong>：讓 hook 腳本 append 到 log 檔，再檢查 log。</li>
+      </ul>
+
+      <h2>不要 pin 什麼：忠實度的邊界</h2>
+      <p>「全部釘住」是很自然的直覺，但它會把工具變成一個不尊重使用者偏好的黑盒。判準是：<strong>只 pin 會破壞解析或造成副作用的鍵，不 pin 只影響內容偏好的鍵。</strong></p>
+      <p>以 diff 為例，<code>diff.algorithm</code>（myers／histogram）、<code>diff.indentHeuristic</code>、<code>diff.interHunkContext</code> 都會改變 hunk 的切分與分組方式，但它們產生的輸出<em>結構</em>完全合法：record 邊界、<code>a/</code> 前綴、context 行的第一個字元都不變。它們影響的是「哪些行被歸成一組」，那是使用者對可讀性的偏好，pin 掉只會讓工具看到的 diff 與使用者自己看到的不一致。同理，如果使用者要求忽略空白差異，那應該是一個你主動支援的選項，不是要封住的干擾。</p>
+
+      <h2>比較兩個更簡單的替代方案</h2>
+      <h3>方案一：整批忽略使用者設定</h3>
+      <p>最省事的想法是 <code>GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null</code>，一次擋掉所有使用者設定，不用維護 pin 清單。問題是它蓋不住 repo-local 的 <code>.git/config</code>：</p>
+      <pre class="language-shell"><span class="label">Shell</span><code><span class="sh-prompt">$</span> <span class="sh-command">git</span> config diff.noprefix true      <span class="sh-comment"># 寫進 repo-local</span>
+<span class="sh-prompt">$</span> <span class="sh-command">export</span> <span class="sh-var">GIT_CONFIG_GLOBAL=/dev/null</span>
+<span class="sh-prompt">$</span> <span class="sh-command">export</span> <span class="sh-var">GIT_CONFIG_SYSTEM=/dev/null</span>
+
+<span class="sh-prompt">$</span> <span class="sh-command">git</span> diff -- f.txt | head <span class="sh-flag">-1</span>
+<span class="sh-command">diff</span> <span class="sh-flag">--git</span> f.txt f.txt               <span class="sh-comment"># ← 仍然生效</span>
+
+<span class="sh-prompt">$</span> <span class="sh-command">git</span> <span class="sh-flag">-c</span> diff.noprefix=false diff -- f.txt | head <span class="sh-flag">-1</span>
+<span class="sh-command">diff</span> <span class="sh-flag">--git</span> a/f.txt b/f.txt           <span class="sh-comment"># 只有 -c 真的封住</span></code></pre>
+      <p>而且它是把嬰兒跟洗澡水一起倒掉：<code>safe.directory</code>、credential helper、<code>includeIf</code> 等使用者<em>需要</em>的設定也一起消失。它可以當作額外的一層，但不能取代 <code>-c</code>。</p>
+
+      <h3>方案二：不 pin，改成寬鬆解析</h3>
+      <p>另一條路是接受輸出不可控，改讓讀取端容錯：輸出超限就截斷並標記、空輸出就跳過該檔案、解析不出來就當成沒有變更。這在「輸出只是給人看的預覽」時是完全合理的選擇——顯示端可以少一塊內容，但不會壞掉。</p>
+      <p>它不適合我們的前置條件，因為那些錯誤剛好會靜默地變成錯誤答案：textconv 造成的空 patch 會被解讀成「這個檔案沒有變更」，於是它從審查範圍裡消失，而使用者以為它被審查過了。當下游要做覆蓋率統計與行號標註時，「安靜地少一塊」比「大聲失敗」危險得多。</p>
+      <div class="table-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th></th>
+            <th>釘住執行環境</th>
+            <th>寬鬆解析</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>優化的性質</td>
+            <td>輸出形狀可預測，錯誤大聲</td>
+            <td>永不因設定而中斷</td>
+          </tr>
+          <tr>
+            <td>接受的代價</td>
+            <td>要維護一張 pin 清單與對應 fixture</td>
+            <td>語意錯誤不會被發現</td>
+          </tr>
+          <tr>
+            <td>適用條件</td>
+            <td>輸出餵給程式：覆蓋率、行號、預算計算</td>
+            <td>輸出給人看：預覽、摘要</td>
+          </tr>
+        </tbody>
+      </table>
+      </div>
+
+      <h2>什麼情況不需要這個 pattern</h2>
+      <ul>
+        <li><strong>你只看 exit code 或單一 token。</strong><code>git rev-parse --is-inside-work-tree</code> 這類輸出不受 diff 設定影響，不需要整套 pin。</li>
+        <li><strong>你在自己完全控制的環境裡跑</strong>（CI 容器、固定映像檔），而且明確驗證過那裡沒有使用者設定；此時 pin 是多餘的複雜度。不過要注意：repo 內的 <code>.gitattributes</code> 仍然來自被檢查的內容。</li>
+        <li><strong>你的輸出直接給人看且允許誤差。</strong>如上一節所述，寬鬆解析更省事。</li>
+        <li><strong>你要刻意反映使用者偏好。</strong>如果產品定位是「顯示使用者自己會看到的 diff」，那 pin 掉他的 diff 設定就是錯的行為。</li>
+      </ul>
+
+      <h2>帶得走的五個診斷問題</h2>
+      <ol>
+        <li><strong>我實際在解析哪幾個位元組？</strong>把依賴的結構列出來（record 邊界、路徑前綴、行首字元、數字欄位），再去該工具的文件裡找哪些設定會動到它們。</li>
+        <li><strong>這個行為是從哪個管道來的？</strong>config key 用 <code>-c</code>、環境變數用 unset、per-path attribute 用 CLI 旗標。選錯手段等於沒封。</li>
+        <li><strong>出錯時會叫還是安靜？</strong>安靜的那些（內容被替換、輸出變空、行號位移）必須有 fixture，因為沒有人會通報它們。</li>
+        <li><strong>這個「唯讀」命令會不會寫入或起行程？</strong>用 index mtime、<code>pgrep</code>、hook log 這類可觀察指標實測，不要憑文件推斷。</li>
+        <li><strong>這條 pin 拿掉之後，哪個測試會紅？</strong>答不出來就代表它是裝飾，或者它防的東西你其實沒驗證過。</li>
+      </ol>
+
+      <div class="sources">
+        <p>延伸閱讀（同一份文件樹）：</p>
+        <ul>
+          <li><a href="./git-unified-diff-parser-guide.html">Strict Unified Diff Parser</a>：本文預設的「嚴格解析」在做什麼、為什麼它會對輸出形狀敏感。</li>
+          <li><a href="./git-error-model-guide.html">Git 錯誤模型</a>：如何把子行程失敗轉成有結構、不外洩內容的錯誤。</li>
+          <li><a href="./nul-delimited-paths-guide.html">NUL-delimited paths</a>：列舉步驟為什麼用 <code>-z</code>，以及路徑引號化的處理。</li>
+        </ul>
+      </div>
+    </article>
+  </main>
+  <script>
+    const copyIcon = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"></rect><path d="M5 15V5a2 2 0 0 1 2-2h8"></path></svg>';
+    const checkIcon = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"></path></svg>';
+
+    const copyText = async (text) => {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(text);
+        return;
+      }
+      const area = document.createElement("textarea");
+      area.value = text;
+      area.setAttribute("readonly", "");
+      area.style.position = "absolute";
+      area.style.left = "-9999px";
+      document.body.appendChild(area);
+      area.select();
+      document.execCommand("copy");
+      document.body.removeChild(area);
+    };
+
+    for (const block of document.querySelectorAll("pre")) {
+      const code = block.querySelector("code");
+      if (!code) continue;
+
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "copy-code";
+      button.setAttribute("aria-label", "複製程式碼");
+      button.innerHTML = copyIcon;
+      button.addEventListener("click", async () => {
+        try {
+          await copyText(code.innerText);
+          button.classList.add("copied");
+          button.innerHTML = checkIcon;
+          setTimeout(() => {
+            button.classList.remove("copied");
+            button.innerHTML = copyIcon;
+          }, 1400);
+        } catch {
+          button.setAttribute("aria-label", "複製失敗");
+        }
+      });
+      block.appendChild(button);
+
+      const track = document.createElement("div");
+      track.className = "code-scrollbar hidden";
+      const thumb = document.createElement("div");
+      thumb.className = "code-scrollbar-thumb";
+      track.appendChild(thumb);
+      block.appendChild(track);
+
+      const sync = () => {
+        const overflow = code.scrollWidth - code.clientWidth;
+        if (overflow <= 1) {
+          track.classList.add("hidden");
+          return;
+        }
+        track.classList.remove("hidden");
+        const ratio = code.clientWidth / code.scrollWidth;
+        const thumbWidth = Math.max(ratio * track.clientWidth, 24);
+        thumb.style.width = `${thumbWidth}px`;
+        const maxOffset = track.clientWidth - thumbWidth;
+        thumb.style.transform = `translateX(${(code.scrollLeft / overflow) * maxOffset}px)`;
+      };
+
+      code.addEventListener("scroll", sync);
+      window.addEventListener("resize", sync);
+      sync();
+
+      let dragging = false;
+      let startX = 0;
+      let startScroll = 0;
+
+      thumb.addEventListener("pointerdown", (event) => {
+        dragging = true;
+        startX = event.clientX;
+        startScroll = code.scrollLeft;
+        thumb.setPointerCapture(event.pointerId);
+      });
+
+      thumb.addEventListener("pointermove", (event) => {
+        if (!dragging) return;
+        const overflow = code.scrollWidth - code.clientWidth;
+        const maxOffset = track.clientWidth - thumb.clientWidth;
+        if (maxOffset <= 0) return;
+        code.scrollLeft = startScroll + ((event.clientX - startX) / maxOffset) * overflow;
+      });
+
+      thumb.addEventListener("pointerup", (event) => {
+        dragging = false;
+        thumb.releasePointerCapture(event.pointerId);
+      });
+    }
+  </script>
+</body>
+</html>
