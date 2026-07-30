@@ -46,7 +46,6 @@ import {
 } from "../review/review-budget";
 import type { ReviewRedactionSummaryV1 } from "../domain/redaction";
 import {
-  countReviewRedactions,
   redactReviewFileContents,
   redactReviewRequestV1,
 } from "../review/review-redaction";
@@ -282,7 +281,7 @@ const prepareReviewRequest = (
     });
     // The request tree pass stays the single outbound boundary: it also covers
     // paths and the prompt envelope, which selection does not touch.
-    const { request } = redactReviewRequestV1(
+    const { request, redaction } = redactReviewRequestV1(
       buildReviewRequestV1({
         repository: { scope },
         config: { model: resolved.engine.model },
@@ -294,7 +293,7 @@ const prepareReviewRequest = (
       diff,
       request,
       selection,
-      redaction: countReviewRedactions(request),
+      redaction,
     };
   });
 
@@ -319,15 +318,20 @@ const withResolvedReview = <Success, Error>(
     const repository = yield* git.resolveRepository(repositoryPath);
     const config = yield* configService.load(repository, configOverrides);
     const engine = yield* engineRegistry.resolve(config);
-    const startedAt = yield* Clock.currentTimeMillis;
-    const remainingEngineBudget = Clock.currentTimeMillis.pipe(
-      Effect.map((now) =>
-        Math.max(
+    const startedAt = yield* Clock.currentTimeNanos;
+    const remainingEngineBudget = Clock.currentTimeNanos.pipe(
+      Effect.map((now) => {
+        const elapsedNanoseconds = now > startedAt ? now - startedAt : 0n;
+        const elapsedMilliseconds = Number(
+          (elapsedNanoseconds + 999_999n) / 1_000_000n,
+        );
+
+        return Math.max(
           1,
-          config.timeoutMs - (now - startedAt) -
+          config.timeoutMs - elapsedMilliseconds -
             engineTimeoutReserveMilliseconds,
-        )
-      ),
+        );
+      }),
     );
 
     return yield* effect({

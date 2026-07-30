@@ -318,17 +318,27 @@ interface OpenAIErrorIdentifiers {
   readonly errorCode?: string;
 }
 
+const providerErrorIdentifierPattern = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/u;
+
+const boundedProviderErrorIdentifier = (
+  value: string | null | undefined,
+): string | undefined =>
+  typeof value === "string" && providerErrorIdentifierPattern.test(value)
+    ? value
+    : undefined;
+
 const envelopeErrorIdentifiers = (
   error: { readonly type?: string | null; readonly code?: string | null } | null
     | undefined,
-): OpenAIErrorIdentifiers => ({
-  ...(typeof error?.type === "string" && error.type.length > 0
-    ? { errorType: error.type }
-    : {}),
-  ...(typeof error?.code === "string" && error.code.length > 0
-    ? { errorCode: error.code }
-    : {}),
-});
+): OpenAIErrorIdentifiers => {
+  const errorType = boundedProviderErrorIdentifier(error?.type);
+  const errorCode = boundedProviderErrorIdentifier(error?.code);
+
+  return {
+    ...(errorType === undefined ? {} : { errorType }),
+    ...(errorCode === undefined ? {} : { errorCode }),
+  };
+};
 
 /**
  * Extracts only the provider's error identifiers from a body that failed before

@@ -440,6 +440,29 @@ test("keeps a non-2xx body out of the error while reporting its identifiers", as
   expect(JSON.stringify(error)).not.toContain(secretish);
 });
 
+test("drops provider error identifiers that are unsafe or unbounded", async () => {
+  const secretish = `private-${"x".repeat(80)}`;
+  const transport: Transport = async () => ({
+    status: 500,
+    body: JSON.stringify({
+      error: {
+        type: "server_error\nuntrusted",
+        code: secretish,
+      },
+    }),
+  });
+
+  const error = await runFailure(transport);
+
+  expect(error).toBeInstanceOf(ReviewEngineTransportError);
+  if (!(error instanceof ReviewEngineTransportError)) {
+    throw new Error("Expected ReviewEngineTransportError");
+  }
+  expect(error.errorType).toBeUndefined();
+  expect(error.errorCode).toBeUndefined();
+  expect(JSON.stringify(error)).not.toContain(secretish);
+});
+
 test("parses findings split across several output_text parts", async () => {
   const findings = JSON.stringify({
     findings: [{

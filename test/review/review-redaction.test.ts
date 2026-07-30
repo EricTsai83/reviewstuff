@@ -138,6 +138,21 @@ test("bounded detectors preserve documented false positives", async () => {
   });
 });
 
+test("only canonical subresource-integrity digests bypass redaction", () => {
+  const valid =
+    "sha512-QorRKhvwHDPwvE8lH5lE0r0dI2z+zj12VUN4h7hfoIunKUiXSoSOMZqF3w13W30RpV6ivsvJywUycaa/18yMPA==";
+  const prefixedSecret = `${valid}A`;
+  const result = redactPatch(`+${valid}\n+${prefixedSecret}`);
+
+  expect(result.request.context.files[0]?.patch).toBe(
+    `+${valid}\n+${reviewRedactionTokens["high-entropy-token"]}`,
+  );
+  expect(result.redaction.reasons).toContainEqual({
+    reason: "high-entropy-token",
+    count: 1,
+  });
+});
+
 test("oversized opaque tokens are replaced without unbounded entropy work", () => {
   const oversizedToken =
     "Aa0_" + "bC1-dE2_fG3+hI4/jK5=".repeat(220);

@@ -32,6 +32,20 @@ export const reviewRedactionTokens: Readonly<
   "high-entropy-token": "[REDACTED:high-entropy-token]",
 };
 
+/**
+ * Git classifies files containing NUL as binary, so these placeholders cannot
+ * collide with the text-file content accepted by the review pipeline. They are
+ * intentionally longer than the public tokens to keep pre-selection budgeting
+ * conservative.
+ */
+const preSelectionRedactionTokens: Readonly<
+  Record<ReviewRedactionReason, string>
+> = {
+  "api-key": "\0reviewstuff-redacted:api-key\0",
+  "private-key": "\0reviewstuff-redacted:private-key\0",
+  "high-entropy-token": "\0reviewstuff-redacted:high-entropy-token\0",
+};
+
 const redactionReasonOrder: ReadonlyArray<ReviewRedactionReason> = [
   "api-key",
   "private-key",
@@ -53,8 +67,6 @@ const privateKeyBeginPattern = new RegExp(
   `-----BEGIN (${privateKeyLabelPattern})-----`,
   "u",
 );
-const maximumPrivateKeyBlockLines = 256;
-const maximumPrivateKeyBlockCharacters = 64 * 1024;
 const minimumHighEntropyTokenCharacters = 32;
 const maximumHighEntropyTokenCharacters = 4_096;
 /**
@@ -70,8 +82,19 @@ const mixedClassEntropyThreshold = 4.2;
  * the same length start at 4.71. The threshold sits in that gap.
  */
 const singleClassEntropyThreshold = 4.6;
-/** Subresource-integrity digests are public checksums, not secrets. */
-const integrityDigestPrefixes = ["sha256-", "sha384-", "sha512-"] as const;
+/**
+ * Subresource-integrity digests are public checksums, but the algorithm prefix
+ * alone is not an allowlist: the digest must have canonical base64 shape and
+ * the exact byte length for that algorithm.
+ */
+const integrityDigestPatterns: ReadonlyArray<RegExp> = [
+  /^sha256-[A-Za-z0-9+/]{43}=$/u,
+  /^sha384-[A-Za-z0-9+/]{64}$/u,
+  /^sha512-[A-Za-z0-9+/]{86}==$/u,
+];
+
+const isIntegrityDigest = (value: string): boolean =>
+  integrityDigestPatterns.some((pattern) => pattern.test(value));
 
 const shannonEntropy = (value: string): number => {
   const frequencies = new Map<string, number>();
@@ -97,9 +120,7 @@ const isHighEntropyToken = (value: string): boolean => {
     return false;
   }
 
-  if (
-    integrityDigestPrefixes.some((prefix) => value.startsWith(prefix))
-  ) {
+  if (isIntegrityDigest(value)) {
     return false;
   }
 
@@ -142,6 +163,7 @@ const isHighEntropyTokenCharacter = (character: string): boolean =>
 const redactHighEntropyTokens = (
   value: string,
   counts: Record<ReviewRedactionReason, number>,
+  tokens: Readonly<Record<ReviewRedactionReason, string>>,
 ): string => {
   const chunks: Array<string> = [];
   let unchangedStart = 0;
@@ -168,10 +190,7 @@ const redactHighEntropyTokens = (
     }
 
     const candidate = value.slice(candidateStart, index);
-    const isIntegrityDigest = integrityDigestPrefixes.some((prefix) =>
-      candidate.startsWith(prefix)
-    );
-    const shouldRedact = !isIntegrityDigest &&
+    const shouldRedact = !isIntegrityDigest(candidate) &&
       (candidateLength > maximumHighEntropyTokenCharacters ||
         isHighEntropyToken(candidate));
     if (!shouldRedact) {
@@ -180,7 +199,7 @@ const redactHighEntropyTokens = (
 
     chunks.push(
       value.slice(unchangedStart, candidateStart),
-      reviewRedactionTokens["high-entropy-token"],
+      tokens["high-entropy-token"],
     );
     unchangedStart = index;
     counts["high-entropy-token"] += 1;
@@ -203,17 +222,50 @@ const diffLinePrefix = (line: string): string =>
     ? line.slice(0, 1)
     : "";
 
+interface PrivateKeyRedactionState {
+  label: string | undefined;
+}
+
+const isDiffStructuralLine = (line: string): boolean =>
+  line.startsWith("@@ ") || line === "\\ No newline at end of file";
+
 const redactPrivateKeyBlocks = (
   value: string,
   counts: Record<ReviewRedactionReason, number>,
+  tokens: Readonly<Record<ReviewRedactionReason, string>>,
+  state: PrivateKeyRedactionState,
 ): string => {
   const parts = value.split(/(\r\n|\r|\n)/u);
-  const lastPartIndex = parts.length - 1;
 
   for (let partIndex = 0; partIndex < parts.length; partIndex += 2) {
     const line = parts[partIndex] ?? "";
+
+    if (state.label !== undefined) {
+      if (isDiffStructuralLine(line)) {
+        continue;
+      }
+
+      const endMarker = `-----END ${state.label}-----`;
+      const endIndex = line.indexOf(endMarker);
+      if (endIndex === -1) {
+        parts[partIndex] = diffLinePrefix(line);
+        continue;
+      }
+
+      parts[partIndex] = `${diffLinePrefix(line)}${
+        line.slice(endIndex + endMarker.length)
+      }`;
+      state.label = undefined;
+      continue;
+    }
+
     const begin = privateKeyBeginPattern.exec(line);
     if (begin === null) {
+      continue;
+    }
+
+    const label = begin[1];
+    if (label === undefined) {
       continue;
     }
 
@@ -221,55 +273,18 @@ const redactPrivateKeyBlocks = (
     // Text before the marker is not key material, so an embedding string
     // literal still reads sensibly after redaction.
     const head = line.slice(0, beginIndex);
-    const endMarker = `-----END ${begin[1]}-----`;
-    let endPartIndex: number | undefined;
-    let tail = "";
-    let scannedCharacters = 0;
-
-    for (
-      let candidatePartIndex = partIndex;
-      candidatePartIndex < parts.length;
-      candidatePartIndex += 2
-    ) {
-      const candidateLine = parts[candidatePartIndex] ?? "";
-      scannedCharacters += candidateLine.length +
-        (parts[candidatePartIndex - 1] ?? "").length;
-      const searchFrom = candidatePartIndex === partIndex
-        ? beginIndex + begin[0].length
-        : 0;
-      const endIndex = candidateLine.indexOf(endMarker, searchFrom);
-      if (endIndex !== -1) {
-        endPartIndex = candidatePartIndex;
-        tail = candidateLine.slice(endIndex + endMarker.length);
-        break;
-      }
-
-      if (
-        (candidatePartIndex - partIndex) / 2 + 1 >=
-          maximumPrivateKeyBlockLines ||
-        scannedCharacters > maximumPrivateKeyBlockCharacters
-      ) {
-        break;
-      }
-    }
-
-    // An unterminated block is redacted through the end of the value: either a
-    // hunk boundary cut the key off, or the rest of the value is key material.
-    const stopPartIndex = endPartIndex ?? lastPartIndex;
-
-    for (
-      let redactedPartIndex = partIndex;
-      redactedPartIndex <= stopPartIndex;
-      redactedPartIndex += 2
-    ) {
-      const redactedTail = redactedPartIndex === stopPartIndex ? tail : "";
-      parts[redactedPartIndex] = redactedPartIndex === partIndex
-        ? `${head}${reviewRedactionTokens["private-key"]}${redactedTail}`
-        : `${diffLinePrefix(parts[redactedPartIndex] ?? "")}${redactedTail}`;
-    }
+    const endMarker = `-----END ${label}-----`;
+    const endIndex = line.indexOf(
+      endMarker,
+      beginIndex + begin[0].length,
+    );
+    const tail = endIndex === -1
+      ? ""
+      : line.slice(endIndex + endMarker.length);
+    parts[partIndex] = `${head}${tokens["private-key"]}${tail}`;
 
     counts["private-key"] += 1;
-    partIndex = stopPartIndex;
+    state.label = endIndex === -1 ? label : undefined;
   }
 
   return parts.join("");
@@ -278,14 +293,38 @@ const redactPrivateKeyBlocks = (
 const redactString = (
   value: string,
   counts: Record<ReviewRedactionReason, number>,
+  tokens: Readonly<Record<ReviewRedactionReason, string>> =
+    reviewRedactionTokens,
+  privateKeyState: PrivateKeyRedactionState = { label: undefined },
 ): string => {
-  const withoutPrivateKeys = redactPrivateKeyBlocks(value, counts);
+  const withoutPrivateKeys = redactPrivateKeyBlocks(
+    value,
+    counts,
+    tokens,
+    privateKeyState,
+  );
   const withoutApiKeys = withoutPrivateKeys.replace(apiKeyPattern, () => {
     counts["api-key"] += 1;
-    return reviewRedactionTokens["api-key"];
+    return tokens["api-key"];
   });
 
-  return redactHighEntropyTokens(withoutApiKeys, counts);
+  return redactHighEntropyTokens(withoutApiKeys, counts, tokens);
+};
+
+const restorePreSelectionRedactions = (
+  value: string,
+  counts: Record<ReviewRedactionReason, number>,
+): string => {
+  let restored = value;
+
+  for (const reason of redactionReasonOrder) {
+    restored = restored.replaceAll(preSelectionRedactionTokens[reason], () => {
+      counts[reason] += 1;
+      return reviewRedactionTokens[reason];
+    });
+  }
+
+  return restored;
 };
 
 const redactRequestTree = (
@@ -293,7 +332,7 @@ const redactRequestTree = (
   counts: Record<ReviewRedactionReason, number>,
 ): unknown => {
   if (typeof value === "string") {
-    return redactString(value, counts);
+    return redactString(restorePreSelectionRedactions(value, counts), counts);
   }
 
   if (Array.isArray(value)) {
@@ -364,52 +403,27 @@ export const redactReviewFileContents = (
 ): ReadonlyArray<ReviewBudgetFile> => {
   const counts = emptyRedactionCounts();
 
-  return files.map((file) => ({
-    path: file.path,
-    source: file.source,
-    fileHeader: redactString(file.fileHeader, counts),
-    hunks: file.hunks.map((hunk) => ({
-      patch: redactString(hunk.patch, counts),
-    })),
-  }));
-};
+  return files.map((file) => {
+    const privateKeyState: PrivateKeyRedactionState = { label: undefined };
 
-/**
- * Counts the redaction tokens present in a request.
- *
- * The summary is derived from the payload instead of from the redaction passes
- * so it describes what is actually sent: content dropped by the budget is not
- * counted, and content redacted before selection still is.
- */
-export const countReviewRedactions = (
-  request: ReviewRequestV1,
-): ReviewRedactionSummaryV1 => {
-  const counts = emptyRedactionCounts();
-
-  const countInValue = (value: unknown): void => {
-    if (typeof value === "string") {
-      for (const reason of redactionReasonOrder) {
-        counts[reason] += value.split(reviewRedactionTokens[reason]).length - 1;
-      }
-      return;
-    }
-
-    if (Array.isArray(value)) {
-      for (const item of value) {
-        countInValue(item);
-      }
-      return;
-    }
-
-    if (typeof value === "object" && value !== null) {
-      for (const item of Object.values(value)) {
-        countInValue(item);
-      }
-    }
-  };
-
-  countInValue(request);
-  return redactionSummary(counts);
+    return {
+      path: file.path,
+      source: file.source,
+      fileHeader: redactString(
+        file.fileHeader,
+        counts,
+        preSelectionRedactionTokens,
+      ),
+      hunks: file.hunks.map((hunk) => ({
+        patch: redactString(
+          hunk.patch,
+          counts,
+          preSelectionRedactionTokens,
+          privateKeyState,
+        ),
+      })),
+    };
+  });
 };
 
 export const redactReviewRequestV1 = (

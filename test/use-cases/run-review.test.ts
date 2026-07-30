@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
@@ -1114,8 +1115,7 @@ const gitTextFileWithHunks = (
   })),
 });
 
-const privateKeyBodyLine =
-  "MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQDb7Yq8Kk1pQwR3";
+const privateKeyBodyLine = "A".repeat(64);
 
 test("redaction runs before the budget so the sent payload stays inside it", async () => {
   const secret = "sk-proj-A1b2C3d4E5f6G7h8I9j0K1l2";
@@ -1249,9 +1249,90 @@ test("redacts a private key that spans two hunks of one file", async () => {
   );
 
   // The first hunk has no end marker and the second has no begin marker, so
-  // both halves must be redacted for the key to stay out of the payload.
+  // state must cross the hunk boundary. The deliberately zero-entropy body
+  // proves this is PEM-state handling rather than the entropy fallback.
   expect(JSON.stringify(received)).not.toContain(privateKeyBodyLine);
-  expect(report.redaction.totalRedactions).toBeGreaterThanOrEqual(2);
+  expect(report.redaction).toEqual({
+    schemaVersion: 1,
+    totalRedactions: 1,
+    reasons: [{ reason: "private-key", count: 1 }],
+  });
+});
+
+test("literal redaction markers are not reported as removed secrets", async () => {
+  const marker = "[REDACTED:api-key]";
+  const git = makeGit({
+    readDiff: () =>
+      Effect.succeed({
+        files: [
+          gitTextFile(
+            "src/documentation.ts",
+            "working-tree",
+            `@@ -0,0 +1 @@\n+export const marker = "${marker}";\n`,
+          ),
+        ],
+      }),
+  });
+  let received: ReviewRequestV1 | undefined;
+  const engine = registryWithEngine({
+    transport: "local",
+    review: (request) =>
+      Effect.sync(() => {
+        received = request;
+        return [];
+      }),
+  });
+
+  const report = await runReview({ scope: "working-tree" }).pipe(
+    Effect.provide(Layer.mergeAll(git, config, engine)),
+    Effect.runPromise,
+  );
+
+  expect(JSON.stringify(received)).toContain(marker);
+  expect(report.redaction).toEqual({
+    schemaVersion: 1,
+    totalRedactions: 0,
+    reasons: [],
+  });
+});
+
+test("engine deadline calculation uses a monotonic clock", async () => {
+  const liveClock = Clock.Clock.pipe(Effect.runSync);
+  const monotonicOnlyClock: Clock.Clock = {
+    currentTimeMillisUnsafe: () => {
+      throw new Error("wall clock must not be read");
+    },
+    currentTimeMillis: Effect.die("wall clock must not be read"),
+    currentTimeNanosUnsafe: () => liveClock.currentTimeNanosUnsafe(),
+    currentTimeNanos: liveClock.currentTimeNanos,
+    sleep: (duration) => liveClock.sleep(duration),
+  };
+  const git = makeGit({
+    readDiff: () =>
+      Effect.succeed({
+        files: [
+          gitTextFile("src/a.ts", "working-tree", "@@ -0,0 +1 @@\n+a\n"),
+        ],
+      }),
+  });
+  let receivedBudget: number | undefined;
+  const engine = registryWithEngine({
+    transport: "local",
+    review: (_request, execution) =>
+      Effect.sync(() => {
+        receivedBudget = execution.timeoutMilliseconds;
+        return [];
+      }),
+  });
+
+  await runReview({ scope: "working-tree" }).pipe(
+    Effect.provide(Layer.mergeAll(git, config, engine)),
+    Effect.provideService(Clock.Clock, monotonicOnlyClock),
+    Effect.runPromise,
+  );
+
+  expect(receivedBudget).toBeGreaterThan(0);
+  expect(receivedBudget).toBeLessThan(120_000);
 });
 
 test("an engine timeout is reported as an engine failure, not a review timeout", async () => {
