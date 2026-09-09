@@ -9,7 +9,7 @@
 **In:** review-to-session mapping、storage failure semantics、latest update、partial provider result policy、
 `.reviewstuff/` gitignore 檢查——session 含 redacted source diff，若目錄未被 git ignore，一次
 `git add -A` 就會把它推上 remote；首次寫入時檢查並輸出警告（不自動改 `.gitignore`）。
-**Out:** query commands、cleanup（retention 在 045 文件化為 known limitation：資料累積至手動刪除）、
+**Out:** query commands（030、031 的 `session` namespace）、cleanup（retention 在 045 文件化為 known limitation：資料累積至手動刪除）、
 prompt snapshot、fix status。
 
 **Steps:** 在 engine result decode 後建立 session；先 save 再 render success；明確決定 engine failure是否保存（v1

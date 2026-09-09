@@ -148,8 +148,8 @@ resolver。
 ```bash
 bun run typecheck
 bun test
-bun run src/index.ts config show
-bun run src/index.ts config show --json
+bun run src/cli.ts config show
+bun run src/cli.ts config show --json
 ```
 
 依 repository 規則，不在本 plan 未獲授權時執行 build。

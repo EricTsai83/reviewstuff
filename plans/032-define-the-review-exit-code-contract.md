@@ -18,11 +18,16 @@ usage-error exit code 驗證：實測 CLI parser 對 unknown flag/invalid value 
 （與 findings gate 相同），必須把 usage error 對應到 2（或其他非 1 的 code）——CI 不能把「打錯
 flag」誤判成「有 findings」。
 **Out:** NDJSON event mapping（033）、doctor exit policy（034）、CI workflow（039）、finding suppression/
-baseline file。
+baseline file、把 gate 結果寫進 report schema。
+
+**Schema 決策：** gate 結果不進 `ReviewReport`。exit decision 是 report 加 threshold 的 pure function，
+由 command 層計算並在 human 輸出顯示、在 `--json` 以 exit code 表達；report 內容對相同 review 不因
+`--fail-on` 而異。`review.failOn` config 欄位加入時同步更新 048 的 provenance source coverage 與
+fixtures。
 
 **Steps:** 先寫 decision table；severity ordering 重用既有 `FindingSeverity`；gate evaluation 是
 report → exit decision 的 pure function；execution failure 從現行 exit 1 遷移到 2，同步更新既有
-e2e assertions；terminal/JSON render 顯示 gate 結果；per-code compiled binary e2e。
+e2e assertions；terminal render 顯示 gate 結果、JSON path 只以 exit code 表達；per-code compiled binary e2e。
 
 **Accept:** 未設 `--fail-on` 時既有行為不變；gate 只依賴 report 內容且 deterministic；execution
 failure 與 findings gate 不共用同一 code；usage error 不與 findings gate 共用 exit 1，且有 e2e 佐證；

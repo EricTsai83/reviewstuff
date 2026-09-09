@@ -2,39 +2,29 @@
 
 [← Plan index](./README.md)
 
-**Depends on:** 023。 **Learning:** observable conservative input policy。
+**Depends on:** 023、053。 **Learning:** observable conservative input policy。
 
 > 排序說明：本 plan 先於 024 執行。central selection policy 與 coverage reason 基礎設施先就位，
 > 024 的 `.reviewstuffignore` exclusion 直接掛在同一 policy 上，避免 024 先自建一套 exclusion
-> 路徑再被本 plan 重構。另外 oversized-file 造成整個 review 失敗是現存 bug，在真實 repo dogfood
-> 時會先撞上，愈早修愈好。
+> 路徑再被本 plan 重構。oversized-file 與 unattributable diff 的整體失敗路徑已由 053 hotfix 處理，
+> 本 plan 只把它們納入同一個 policy 與 coverage 語意。
 
 **Working state:** binary、media、generated、lock、build output 都由單一 selection policy 判斷並回報 stable reason；
 不在 Git adapter 或 engine 各自靜默略過。
 
-**In:** hard exclusion vs overridable default、rename/delete location policy、config override、coverage summary。
-**Out:** semantic generated detection、provider-specific truncation、language analyzers。
+**In:** hard exclusion vs overridable default、rename/delete location policy、config override（同步更新 048
+provenance）、coverage summary、`coverage.complete` 語意。
+**Out:** semantic generated detection、provider-specific truncation、language analyzers、size 預檢與
+per-file 輸出上限（053）。
 
-**Steps:** 將現有 binary behavior 移到 pure selection contract；hard exclude binary/media；其餘 override 仍受
-012 budget；補每個 heuristic fixture與 boundary test。
+**Steps:** 將現有 binary behavior 與 053 的 `file-too-large`/`unsupported-diff` 移到 pure selection contract；
+hard exclude binary/media；其餘 override 仍受 012 budget；補每個 heuristic fixture 與 boundary test。
 
-**注意（現況修正）：** large-file skip 目前只有 schema 與 renderer 支援（`file-too-large` coverage variant、
-`LargeSkippedFileCoverageSchema`），source 裡沒有任何 producer——單一檔案的 patch 超過
-`gitPatchMaxOutputBytes`（4 MiB，`src/git/git-diff.ts`）會以 `GitCommandOutputLimitError` 讓整個 review
-失敗，而不是 skip 該檔案。本 plan 必須：(1) 在收 patch 前用目前未接線的 `readGitObjectSize`
-（`src/git/git-command.ts`；untracked 檔另以 filesystem size 檢查，對應 `GitExecutionError` 的
-`file-inspection` failure）做大小預檢，超限產出 `file-too-large` skip；(2) 讓 per-file 輸出上限不再是
-全 review 的失敗路徑。size 預檢不得對每個檔案各起一個 subprocess——大 diff 下延遲會線性放大；
-用 `git cat-file --batch-check` 一次查完 tracked objects，untracked 檔用 filesystem stat。另外定義 coverage 語意：政策性排除（binary/media hard exclude）與資源性
-skip（budget/size）分開，政策性排除不應永久把 `coverage.complete` 標為 false——目前任何含 binary
-變更的 review 都會顯示 "Review coverage incomplete"。
-
-**注意（050 之後新增的同類失敗路徑）：** `selectTargetRecords`（`src/git/git-diff.ts`）在「多個 diff record
-但沒有一個 record 的 path 對得上 target」時丟 `GitInvalidOutputError`，讓整個 review 失敗。這與上面的
-oversized-file 是同一類「單一檔案的問題升級成全 review 失敗」，本 plan 把 per-file 輸出上限改成 skip 時
-應一併納入，給它自己的 coverage reason，否則會留下一條沒被 central policy 覆蓋的整體失敗路徑。
+**Coverage 語意（本 plan 唯一一次 report bump）：** 政策性排除（binary/media hard exclude、
+generated/lock default exclude、024 的 ignore）與資源性 skip（budget、size、unsupported diff）分開。
+`coverage.complete` 只描述資源性 skip：政策性排除不把它標為 false。目前任何含 binary 變更的
+review 都會顯示 "Review coverage incomplete"，這是要修正的行為。human/JSON 對兩類各有獨立計數。
 
 **Accept:** 每個 scope file 恰有一個 final status；override 不繞過 containment/hard cap；rename/delete 不 crash；
-human/JSON/request coverage counts 一致；oversized file 產生 `file-too-large` skip 而非整體失敗；
-`coverage.complete` 的語意在 human/JSON 輸出中對 policy exclusion 與 resource skip 有明確且一致的定義。
-
+human/JSON/request coverage counts 一致；`coverage.complete` 對 policy exclusion 與 resource skip 的定義在
+human/JSON 一致且有 fixture；report 只 bump 一次。

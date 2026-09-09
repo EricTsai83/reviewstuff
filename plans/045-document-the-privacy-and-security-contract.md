@@ -13,7 +13,8 @@ reporting流程。
 **Steps:** 以 013–015、027–029 的實際 schema/data為 source；逐一列出 sent/stored/not-stored data；加入 request preview與
 session inspection examples；定義 security report channel與 supported versions。
 
-**Accept:** 清楚說 secret detection非保證；不宣稱 local provider等於零外部風險；privacy內容與 normalized request/session storage
+**Accept:** 清楚說 secret detection 非保證；明載 Codex CLI engine 的 transport 是 `cloud`、資料會送到 OpenAI，
+`local-only` 下不可用；只有 fake engine 是真正的 local transport；privacy內容與 normalized request/session storage
 一致；沒有非 v1 feature承諾；明載 session retention 為 known limitation（`.reviewstuff/sessions/` 會
 累積至手動刪除，含 redacted diff，需保持被 git ignore）；明載 v1 不保存 failed-run session，provider
 失敗的 attempt metadata 只存在於 terminal output。

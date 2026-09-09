@@ -23,6 +23,11 @@ service skeleton、flag 或空目錄。
 「獨立」在這裡指 change set 自足、驗收不借用未來功能；不是指完全沒有前置依賴。每個 plan
 可以依賴前序已完成 contract，但不可依賴後續 plan 才能通過測試或讓 CLI 恢復 working state。
 
+「不建立後續 plan 的 schema」有一個刻意例外：當同一個 machine-owned contract 會被連續數個 plan
+各改一次時，第一個 plan 必須一次定義完整的 contract（含全部 variants），後續 plan 只填入行為。
+目前適用的是 019 的 scope contract（涵蓋 019–022 與 `ReviewFileSource`）。這是為了避免同一個
+report schema 在一個 milestone 內被 bump 四次，並不允許建立 flag、service skeleton 或空目錄。
+
 ## 技術與驗證基線
 
 - Runtime/package manager/test/build target：Bun。
@@ -32,6 +37,14 @@ service skeleton、flag 或空目錄。
 - 一般驗收至少執行 `bun run typecheck` 與 `bun test`。`bun run test` 目前包含 build；只有獲得
   build 授權時才執行。需要 compiled binary 的 plan 必須另列 binary smoke。
 - 不把 credentials、provider payload、未 redacted session 或使用者 source 上傳為 CI artifact。
+- Machine-owned schema（report、request、coverage、selection）的版本政策分兩個階段：
+  - **Pre-persistence（029 之前）：** 沒有任何 report 被寫入 disk 或由 tagged release 發布，因此
+    schema 變更時仍 bump 版本號，但只維護 current fixture 與 decoder，不新增 migration。027 負責
+    刪除現有 V2–V6 migration 與 fixtures，讓 `decodeReviewReport` 只接受 current version。
+  - **Persisted（029 起）：** 任何被 session 持久化或 tagged release 發布過的版本都要保留
+    migration、previous-version fixture 與 `assumed-by-migration` 類型的證據標記。
+  - 為了讓 bump 次數可控，scope（019）、coverage 語意（025）、provider metadata（037）各只允許
+    一次 report bump；exit-code gate（032）不得進入 report schema。
 
 ## Status and plan index
 
@@ -60,6 +73,7 @@ service skeleton、flag 或空目錄。
 | [x] DONE | 050 | [Harden Git Diff Collection](./050-harden-git-diff-collection.md) | Hardening hotfix |
 | [x] DONE | 051 | [Harden Secret Redaction](./051-harden-secret-redaction.md) | Hardening hotfix |
 | [x] DONE | 052 | [Harden Cloud Engine Transport](./052-harden-cloud-engine-transport.md) | Hardening hotfix |
+| [ ] TODO | 053 | [Skip Oversized Files Instead Of Failing The Review](./053-skip-oversized-files-instead-of-failing-the-review.md) | Hardening hotfix |
 | [ ] TODO | 048 | [Explain Effective Configuration Sources](./048-explain-effective-configuration-sources.md) | Real repository UX |
 | [ ] TODO | 019 | [Review An Exact Committed Range](./019-review-an-exact-committed-range.md) | Real repository UX |
 | [ ] TODO | 020 | [Review A Branch Using Merge-base Semantics](./020-review-a-branch-using-merge-base-semantics.md) | Real repository UX |
@@ -100,8 +114,8 @@ service skeleton、flag 或空目錄。
 | Baseline closure | 005 | 現有 deterministic review pipeline 正式關閉 |
 | Repository config foundation | 018、049 | selected Git root、`--dir` 與 strict repository YAML config |
 | Safe cloud dogfood | 007–017、026 | 有 budget、privacy、redaction、preview 的 OpenAI review 與 light workload |
-| Hardening hotfix | 050–052 | git 解析對真實 repo robust、redaction 對不完整 secret 形狀有效、engine transport 有界且可診斷 |
-| Real repository UX | 048、019–023、025、024 | effective config provenance、commit/branch scopes、filters、skip policy |
+| Hardening hotfix | 050–053 | git 解析對真實 repo robust、redaction 對不完整 secret 形狀有效、engine transport 有界且可診斷、單檔過大不再讓整個 review 失敗 |
+| Real repository UX | 048、019–023、025、024 | effective config provenance、一次定義完整的 scope contract、commit/branch scopes、filters、skip policy |
 | Durable automation beta | 032、027–031、033–037 | exit-code contract、sessions、queries、NDJSON、doctor、Codex CLI、provider reliability |
 | Supported macOS v1 | 038–047 | report polish、CI、signed artifact、Homebrew/npm、docs、readiness gate |
 
@@ -112,7 +126,10 @@ service skeleton、flag 或空目錄。
 - `bun run typecheck` 通過。
 - `bun test` 通過；若該命令因 repository script 觸發 build，先取得 build 授權。
 - 需要 compiled artifact 的 plan 另跑它列出的 smoke commands。
-- Public/persisted machine-owned schema 有 current 與 previous-version fixture；user-authored config
-  維持 raw config → resolved config，只有實際相容需求才加入 legacy fixture。
+- Machine-owned schema 依上方兩階段政策處理：029 之前只需 current fixture，029 起要有 current 與
+  previous-version fixture 與 migration；user-authored config 維持 raw config → resolved config，只有
+  實際相容需求才加入 legacy fixture。
+- 新增任何 `.reviewstuff.yaml` 欄位或 CLI config override 時，同步更新 048 的 provenance source
+  coverage 與 `EffectiveConfigReportV1` fixtures。
 - 新增的 error 能在 human 與 machine-readable boundary 被穩定處理。
 - 更新本表狀態，而且下一個 plan 不需要先修正本 plan 的遺留問題。
