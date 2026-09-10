@@ -354,6 +354,8 @@ const collectStagedDiff = Effect.fn("GitService.collectStagedDiff")(
     ),
 );
 
+const listingConcurrency = 2;
+
 const collectWorkingTreeDiff = Effect.fn(
   "GitService.collectWorkingTreeDiff",
 )(function* (
@@ -367,10 +369,16 @@ const collectWorkingTreeDiff = Effect.fn(
     "unstaged",
   );
   const trackedChanges = [...stagedChanges, ...unstagedChanges];
+  // Conflicts are checked before any further Git work is started.
   yield* ensureNoUnmergedChanges(trackedChanges);
 
-  const untrackedFiles = yield* listUntrackedFiles(runner, repositoryRoot);
-  const reviewBase = yield* resolveReviewBase(runner, repositoryRoot);
+  const [untrackedFiles, reviewBase] = yield* Effect.all(
+    [
+      listUntrackedFiles(runner, repositoryRoot),
+      resolveReviewBase(runner, repositoryRoot),
+    ],
+    { concurrency: listingConcurrency },
+  );
   const workingTreeChanges = yield* listWorkingTreeChanges(
     runner,
     repositoryRoot,

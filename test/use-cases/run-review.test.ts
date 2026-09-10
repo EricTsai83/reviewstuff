@@ -112,8 +112,9 @@ test("runReview resolves the repository once and shares its context", async () =
     scope: "working-tree",
     repositoryPath: "../selected",
   }).pipe(
-    Effect.provide(git),
-    Effect.provide(Layer.merge(selectedConfig, fakeReviewEngineRegistry)),
+    Effect.provide(
+      Layer.mergeAll(git, selectedConfig, fakeReviewEngineRegistry),
+    ),
     Effect.runPromise,
   );
 
@@ -133,9 +134,9 @@ test("runReview rejects unsupported selections before Git work", async () => {
       engine: "unsupported",
     },
   }).pipe(
-    Effect.provide(git),
     Effect.provide(
-      Layer.merge(
+      Layer.mergeAll(
+        git,
         config,
         Layer.succeed(ReviewEngineRegistry, makeReviewEngineRegistry()),
       ),
@@ -198,9 +199,7 @@ test("local-only refuses a cloud transport before diff or engine work", async ()
   });
 
   const error = await runReview({ scope: "working-tree" }).pipe(
-    Effect.provide(git),
-    Effect.provide(config),
-    Effect.provide(engine),
+    Effect.provide(Layer.mergeAll(git, config, engine)),
     Effect.flip,
     Effect.runPromise,
   );
@@ -242,9 +241,7 @@ test("cloud-allowed invokes a cloud transport and records the decision", async (
     scope: "working-tree",
     configOverrides: { privacy: "cloud-allowed" },
   }).pipe(
-    Effect.provide(git),
-    Effect.provide(config),
-    Effect.provide(engine),
+    Effect.provide(Layer.mergeAll(git, config, engine)),
     Effect.runPromise,
   );
 
@@ -390,8 +387,7 @@ test("runReview applies the resolved timeout to Git diff work", async () => {
     scope: "working-tree",
     configOverrides: { timeoutMs: 1 },
   }).pipe(
-    Effect.provide(git),
-    Effect.provide(services),
+    Effect.provide(Layer.merge(git, services)),
     Effect.flip,
     Effect.runPromise,
   );
@@ -421,9 +417,7 @@ test("runReview applies the same resolved timeout to engine work", async () => {
     scope: "working-tree",
     configOverrides: { timeoutMs: 1 },
   }).pipe(
-    Effect.provide(git),
-    Effect.provide(config),
-    Effect.provide(engine),
+    Effect.provide(Layer.mergeAll(git, config, engine)),
     Effect.flip,
     Effect.runPromise,
   );
@@ -465,9 +459,7 @@ test("runReview builds the normalized request before invoking the engine", async
       concurrency: 1,
     },
   }).pipe(
-    Effect.provide(git),
-    Effect.provide(config),
-    Effect.provide(engine),
+    Effect.provide(Layer.mergeAll(git, config, engine)),
     Effect.runPromise,
   );
 
@@ -615,8 +607,7 @@ test("preview applies the resolved timeout to request preparation", async () => 
     scope: "working-tree",
     configOverrides: { timeoutMs: 1 },
   }).pipe(
-    Effect.provide(git),
-    Effect.provide(services),
+    Effect.provide(Layer.merge(git, services)),
     Effect.flip,
     Effect.runPromise,
   );
@@ -656,9 +647,7 @@ test("runReview gives the engine only redacted repository data", async () => {
   });
 
   await runReview({ scope: "working-tree" }).pipe(
-    Effect.provide(git),
-    Effect.provide(config),
-    Effect.provide(engine),
+    Effect.provide(Layer.mergeAll(git, config, engine)),
     Effect.runPromise,
   );
 
@@ -698,9 +687,7 @@ test("engine failures cannot echo the original secret through their cause", asyn
   });
 
   const error = await runReview({ scope: "working-tree" }).pipe(
-    Effect.provide(git),
-    Effect.provide(config),
-    Effect.provide(engine),
+    Effect.provide(Layer.mergeAll(git, config, engine)),
     Effect.flip,
     Effect.runPromise,
   );
@@ -728,8 +715,7 @@ test("runReview produces deterministic findings from added marker lines", async 
       }),
   });
   const report = await runReview({ scope: "working-tree" }).pipe(
-    Effect.provide(git),
-    Effect.provide(services),
+    Effect.provide(Layer.merge(git, services)),
     Effect.runPromise,
   );
 
@@ -787,7 +773,7 @@ test("runReview produces deterministic findings from added marker lines", async 
 test("finding IDs do not change when the same patch is staged", async () => {
   const review = (source: "staged" | "working-tree") =>
     runReview({ scope: "working-tree" }).pipe(
-      Effect.provide(
+      Effect.provide(Layer.merge(
         makeGit({
           readDiff: () =>
             Effect.succeed({
@@ -800,8 +786,8 @@ test("finding IDs do not change when the same patch is staged", async () => {
               ],
             }),
         }),
-      ),
-      Effect.provide(services),
+        services,
+      )),
       Effect.map((report) => report.findings[0]?.id),
       Effect.runPromise,
     );
@@ -811,7 +797,7 @@ test("finding IDs do not change when the same patch is staged", async () => {
 
 test("runReview reports deterministic incomplete coverage", async () => {
   const report = await runReview({ scope: "working-tree" }).pipe(
-    Effect.provide(
+    Effect.provide(Layer.merge(
       makeGit({
         readDiff: () =>
           Effect.succeed({
@@ -830,8 +816,8 @@ test("runReview reports deterministic incomplete coverage", async () => {
             ],
           }),
       }),
-    ),
-    Effect.provide(services),
+      services,
+    )),
     Effect.runPromise,
   );
 
@@ -912,9 +898,7 @@ test("runReview sends only budget-selected hunks and reports the same coverage",
       },
     },
   }).pipe(
-    Effect.provide(git),
-    Effect.provide(config),
-    Effect.provide(engine),
+    Effect.provide(Layer.mergeAll(git, config, engine)),
     Effect.runPromise,
   );
 
@@ -980,16 +964,14 @@ test("runReview skips the engine when no hunk fits the request budget", async ()
       },
     },
   }).pipe(
-    Effect.provide(
+    Effect.provide(Layer.mergeAll(
       makeGit({
         readDiff: () =>
           Effect.succeed({
             files: [gitTextFile("oversized.ts", "staged", hugeHunk)],
           }),
       }),
-    ),
-    Effect.provide(config),
-    Effect.provide(
+      config,
       registryWithEngine({
         transport: "local",
         review: () =>
@@ -998,7 +980,7 @@ test("runReview skips the engine when no hunk fits the request budget", async ()
             return [];
           }),
       }),
-    ),
+    )),
     Effect.runPromise,
   );
 
@@ -1026,13 +1008,11 @@ test("runReview sends metadata-only files to the engine", async () => {
   const metadataOnly = gitTextFile("empty.ts", "untracked", "");
 
   const report = await runReview({ scope: "working-tree" }).pipe(
-    Effect.provide(
+    Effect.provide(Layer.mergeAll(
       makeGit({
         readDiff: () => Effect.succeed({ files: [metadataOnly] }),
       }),
-    ),
-    Effect.provide(config),
-    Effect.provide(
+      config,
       registryWithEngine({
         transport: "local",
         review: (request) =>
@@ -1042,7 +1022,7 @@ test("runReview sends metadata-only files to the engine", async () => {
             return [];
           }),
       }),
-    ),
+    )),
     Effect.runPromise,
   );
 
@@ -1085,9 +1065,7 @@ test("runReview propagates typed engine failures", async () => {
   });
 
   const error = await runReview({ scope: "working-tree" }).pipe(
-    Effect.provide(git),
-    Effect.provide(config),
-    Effect.provide(engine),
+    Effect.provide(Layer.mergeAll(git, config, engine)),
     Effect.flip,
     Effect.runPromise,
   );

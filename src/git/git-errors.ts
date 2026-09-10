@@ -1,5 +1,6 @@
 import * as Data from "effect/Data";
 import * as Match from "effect/Match";
+import type { ReviewFileSource } from "../domain/review-file";
 import * as CommandRunner from "../platform/command-runner";
 
 export type GitProcessPhase = "stdout" | "stderr" | "exit-code";
@@ -77,7 +78,7 @@ export class GitChangedFileUnavailableError extends Data.TaggedError(
   "GitChangedFileUnavailableError",
 )<{
   readonly path: string;
-  readonly source: import("../domain/review-file").ReviewFileSource;
+  readonly source: ReviewFileSource;
 }> {}
 
 export class GitInvalidOutputError extends Data.TaggedError(

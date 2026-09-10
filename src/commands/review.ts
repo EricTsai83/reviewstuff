@@ -165,11 +165,7 @@ export const reviewCommand = Command.make("review", {
       );
 
     return output.pipe(
-      Effect.flatMap((rendered) =>
-        Console.log(
-          rendered,
-        ),
-      ),
+      Effect.flatMap((rendered) => Console.log(rendered)),
       Effect.matchEffect({
         onFailure: (error) =>
           reportCommandFailure(renderReviewError(error)),

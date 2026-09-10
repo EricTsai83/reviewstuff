@@ -66,6 +66,28 @@ test("fake ReviewEngine produces deterministic findings from added marker lines"
   expect(await review(request)).toEqual(expected);
 });
 
+test("fake ReviewEngine counts added lines whose content starts with ++", async () => {
+  const findings = await review(buildRequest([
+    {
+      path: "src/example.c",
+      source: "working-tree",
+      patch: [
+        "diff --git a/src/example.c b/src/example.c",
+        "--- a/src/example.c",
+        "+++ b/src/example.c",
+        "@@ -1,2 +1,4 @@",
+        " int i = 0;",
+        "+++i;",
+        "+--i;",
+        "+// REVIEWSTUFF_FAKE_FINDING",
+        " return i;",
+      ].join("\n"),
+    },
+  ]));
+
+  expect(findings.map((finding) => finding.line)).toEqual([4]);
+});
+
 test("fake ReviewEngine ignores markers outside added lines", async () => {
   expect(
     await review(buildRequest([

@@ -139,32 +139,60 @@ export const requireGitSuccess = (
     ),
   );
 
-export const resolveEmptyTreeObjectId = (
+const requireGitObjectId = (
   runner: CommandRunner.Service,
+  operation: string,
+  args: ReadonlyArray<string>,
   repositoryRoot: string,
-): Effect.Effect<string, GitError> => {
-  const operation = "resolve empty tree";
+): Effect.Effect<string, GitError> =>
+  executeGit(runner, operation, args, {
+    maxOutputBytes: gitObjectMetadataMaxOutputBytes,
+    workingDirectory: repositoryRoot,
+  }).pipe(
+    Effect.flatMap((result): Effect.Effect<string, GitError> => {
+      if (result.exitCode !== 0) {
+        return Effect.fail(makeGitCommandError(operation, result));
+      }
 
-  return requireGitSuccess(
-    runner,
-    operation,
-    ["hash-object", "-t", "tree", "/dev/null"],
-    { workingDirectory: repositoryRoot },
-  ).pipe(
-    Effect.flatMap((output) => {
-      const emptyTreeObjectId = parseGitObjectId(output);
+      const objectId = parseGitObjectId(result.stdout);
 
-      return emptyTreeObjectId !== undefined
-        ? Effect.succeed(emptyTreeObjectId)
+      return objectId !== undefined
+        ? Effect.succeed(objectId)
         : Effect.fail(
             new GitInvalidOutputError({
               operation,
-              outputBytes: Buffer.byteLength(output),
+              outputBytes: Buffer.byteLength(result.stdout),
             }),
           );
     }),
   );
-};
+
+export const resolveEmptyTreeObjectId = (
+  runner: CommandRunner.Service,
+  repositoryRoot: string,
+): Effect.Effect<string, GitError> =>
+  requireGitObjectId(
+    runner,
+    "resolve empty tree",
+    ["hash-object", "-t", "tree", "/dev/null"],
+    repositoryRoot,
+  );
+
+/**
+ * The empty blob's object name depends only on the repository's hash
+ * algorithm, so callers resolve it once per collection instead of once per
+ * empty file.
+ */
+export const resolveEmptyBlobObjectId = (
+  runner: CommandRunner.Service,
+  repositoryRoot: string,
+): Effect.Effect<string, GitError> =>
+  requireGitObjectId(
+    runner,
+    "resolve empty blob",
+    ["hash-object", "--no-filters", "--", "/dev/null"],
+    repositoryRoot,
+  );
 
 export const readGitObjectSize = (
   runner: CommandRunner.Service,

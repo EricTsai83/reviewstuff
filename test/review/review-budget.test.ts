@@ -205,6 +205,38 @@ describe("review request budget selection", () => {
     expect(expectedBytes).toBeGreaterThan(serialized.length);
   });
 
+  test("estimates each hunk once instead of re-serializing the selection", () => {
+    const hunkCount = 500;
+    const hunks = Array.from(
+      { length: hunkCount },
+      (_, index) => `@@ -${index + 1} +${index + 1} @@\n+line ${index}\n`,
+    );
+    let estimateCalls = 0;
+    const countingEstimator = {
+      unit: "tokens" as const,
+      estimate: (fragment: string) => {
+        estimateCalls += 1;
+        return fallbackReviewRequestEstimator.estimate(fragment);
+      },
+    };
+    const files = [file("many.ts", hunks), file("meta.ts", [])];
+
+    const selection = selectReviewHunks({
+      files,
+      policy: { ...policyOverhead, maxTokens: 1_000_000 },
+      estimator: countingEstimator,
+    });
+
+    // One header-only estimate per file, one per hunk, plus the two array
+    // delimiters: the count must not grow with the number of selected hunks
+    // per candidate.
+    expect(estimateCalls).toBe(files.length + hunkCount + 2);
+    expect(selection.coverage.complete).toBe(true);
+    expect(selection.estimate.selectedRequestTokens).toBe(
+      fallbackReviewRequestEstimator.estimate(JSON.stringify(selection.files)),
+    );
+  });
+
   test("identical input and policy produce identical selection", () => {
     const input = {
       files: [

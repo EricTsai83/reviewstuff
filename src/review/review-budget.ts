@@ -71,9 +71,10 @@ export interface ReviewRequestEstimator {
   readonly unit: "tokens";
   /**
    * Estimates one serialized JSON fragment. Selection estimates each file's
-   * serialization separately and sums the parts, so estimates must be
-   * additive under string concatenation; the fallback byte estimator is
-   * exactly additive, and tokenizer-based estimators are approximately so.
+   * header-only serialization and each hunk's escaped body separately and
+   * sums the parts, so estimates must be additive under string concatenation;
+   * the fallback byte estimator is exactly additive, and tokenizer-based
+   * estimators are approximately so.
    */
   readonly estimate: (serializedFragment: string) => number;
 }
@@ -140,20 +141,23 @@ const validateInput = (
   }
 };
 
-const serializeSelectedFile = (
+const serializeFile = (
   file: ReviewBudgetFile,
-  hunkIndexes: ReadonlySet<number>,
-): string => {
-  const selected = file.hunks.filter((_hunk, hunkIndex) =>
-    hunkIndexes.has(hunkIndex)
-  );
-
-  return JSON.stringify({
+  selectedHunkPatches: string,
+): string =>
+  JSON.stringify({
     path: file.path,
     source: file.source,
-    patch: `${file.fileHeader}${selected.map((hunk) => hunk.patch).join("")}`,
+    patch: `${file.fileHeader}${selectedHunkPatches}`,
   });
-};
+
+/**
+ * The escaped body of a JSON string without its quotes. JSON escaping is
+ * applied per character, so the body of a concatenation is the concatenation
+ * of the bodies, which is what lets a hunk be estimated once and added.
+ */
+const jsonStringBody = (value: string): string =>
+  JSON.stringify(value).slice(1, -1);
 
 const selectedFiles = (
   files: ReadonlyArray<ReviewBudgetFile>,
@@ -197,12 +201,26 @@ export const selectReviewHunks = ({
   );
 
   // The selection estimate decomposes the serialized files array into its
-  // enclosing brackets, separators, and per-file fragments, so each candidate
-  // re-estimates only the file it changes instead of the whole selection.
+  // enclosing brackets, separators, and per-file fragments, and each file into
+  // its header-only serialization plus one fragment per hunk. Every part is
+  // estimated once, so a candidate costs a lookup instead of re-serializing
+  // every hunk already selected for its file.
   const arrayBracketTokens = estimator.estimate("[]");
   const arraySeparatorTokens = estimator.estimate(",");
   assertNonNegativeSafeInteger("array bracket estimate", arrayBracketTokens);
   assertNonNegativeSafeInteger("array separator estimate", arraySeparatorTokens);
+  const headerOnlyFileTokens = files.map((file) => {
+    const tokens = estimator.estimate(serializeFile(file, ""));
+    assertNonNegativeSafeInteger("file estimate", tokens);
+    return tokens;
+  });
+  const hunkTokens = files.map((file) =>
+    file.hunks.map((hunk) => {
+      const tokens = estimator.estimate(jsonStringBody(hunk.patch));
+      assertNonNegativeSafeInteger("hunk estimate", tokens);
+      return tokens;
+    })
+  );
   const perFileTokens: Array<number | undefined> = files.map(() => undefined);
   let includedFiles = 0;
   let includedFileTokens = 0;
@@ -220,21 +238,16 @@ export const selectReviewHunks = ({
   for (let hunkIndex = 0; hunkIndex < rounds; hunkIndex += 1) {
     for (const [fileIndex, file] of files.entries()) {
       const metadataOnly = file.hunks.length === 0 && hunkIndex === 0;
-      if (!metadataOnly && file.hunks[hunkIndex] === undefined) {
+      const candidateHunkTokens = hunkTokens[fileIndex]?.[hunkIndex];
+      if (!metadataOnly && candidateHunkTokens === undefined) {
         continue;
       }
 
-      if (metadataOnly) {
-        selectedMetadataFiles.add(fileIndex);
-      } else {
-        selectedHunks[fileIndex]?.add(hunkIndex);
-      }
-
       const previousFileTokens = perFileTokens[fileIndex];
-      const candidateFileTokens = estimator.estimate(
-        serializeSelectedFile(file, selectedHunks[fileIndex] ?? new Set()),
+      const candidateFileTokens = sumTokenCounts(
+        previousFileTokens ?? headerOnlyFileTokens[fileIndex] ?? 0,
+        metadataOnly ? 0 : candidateHunkTokens ?? 0,
       );
-      assertNonNegativeSafeInteger("file estimate", candidateFileTokens);
       const candidateIncludedFiles = includedFiles +
         (previousFileTokens === undefined ? 1 : 0);
       const candidateIncludedFileTokens = includedFileTokens -
@@ -249,19 +262,19 @@ export const selectReviewHunks = ({
         candidateRequestTokens,
       );
 
-      if (candidateTotal <= policy.maxTokens) {
-        perFileTokens[fileIndex] = candidateFileTokens;
-        includedFiles = candidateIncludedFiles;
-        includedFileTokens = candidateIncludedFileTokens;
-        selectedRequestTokens = candidateRequestTokens;
+      if (candidateTotal > policy.maxTokens) {
         continue;
       }
 
       if (metadataOnly) {
-        selectedMetadataFiles.delete(fileIndex);
+        selectedMetadataFiles.add(fileIndex);
       } else {
-        selectedHunks[fileIndex]?.delete(hunkIndex);
+        selectedHunks[fileIndex]?.add(hunkIndex);
       }
+      perFileTokens[fileIndex] = candidateFileTokens;
+      includedFiles = candidateIncludedFiles;
+      includedFileTokens = candidateIncludedFileTokens;
+      selectedRequestTokens = candidateRequestTokens;
     }
   }
 

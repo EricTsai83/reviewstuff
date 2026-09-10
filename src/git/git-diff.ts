@@ -10,6 +10,7 @@ import {
   gitDiffTimeoutMilliseconds,
   gitObjectMetadataMaxOutputBytes,
   parseGitObjectId,
+  resolveEmptyBlobObjectId,
 } from "./git-command";
 import {
   GitChangedFileUnavailableError,
@@ -66,6 +67,12 @@ interface ReadDiffPatchOptions {
   readonly source: ReviewFileSource;
   readonly expectedExitCodes: ReadonlySet<number>;
   readonly repositoryRoot: string;
+  /**
+   * Present only for untracked files, whose empty diff is ambiguous: the file
+   * may be empty or may have changed since it was listed. The shared effect
+   * resolves the empty blob once for the whole collection.
+   */
+  readonly emptyBlobObjectId?: Effect.Effect<string, GitError>;
 }
 
 const fileMetadata = (
@@ -165,7 +172,60 @@ const mergeTargetRecords = (
   };
 };
 
-const readDiffPatch = ({
+/**
+ * `git diff --no-index` prints nothing for an empty untracked file, which is
+ * also what it prints when the file disappeared or gained content after it was
+ * listed. Hashing the file distinguishes the two.
+ */
+const verifyEmptyUntrackedFile = Effect.fn("GitDiff.verifyEmptyUntrackedFile")(
+  function* (
+    runner: CommandRunner.Service,
+    target: GitPatchTarget,
+    repositoryRoot: string,
+    emptyBlobObjectId: Effect.Effect<string, GitError>,
+  ): Effect.fn.Return<GitFile, GitError> {
+    const operation = "verify empty untracked file";
+    const verification = yield* executeGit(
+      runner,
+      operation,
+      ["hash-object", "--no-filters", "--", target.path],
+      {
+        maxOutputBytes: gitObjectMetadataMaxOutputBytes,
+        workingDirectory: repositoryRoot,
+      },
+    );
+    if (verification.exitCode !== 0) {
+      return yield* new GitChangedFileUnavailableError({
+        path: target.path,
+        source: "untracked",
+      });
+    }
+
+    const objectId = parseGitObjectId(verification.stdout);
+    if (objectId === undefined) {
+      return yield* new GitInvalidOutputError({
+        operation,
+        outputBytes: Buffer.byteLength(verification.stdout),
+      });
+    }
+    if (objectId !== (yield* emptyBlobObjectId)) {
+      return yield* new GitChangedFileUnavailableError({
+        path: target.path,
+        source: "untracked",
+      });
+    }
+
+    return {
+      ...fileMetadata(target, "untracked"),
+      kind: "text",
+      patch: "",
+      fileHeader: "",
+      hunks: [],
+    };
+  },
+);
+
+const readDiffPatch = Effect.fn("GitDiff.readDiffPatch")(function* ({
   runner,
   operation,
   args,
@@ -173,117 +233,44 @@ const readDiffPatch = ({
   source,
   expectedExitCodes,
   repositoryRoot,
-}: ReadDiffPatchOptions): Effect.Effect<GitFile, GitError> =>
-  executeGit(runner, operation, args, {
+  emptyBlobObjectId,
+}: ReadDiffPatchOptions): Effect.fn.Return<GitFile, GitError> {
+  const patchResult = yield* executeGit(runner, operation, args, {
     maxOutputBytes: gitPatchMaxOutputBytes,
     workingDirectory: repositoryRoot,
     timeoutMilliseconds: gitDiffTimeoutMilliseconds,
-  }).pipe(
-    Effect.flatMap((patchResult): Effect.Effect<GitFile, GitError> => {
-      if (!expectedExitCodes.has(patchResult.exitCode)) {
-        return Effect.fail(makeGitCommandError(operation, patchResult));
-      }
+  });
+  if (!expectedExitCodes.has(patchResult.exitCode)) {
+    return yield* makeGitCommandError(operation, patchResult);
+  }
 
-      if (patchResult.stdout.length === 0) {
-        if (source === "untracked") {
-          return executeGit(
-            runner,
-            "verify empty untracked file",
-            ["hash-object", "--no-filters", "--", target.path],
-            {
-              maxOutputBytes: gitObjectMetadataMaxOutputBytes,
-              workingDirectory: repositoryRoot,
-            },
-          ).pipe(
-            Effect.flatMap((verification): Effect.Effect<GitFile, GitError> => {
-              if (verification.exitCode !== 0) {
-                return Effect.fail(
-                  new GitChangedFileUnavailableError({
-                    path: target.path,
-                    source,
-                  }),
-                );
-              }
-              const objectId = parseGitObjectId(verification.stdout);
-              if (objectId === undefined) {
-                return Effect.fail(
-                  new GitInvalidOutputError({
-                    operation: "verify empty untracked file",
-                    outputBytes: Buffer.byteLength(verification.stdout),
-                  }),
-                );
-              }
-
-              return executeGit(
-                runner,
-                "resolve empty blob",
-                ["hash-object", "--no-filters", "--", "/dev/null"],
-                {
-                  maxOutputBytes: gitObjectMetadataMaxOutputBytes,
-                  workingDirectory: repositoryRoot,
-                },
-              ).pipe(
-                Effect.flatMap((emptyBlob): Effect.Effect<GitFile, GitError> => {
-                  if (emptyBlob.exitCode !== 0) {
-                    return Effect.fail(
-                      makeGitCommandError("resolve empty blob", emptyBlob),
-                    );
-                  }
-                  const emptyBlobObjectId = parseGitObjectId(emptyBlob.stdout);
-                  if (emptyBlobObjectId === undefined) {
-                    return Effect.fail(
-                      new GitInvalidOutputError({
-                        operation: "resolve empty blob",
-                        outputBytes: Buffer.byteLength(emptyBlob.stdout),
-                      }),
-                    );
-                  }
-                  if (objectId !== emptyBlobObjectId) {
-                    return Effect.fail(
-                      new GitChangedFileUnavailableError({
-                        path: target.path,
-                        source,
-                      }),
-                    );
-                  }
-
-                  return Effect.succeed({
-                    ...fileMetadata(target, source),
-                    kind: "text",
-                    patch: "",
-                    fileHeader: "",
-                    hunks: [],
-                  });
-                }),
-              );
-            }),
-          );
-        }
-
-        return Effect.fail(
-          new GitChangedFileUnavailableError({
-            path: target.path,
-            source,
-          }),
-        );
-      }
-
-      return parseUnifiedDiff(patchResult.stdout, operation).pipe(
-        Effect.flatMap((records): Effect.Effect<GitFile, GitError> => {
-          const selected = selectTargetRecords(records, target);
-
-          return selected === undefined
-            ? Effect.fail(
-              new GitInvalidOutputError({
-                operation,
-                outputBytes: Buffer.byteLength(patchResult.stdout),
-              }),
-            )
-            : Effect.succeed(mergeTargetRecords(selected, target, source));
-        }),
+  if (patchResult.stdout.length === 0) {
+    if (source === "untracked" && emptyBlobObjectId !== undefined) {
+      return yield* verifyEmptyUntrackedFile(
+        runner,
+        target,
+        repositoryRoot,
+        emptyBlobObjectId,
       );
-    }),
-  );
+    }
+
+    return yield* new GitChangedFileUnavailableError({
+      path: target.path,
+      source,
+    });
+  }
+
+  const records = yield* parseUnifiedDiff(patchResult.stdout, operation);
+  const selected = selectTargetRecords(records, target);
+  if (selected === undefined) {
+    return yield* new GitInvalidOutputError({
+      operation,
+      outputBytes: Buffer.byteLength(patchResult.stdout),
+    });
+  }
+
+  return mergeTargetRecords(selected, target, source);
+});
 
 const patchCollectionConcurrency = 4;
 const gitDiffExitCodes: ReadonlySet<number> = new Set([0]);
@@ -299,57 +286,66 @@ const gitNoIndexDiffExitCodes: ReadonlySet<number> = new Set([0, 1]);
  */
 const gitPatchContentArguments = ["--no-ext-diff", "--no-textconv"] as const;
 
-export const collectDiffPatches = ({
-  runner,
-  targets,
-  source,
-  repositoryRoot,
-  diffBase = "HEAD",
-}: CollectDiffPatchesOptions): Effect.Effect<GitDiff, GitError> =>
-  Effect.forEach(targets, (target) => {
-    if (source === "untracked") {
+export const collectDiffPatches = Effect.fn("GitDiff.collectDiffPatches")(
+  function* ({
+    runner,
+    targets,
+    source,
+    repositoryRoot,
+    diffBase = "HEAD",
+  }: CollectDiffPatchesOptions): Effect.fn.Return<GitDiff, GitError> {
+    // Resolved lazily and at most once, so a collection without an empty
+    // untracked file never spawns the extra process.
+    const emptyBlobObjectId = yield* Effect.cached(
+      resolveEmptyBlobObjectId(runner, repositoryRoot),
+    );
+    const files = yield* Effect.forEach(targets, (target) => {
+      if (source === "untracked") {
+        return readDiffPatch({
+          runner,
+          operation: "read untracked diff",
+          args: [
+            "diff",
+            "--no-index",
+            "--no-color",
+            ...gitPatchContentArguments,
+            "--unified=3",
+            "--",
+            "/dev/null",
+            target.path,
+          ],
+          target,
+          source,
+          expectedExitCodes: gitNoIndexDiffExitCodes,
+          repositoryRoot,
+          emptyBlobObjectId,
+        });
+      }
+
+      const diffBaseArguments = source === "staged"
+        ? ["--cached"]
+        : [diffBase];
+
       return readDiffPatch({
         runner,
-        operation: "read untracked diff",
+        operation: `read ${source} diff`,
         args: [
           "diff",
-          "--no-index",
+          ...diffBaseArguments,
+          "--find-copies-harder",
           "--no-color",
           ...gitPatchContentArguments,
           "--unified=3",
           "--",
-          "/dev/null",
-          target.path,
+          ...target.pathspecs,
         ],
         target,
         source,
-        expectedExitCodes: gitNoIndexDiffExitCodes,
+        expectedExitCodes: gitDiffExitCodes,
         repositoryRoot,
       });
-    }
+    }, { concurrency: patchCollectionConcurrency });
 
-    const diffBaseArguments = source === "staged"
-      ? ["--cached"]
-      : [diffBase];
-
-    return readDiffPatch({
-      runner,
-      operation: `read ${source} diff`,
-      args: [
-        "diff",
-        ...diffBaseArguments,
-        "--find-copies-harder",
-        "--no-color",
-        ...gitPatchContentArguments,
-        "--unified=3",
-        "--",
-        ...target.pathspecs,
-      ],
-      target,
-      source,
-      expectedExitCodes: gitDiffExitCodes,
-      repositoryRoot,
-    });
-  }, { concurrency: patchCollectionConcurrency }).pipe(
-    Effect.map((files) => ({ files })),
-  );
+    return { files };
+  },
+);

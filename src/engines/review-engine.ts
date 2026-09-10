@@ -160,6 +160,7 @@ const findingsForPatch = (
 ): ReadonlyArray<ReviewFindingV1> => {
   const findings: Array<ReviewFindingV1> = [];
   let targetLineNumber = 0;
+  let insideHunk = false;
 
   for (const line of file.patch.split("\n")) {
     const hunkHeaderMatch = /^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@/.exec(
@@ -168,10 +169,14 @@ const findingsForPatch = (
 
     if (hunkHeaderMatch !== null) {
       targetLineNumber = Number(hunkHeaderMatch[1]);
+      insideHunk = true;
       continue;
     }
 
-    if (line.startsWith("+") && !line.startsWith("+++")) {
+    // Only a file header carries a `+++` line outside a hunk. Inside a hunk
+    // every `+` line is added content, including content that itself starts
+    // with `++`, so it must count toward the line number.
+    if (line.startsWith("+") && (insideHunk || !line.startsWith("+++"))) {
       if (line.includes(fakeFindingMarker)) {
         findings.push(decodeReviewFindingV1({
           id: `fake-marker:${file.path}:${targetLineNumber}:${stableFindingFingerprint(line.slice(1))}`,
@@ -189,9 +194,18 @@ const findingsForPatch = (
       continue;
     }
 
-    if (!line.startsWith("-") && !line.startsWith("\\")) {
+    if (line.startsWith(" ")) {
       targetLineNumber += 1;
+      continue;
     }
+
+    if (line.startsWith("-") || line.startsWith("\\")) {
+      continue;
+    }
+
+    // Any other line belongs to a file header, so the current hunk has ended
+    // and the next `@@` header resets the line number.
+    insideHunk = false;
   }
 
   return findings;

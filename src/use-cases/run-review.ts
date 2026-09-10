@@ -244,9 +244,11 @@ interface ResolvedReview {
   /**
    * Budget the engine may still spend, always strictly smaller than the outer
    * review deadline so a provider timeout surfaces as an engine error instead
-   * of the generic review timeout.
+   * of the generic review timeout. Fails with the review timeout when the
+   * preceding work has already consumed the deadline, so the engine is never
+   * handed a budget it cannot meaningfully use.
    */
-  readonly remainingEngineBudget: Effect.Effect<number>;
+  readonly remainingEngineBudget: Effect.Effect<number, ReviewTimeoutError>;
 }
 
 /**
@@ -320,17 +322,19 @@ const withResolvedReview = <Success, Error>(
     const engine = yield* engineRegistry.resolve(config);
     const startedAt = yield* Clock.currentTimeNanos;
     const remainingEngineBudget = Clock.currentTimeNanos.pipe(
-      Effect.map((now) => {
+      Effect.flatMap((now) => {
         const elapsedNanoseconds = now > startedAt ? now - startedAt : 0n;
         const elapsedMilliseconds = Number(
           (elapsedNanoseconds + 999_999n) / 1_000_000n,
         );
+        const remainingMilliseconds = config.timeoutMs - elapsedMilliseconds -
+          engineTimeoutReserveMilliseconds;
 
-        return Math.max(
-          1,
-          config.timeoutMs - elapsedMilliseconds -
-            engineTimeoutReserveMilliseconds,
-        );
+        return remainingMilliseconds > 0
+          ? Effect.succeed(remainingMilliseconds)
+          : Effect.fail(
+            new ReviewTimeoutError({ timeoutMilliseconds: config.timeoutMs }),
+          );
       }),
     );
 
