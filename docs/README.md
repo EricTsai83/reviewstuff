@@ -6,7 +6,7 @@ whose truth is the current repository implementation.
 | Area | Purpose |
 | --- | --- |
 | [`learning/`](./learning/README.md) | Independently readable tutorials, case studies, overviews, and learning paths |
-| [`reference/`](./reference/reviewstuff-repository-structure.md) | Normative repository rules that must evolve with the codebase |
+| [`reference/`](./reference/reviewstuff-repository-structure.md) | Normative repository rules that must evolve with the codebase, including the [product positioning](./reference/reviewstuff-product-positioning.md) |
 | [`system-design/`](./system-design/reviewstuff-cli-implementation-reference.html) | Current implementation references, including the [whole CLI overview](./system-design/reviewstuff-cli-implementation-reference.html) and [Git pipeline detail](./system-design/reviewstuff-git-pipeline-implementation-reference.html) |
 | [`assets/`](./assets/learning-article.css) | Shared presentation assets used by learning articles |
 
