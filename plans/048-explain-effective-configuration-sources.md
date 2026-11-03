@@ -2,12 +2,11 @@
 
 [← Plan index](./README.md)
 
-**Depends on:** 018、026、049。 **Learning:** observable configuration provenance without
+**Depends on:** 無未完成的前置 plan；以 `src/config/config-service.ts`、`src/config/schema.ts` 與 `src/commands/review.ts` 的現有設定流程為準。 **Learning:** observable configuration provenance without
 duplicating resolution logic。
 
-> Plan 018、049 已先固定 selected repository root 與唯一 YAML config contract；013、017、026
-> 再固定 privacy、engine/provider/model 與 workload fields。此時建立 provenance 可避免前期欄位
-> churn，並讓 config path 從一開始就指向 canonical repository config。
+> 以現有 selected repository root、唯一 YAML config，以及 privacy、engine/provider/model、
+> workload 的實際 resolution 行為為基礎建立 provenance；實作前重新確認欄位與來源。
 
 ## Goal
 

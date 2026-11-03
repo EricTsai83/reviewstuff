@@ -10,7 +10,7 @@ reporting流程。
 **In:** privacy/security docs、data-flow table、threat-model summary、redaction residual risk、SECURITY.md。
 **Out:** install quickstart、provider setup walkthrough、marketing site、enterprise policy。
 
-**Steps:** 以 013–015、027–029 的實際 schema/data為 source；逐一列出 sent/stored/not-stored data；加入 request preview與
+**Steps:** 以現有 privacy/redaction/request pipeline 與 session 實作的實際 schema/data 為 source；逐一列出 sent/stored/not-stored data；加入 request preview與
 session inspection examples；定義 security report channel與 supported versions。
 
 **Accept:** 清楚說 secret detection 非保證；明載 Codex CLI engine 的 transport 是 `cloud`、資料會送到 OpenAI，

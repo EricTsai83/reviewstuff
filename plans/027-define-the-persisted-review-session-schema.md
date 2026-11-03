@@ -2,7 +2,7 @@
 
 [← Plan index](./README.md)
 
-**Depends on:** 026、032。 **Learning:** durable schema design before filesystem code。
+**Depends on:** 032。現有 report 與 request contract 以 `src/domain/report.ts`、`src/review/review-request.ts` 為準。 **Learning:** durable schema design before filesystem code。
 
 **Working state:** `ReviewSessionV1` fixtures 能表示 effective scope/policy、redacted normalized request、coverage、
 engine metadata 與 findings，但尚未寫入 disk。report 的 pre-persistence migration 鏈已被移除。
@@ -17,7 +17,7 @@ engine metadata 與 findings，但尚未寫入 disk。report 的 pre-persistence
 slice 0 的 migration 清除。
 **Out:** filesystem layout、latest lookup、raw pre-redaction diff/prompt、fix attempts。
 
-**Steps:** 先完成 slice 0 並確認 e2e 不變；從實際 output contract 設計 schema；只保存 014 redaction 後
+**Steps:** 先完成 slice 0 並確認 e2e 不變；從實際 output contract 設計 schema；只保存現有 redaction pipeline（`src/review/review-redaction.ts`）處理後
 的 request；用 fake Clock/ID 產生 deterministic fixture；定義 corrupt/unsupported version errors。
 
 **Accept:** schema 不含 credentials/raw provider body；同一 finding/report schema 不被複製成第二套，

@@ -2,7 +2,7 @@
 
 [← Plan index](./README.md)
 
-**Depends on:** 026（report 與 `FindingSeverity` contract）。 **Learning:** exit codes as a stable machine contract。
+**Depends on:** 無未完成的前置 plan；以 `src/domain/report.ts` 與 `src/domain/finding.ts` 的現有 contract 為準。 **Learning:** exit codes as a stable machine contract。
 
 > 排序說明：本 plan 提前到 027–031 之前執行。exit-code 遷移（execution failure 1 → 2）要改動
 > 既有 e2e assertions；若排在 sessions/query/replay 之後，029–031 新增的 e2e 也得跟著遷移。

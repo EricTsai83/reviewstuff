@@ -2,7 +2,7 @@
 
 [← Plan index](./README.md)
 
-**Depends on:** 050、052。 **Learning:** per-file failure isolation in the Git adapter。
+**Depends on:** 無未完成的前置 plan；以 `src/git/git-diff.ts`、`src/git/git-command.ts` 與 `src/platform/command-runner.ts` 的現有行為為準。 **Learning:** per-file failure isolation in the Git adapter。
 
 > 排序說明：本 plan 原本是 025 的一段「現況修正」註記。它被提前成獨立 hotfix，因為 019、020
 > 開放 committed range 之後，單一檔案 patch 超過輸出上限的機率會大幅上升；若等到 025 才修，

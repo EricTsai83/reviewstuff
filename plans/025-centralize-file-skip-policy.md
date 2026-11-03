@@ -18,7 +18,7 @@ provenance）、coverage summary、`coverage.complete` 語意。
 per-file 輸出上限（053）。
 
 **Steps:** 將現有 binary behavior 與 053 的 `file-too-large`/`unsupported-diff` 移到 pure selection contract；
-hard exclude binary/media；其餘 override 仍受 012 budget；補每個 heuristic fixture 與 boundary test。
+hard exclude binary/media；其餘 override 仍受現有 request budget（`src/review/review-budget.ts`）限制；補每個 heuristic fixture 與 boundary test。
 
 **Coverage 語意（本 plan 唯一一次 report bump）：** 政策性排除（binary/media hard exclude、
 generated/lock default exclude、024 的 ignore）與資源性 skip（budget、size、unsupported diff）分開。

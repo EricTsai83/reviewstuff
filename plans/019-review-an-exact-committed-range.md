@@ -2,7 +2,7 @@
 
 [← Plan index](./README.md)
 
-**Depends on:** 018、053。 **Learning:** immutable Git range semantics，以及一次定義完整的 scope contract。
+**Depends on:** 053。現有 repository selection 以 `src/git/git-service.ts` 與 `src/commands/review.ts` 為準。 **Learning:** immutable Git range semantics，以及一次定義完整的 scope contract。
 
 **Working state:** `--from <ref>` 可 review 已驗證 commit 到 `HEAD` 的 committed diff（exact left endpoint，
 不做 merge-base）。`reviewstuff review` 與 `--staged` 的行為與輸出語意不變，只有 scope 的序列化形狀升級。
