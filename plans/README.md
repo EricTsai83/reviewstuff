@@ -1,13 +1,29 @@
 # ReviewStuff implementation plans
 
-這裡只維護一條可依序執行的主線。每個編號各有一份 canonical plan，本文件只負責共通規則、
-執行順序、狀態與 milestone，避免單一 roadmap 隨主線增長而必須整份載入。
+這裡只維護尚未完成、可依序執行的一條主線。每個編號各有一份 canonical plan，本文件只負責
+共通規則、執行順序、狀態與剩餘 milestone。
+
+## 設計依據與 plan 生命週期
+
+- 所有設計都以當下 codebase、實際需求與測試為依據，選擇當下最合適、簡單的方案。
+  舊 plan 的設計決策不構成約束，不為延續過去計畫而保留已不合適的 abstraction 或 contract。
+- 未完成 plan 是可修訂的工作假設。開始實作前先核對現有程式、測試與整合邊界；若與 plan
+  不符或已有更合適的方案，先更新該 plan 的設計、範圍、驗收條件及相關依賴，再實作。
+- 本目錄只保留 `TODO` 與 `IN PROGRESS` 的 plan。完成驗收後，在同一個 change set 刪除
+  該 plan 檔案與本文件的索引列，不封存、不建立已完成清單，也不保留歷史 plan 作為設計依據。
+- 刪除時同步清理其他 plan、milestone 與文件的引用。已實作的前置能力改指向現有程式、測試
+  或仍適用的 reference 文件；`Depends on` 只列尚未完成的前置 plan。
+- 需要長期說明的現行行為或使用方式，更新到適當的 `docs/reference`、`docs/system-design`
+  或使用文件；只記錄當前實作，不搬移舊 plan 或保留過時設計。文件與實作不符時先查證 codebase，
+  再修正文案或計畫。
+- 保留未完成 plan 的原編號，不因刪除而重新編號；執行順序以本文件的表格列序為準。
 
 ## 執行規則
 
-每次只 implement 一個 plan。開始前只需讀本文件的共通規則與當前 plan；只有直接前置 contract
-不清楚時，才讀該 plan 的 `Depends on` 所指檔案，不需載入其他未完成 plan。先確認當前 plan 的
-`Out of scope` 與 acceptance criteria，完成後才更新下方狀態。不要順手建立後續 plan 的 schema、
+每次只 implement 一個 plan。開始前讀本文件、當前 plan 與直接相關的現有程式及測試；
+`Depends on` 用來確認未完成前置工作，不需載入其他無關 plan。先核對當前 plan 的設計、
+`Out of scope` 與 acceptance criteria，開始時標為 `IN PROGRESS`，完成驗收後依生命週期規則刪除。
+不要順手建立後續 plan 的 schema、
 service skeleton、flag 或空目錄。
 
 一個 plan 必須同時符合：
@@ -21,7 +37,7 @@ service skeleton、flag 或空目錄。
 - 若實作觸及三個以上 semantic service boundaries，先拆 plan，不以「只是 wiring」為理由合併。
 
 「獨立」在這裡指 change set 自足、驗收不借用未來功能；不是指完全沒有前置依賴。每個 plan
-可以依賴前序已完成 contract，但不可依賴後續 plan 才能通過測試或讓 CLI 恢復 working state。
+可以依賴 codebase 中已存在且經確認的 contract，但不可依賴後續 plan 才能通過測試或讓 CLI 恢復 working state。
 
 「不建立後續 plan 的 schema」有一個刻意例外：當同一個 machine-owned contract 會被連續數個 plan
 各改一次時，第一個 plan 必須一次定義完整的 contract（含全部 variants），後續 plan 只填入行為。
@@ -50,29 +66,6 @@ report schema 在一個 milestone 內被 bump 四次，並不允許建立 flag�
 
 | Status | Order | Plan | Outcome / milestone |
 | --- | ---: | --- | --- |
-| [x] DONE | 001 | [Project Bootstrap And Bun CLI](./001-project-bootstrap-and-bun-cli.md) | 最小 standalone CLI |
-| [x] DONE | 002 | [Binary Test Harness](./002-binary-test-harness.md) | compiled binary e2e |
-| [x] DONE | 003 | [Local CLI Workflow](./003-local-cli-workflow.md) | 本機 binary workflow |
-| [x] DONE | 004 | [Repository Structure Boundaries](./004-repository-structure-boundaries.md) | module boundary 固定 |
-| [x] DONE | 005 | [Git Diff Review MVP](./005-git-diff-review-mvp.md) | deterministic Git diff review |
-| [x] DONE | 006 | [Config Profiles](./006-config-profiles-and-prompts.md) | config resolution/legacy profile |
-| [x] DONE | 007 | [Normalize Review Contracts](./007-normalize-review-contracts.md) | Safe cloud dogfood |
-| [x] DONE | 008 | [Extract The Fake Review Engine](./008-extract-the-fake-review-engine.md) | Safe cloud dogfood |
-| [x] DONE | 009 | [Build A Pure Review Request](./009-build-a-pure-review-request.md) | Safe cloud dogfood |
-| [x] DONE | 010 | [Preserve Normalized File And Hunk Metadata](./010-preserve-normalized-file-and-hunk-metadata.md) | Safe cloud dogfood |
-| [x] DONE | 011 | [Select Complete Hunks Within A Request Budget](./011-select-complete-hunks-within-a-request-budget.md) | Safe cloud dogfood |
-| [x] DONE | 012 | [Integrate Budgeted Coverage Into Review Output](./012-integrate-budgeted-coverage-into-review-output.md) | Safe cloud dogfood |
-| [x] DONE | 018 | [Select A Repository With `--dir`](./018-select-a-repository-with-dir.md) | Repository config foundation |
-| [x] DONE | 049 | [Adopt Repository-root YAML Configuration](./049-adopt-repository-root-yaml-configuration.md) | Repository config foundation |
-| [x] DONE | 013 | [Enforce An Explicit Cloud Privacy Mode](./013-enforce-an-explicit-cloud-privacy-mode.md) | Safe cloud dogfood |
-| [x] DONE | 014 | [Redact Obvious Secrets Before Engine Input](./014-redact-obvious-secrets-before-engine-input.md) | Safe cloud dogfood |
-| [x] DONE | 015 | [Preview The Exact Outbound Request](./015-preview-the-exact-outbound-request.md) | Safe cloud dogfood |
-| [x] DONE | 016 | [Implement The OpenAI Responses Adapter](./016-implement-the-openai-responses-adapter.md) | Safe cloud dogfood |
-| [x] DONE | 017 | [Select And Run The OpenAI Engine](./017-select-and-run-the-openai-engine.md) | Safe cloud dogfood |
-| [x] DONE | 026 | [Add The Light Review Workload](./026-add-light-review-workload.md) | Safe cloud dogfood |
-| [x] DONE | 050 | [Harden Git Diff Collection](./050-harden-git-diff-collection.md) | Hardening hotfix |
-| [x] DONE | 051 | [Harden Secret Redaction](./051-harden-secret-redaction.md) | Hardening hotfix |
-| [x] DONE | 052 | [Harden Cloud Engine Transport](./052-harden-cloud-engine-transport.md) | Hardening hotfix |
 | [ ] TODO | 053 | [Skip Oversized Files Instead Of Failing The Review](./053-skip-oversized-files-instead-of-failing-the-review.md) | Hardening hotfix |
 | [ ] TODO | 048 | [Explain Effective Configuration Sources](./048-explain-effective-configuration-sources.md) | Real repository UX |
 | [ ] TODO | 019 | [Review An Exact Committed Range](./019-review-an-exact-committed-range.md) | Real repository UX |
@@ -104,17 +97,14 @@ report schema 在一個 milestone 內被 bump 四次，並不允許建立 flag�
 | [ ] TODO | 046 | [Document Installation And First Review](./046-document-installation-and-first-review.md) | Supported macOS v1 |
 | [ ] TODO | 047 | [Pass The Read-only macOS v1 Readiness Gate](./047-pass-the-read-only-macos-v1-readiness-gate.md) | Supported macOS v1 |
 
-狀態只能由 `TODO` → `IN PROGRESS` → `DONE`；從 007 開始依本表列序維持嚴格順序，不以 plan
-編號大小判定先後。
+依本表列序執行，不以 plan 編號大小判定先後。狀態由 `TODO` → `IN PROGRESS`，完成驗收後
+刪除檔案與索引列，不保留 `DONE` 狀態。目前下一個 plan 為本表第一列。
 
 ## Milestones
 
 | Milestone | Plans | Exit state |
 | --- | --- | --- |
-| Baseline closure | 005 | 現有 deterministic review pipeline 正式關閉 |
-| Repository config foundation | 018、049 | selected Git root、`--dir` 與 strict repository YAML config |
-| Safe cloud dogfood | 007–017、026 | 有 budget、privacy、redaction、preview 的 OpenAI review 與 light workload |
-| Hardening hotfix | 050–053 | git 解析對真實 repo robust、redaction 對不完整 secret 形狀有效、engine transport 有界且可診斷、單檔過大不再讓整個 review 失敗 |
+| Hardening hotfix | 053 | 單檔過大不再讓整個 review 失敗 |
 | Real repository UX | 048、019–023、025、024 | effective config provenance、一次定義完整的 scope contract、commit/branch scopes、filters、skip policy |
 | Durable automation beta | 032、027–031、033–037 | exit-code contract、sessions、queries、NDJSON、doctor、Codex CLI、provider reliability |
 | Supported macOS v1 | 038–047 | report polish、CI、signed artifact、Homebrew/npm、docs、readiness gate |
@@ -132,4 +122,6 @@ report schema 在一個 milestone 內被 bump 四次，並不允許建立 flag�
 - 新增任何 `.reviewstuff.yaml` 欄位或 CLI config override 時，同步更新 048 的 provenance source
   coverage 與 `EffectiveConfigReportV1` fixtures。
 - 新增的 error 能在 human 與 machine-readable boundary 被穩定處理。
-- 更新本表狀態，而且下一個 plan 不需要先修正本 plan 的遺留問題。
+- 依當前實作更新需要長期維護的文件；下一個 plan 不需要先修正本 plan 的遺留問題。
+- 刪除已完成 plan 與索引列，清理相關引用及已完成 milestone；其他 plan 的前置能力改指向
+  現有程式、測試或適用文件，不保留已完成 plan 編號作為依據。

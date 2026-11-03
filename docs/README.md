@@ -21,5 +21,6 @@ whose truth is the current repository implementation.
 - `*-system-design`: reusable design reasoning rather than a live code snapshot.
 - `*-implementation-reference`: code-coupled description of the current implementation.
 
-Historical implementation plans remain under [`../plans/`](../plans/README.md)
-and are not part of the teaching-document inventory.
+Pending implementation plans live under [`../plans/`](../plans/README.md). Completed
+plans are deleted after verification; current code and tests are the basis for design.
+Plans are not part of the teaching-document inventory.
