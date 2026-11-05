@@ -18,7 +18,40 @@
     "plugins": [
       {
         "name": "@effect/language-service",
-        "ignoreEffectWarningsInTscExitCode": true
+        "ignoreEffectWarningsInTscExitCode": true,
+        "allowedUnstableApis": [
+          "@effect/platform-bun/BunRuntime#runMain",
+          "@effect/platform-bun/BunServices#layer",
+          "effect/FileSystem#FileSystem",
+          "effect/FileSystem#makeNoop",
+          "effect/Path#Path",
+          "effect/PlatformError#PlatformError",
+          "effect/PlatformError#SystemErrorTag",
+          "effect/PlatformError#systemError",
+          "effect/ai/OpenAiStructuredOutput#toCodecOpenAI",
+          "effect/cli/Command#make",
+          "effect/cli/Command#run",
+          "effect/cli/Command#withDescription",
+          "effect/cli/Command#withHandler",
+          "effect/cli/Command#withSubcommands",
+          "effect/cli/Flag#Boolean",
+          "effect/cli/Flag#Directory",
+          "effect/cli/Flag#Int",
+          "effect/cli/Flag#Literals",
+          "effect/cli/Flag#String",
+          "effect/cli/Flag#filter",
+          "effect/cli/Flag#map",
+          "effect/cli/Flag#optional",
+          "effect/cli/Flag#withDefault",
+          "effect/cli/Flag#withDescription",
+          "effect/process/ChildProcess#make",
+          "effect/process/ChildProcessSpawner#ChildProcessHandle",
+          "effect/process/ChildProcessSpawner#ChildProcessSpawner",
+          "effect/process/ChildProcessSpawner#ExitCode",
+          "effect/process/ChildProcessSpawner#ProcessId",
+          "effect/process/ChildProcessSpawner#make",
+          "effect/process/ChildProcessSpawner#makeHandle"
+        ]
       }
     ],
     "resolveJsonModule": true,

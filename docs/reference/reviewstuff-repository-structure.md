@@ -56,3 +56,17 @@ Prefer existing Effect 4 services for filesystem, path, clock, and similar primi
 The canonical implementation is added to `platform/command-runner.ts` with the first real subprocess use case. It must use `effect/process/ChildProcess`, consume stdout and stderr concurrently, enforce the output cap while streaming, interrupt and clean up the process on timeout or cancellation, and map platform failures into the `CommandRunner` error union. Feature adapters must never use `ChildProcess` directly, `child_process`, `Bun.spawn`, or shell command strings.
 
 Only create a directory when its first real owner is implemented. The table records the boundaries defined so far; future areas join it when their first real implementation establishes an owner and dependency rule.
+
+## Effect API stability diagnostics
+
+The project intentionally uses Effect 4 CLI, process, filesystem, path, Bun runtime,
+and OpenAI structured-output APIs marked `@stability unstable`. This annotation
+warns about future compatibility; it does not identify an obsolete API or offer a
+replacement. The selected Effect packages are pinned to exact versions.
+
+`tsconfig.json` uses the diagnostic tool's `allowedUnstableApis` option to acknowledge
+only the exports already used by application code, build scripts, and tests. The
+`unstableApiUsage` rule remains enabled for other exports. When adding an API,
+review its purpose before extending this list; when removing one, remove its entry.
+Dependency upgrades still require typechecking, tests, and a compiled binary smoke
+check. This allow-list does not make upstream APIs stable.
