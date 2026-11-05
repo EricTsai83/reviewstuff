@@ -295,7 +295,7 @@ test("source modules preserve the documented dependency direction", async () => 
         moduleName === "effect/FileSystem" ||
         moduleName === "effect/Path" ||
         moduleName === "effect/PlatformError" ||
-        moduleName.startsWith("effect/unstable/process");
+        moduleName.startsWith("effect/process");
       const importsBunPlatform = moduleName.startsWith("@effect/platform-bun");
 
       if (

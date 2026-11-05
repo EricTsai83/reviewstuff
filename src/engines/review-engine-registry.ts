@@ -167,7 +167,7 @@ export const make = (
       }),
   });
 
-const makeLive = Config.redacted("OPENAI_API_KEY").pipe(
+const makeLive = Config.Redacted("OPENAI_API_KEY").pipe(
   Config.option,
   Effect.map((apiKey) =>
     make({

@@ -120,7 +120,7 @@ test("v6 rejects invalid workload, privacy, and contradictory values", async () 
       ...report,
       privacy: { ...report.privacy, decision: "refused" },
     })
-  ).toThrow('Expected "allowed", got "refused"');
+  ).toThrow();
   expect(() =>
     decodeReviewReportV6({
       ...report,

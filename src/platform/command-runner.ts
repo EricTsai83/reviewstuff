@@ -5,8 +5,8 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Ref from "effect/Ref";
 import * as Stream from "effect/Stream";
-import * as ChildProcess from "effect/unstable/process/ChildProcess";
-import * as ChildProcessSpawner from "effect/unstable/process/ChildProcessSpawner";
+import * as ChildProcess from "effect/process/ChildProcess";
+import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 
 export interface CommandRequest {
   readonly program: string;
@@ -167,7 +167,7 @@ const runCommand = (
       ChildProcessSpawner.ChildProcessHandle | undefined
     >(undefined);
 
-    return yield* Effect.gen(function* () {
+    const execute = Effect.gen(function* () {
       const childProcess = yield* command.pipe(
         Effect.mapError(
           (cause) =>
@@ -218,17 +218,20 @@ const runCommand = (
             }),
           ),
       }),
-      Effect.onExit(() =>
-        Ref.get(childProcessRef).pipe(
-          Effect.flatMap((childProcess) =>
-            childProcess === undefined
-              ? Effect.void
-              : terminateChildProcess(childProcess, request.program)
-          ),
-        )
-      ),
-      Effect.scoped,
     );
+
+    // Keep cleanup uninterruptible and prefer its failure over the command
+    // failure, including a timeout, so a failed kill is never hidden.
+    return yield* Effect.uninterruptibleMask((restore) =>
+      Effect.gen(function* () {
+        const result = yield* Effect.exit(restore(execute));
+        const childProcess = yield* Ref.get(childProcessRef);
+        if (childProcess !== undefined) {
+          yield* terminateChildProcess(childProcess, request.program);
+        }
+        return yield* result;
+      })
+    ).pipe(Effect.scoped);
   });
 };
 

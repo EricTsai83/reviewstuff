@@ -1,7 +1,7 @@
 import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
-import { Command, Flag } from "effect/unstable/cli";
+import { Command, Flag } from "effect/cli";
 import { stagedScope, workingTreeScope } from "../domain/scope";
 import {
   renderJsonReport,
@@ -18,25 +18,29 @@ import {
 } from "../use-cases/run-review";
 import { renderReviewError } from "./review-error-renderer";
 
-const jsonFlag = Flag.boolean("json").pipe(
+const jsonFlag = Flag.Boolean("json").pipe(
+  Flag.withDefault(false),
   Flag.withDescription("Render command output as JSON."),
 );
-const dryRunRequestFlag = Flag.boolean("dry-run-request").pipe(
+const dryRunRequestFlag = Flag.Boolean("dry-run-request").pipe(
+  Flag.withDefault(false),
   Flag.withDescription(
     "Preview the exact normalized request without invoking the review engine.",
   ),
 );
-const stagedFlag = Flag.boolean("staged").pipe(
+const stagedFlag = Flag.Boolean("staged").pipe(
+  Flag.withDefault(false),
   Flag.withDescription("Review only changes staged in the index."),
 );
-const workloadFlag = Flag.choice("workload", ["standard", "light"]).pipe(
+const workloadFlag = Flag.Literals("workload", ["standard", "light"]).pipe(
   Flag.optional,
   Flag.withDescription("Select the standard or light review workload."),
 );
-const lightFlag = Flag.boolean("light").pipe(
+const lightFlag = Flag.Boolean("light").pipe(
+  Flag.withDefault(false),
   Flag.withDescription("Use the light review workload."),
 );
-const privacyFlag = Flag.choice("privacy", [
+const privacyFlag = Flag.Literals("privacy", [
   "local-only",
   "cloud-allowed",
 ]).pipe(
@@ -44,7 +48,7 @@ const privacyFlag = Flag.choice("privacy", [
   Flag.withDescription("Control whether cloud review transports are allowed."),
 );
 const optionalNonEmptyFlag = (name: string, description: string) =>
-  Flag.string(name).pipe(
+  Flag.String(name).pipe(
     // Trim first: a whitespace-only value is not a selection, and a padded one
     // must not reach config resolution with its padding intact.
     Flag.map((value) => value.trim()),
@@ -58,12 +62,12 @@ const providerFlag = optionalNonEmptyFlag(
   "Override the review provider.",
 );
 const modelFlag = optionalNonEmptyFlag("model", "Override the reviewer model.");
-const directoryFlag = Flag.directory("dir").pipe(
+const directoryFlag = Flag.Directory("dir").pipe(
   Flag.optional,
   Flag.withDescription("Select the Git working-tree repository."),
 );
 const optionalPositiveIntegerFlag = (name: string, description: string) =>
-  Flag.integer(name).pipe(
+  Flag.Int(name).pipe(
     Flag.filter((value) => value > 0, () => `${name} must be greater than 0`),
     Flag.optional,
     Flag.withDescription(description),

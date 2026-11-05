@@ -1281,8 +1281,12 @@ test("engine deadline calculation uses a monotonic clock", async () => {
       throw new Error("wall clock must not be read");
     },
     currentTimeMillis: Effect.die("wall clock must not be read"),
-    currentTimeNanosUnsafe: () => liveClock.currentTimeNanosUnsafe(),
-    currentTimeNanos: liveClock.currentTimeNanos,
+    currentTimeNanosUnsafe: () => {
+      throw new Error("wall clock must not be read");
+    },
+    currentTimeNanos: Effect.die("wall clock must not be read"),
+    monotonicTimeNanosUnsafe: () => liveClock.monotonicTimeNanosUnsafe(),
+    monotonicTimeNanos: liveClock.monotonicTimeNanos,
     sleep: (duration) => liveClock.sleep(duration),
   };
   const git = makeGit({

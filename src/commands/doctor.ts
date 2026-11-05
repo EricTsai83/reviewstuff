@@ -1,5 +1,5 @@
 import * as Console from "effect/Console";
-import { Command } from "effect/unstable/cli";
+import { Command } from "effect/cli";
 
 export const doctorCommand = Command.make("doctor").pipe(
   Command.withDescription("Check local reviewstuff environment."),

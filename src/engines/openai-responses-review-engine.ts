@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
-import { OpenAiStructuredOutput } from "effect/unstable/ai";
+import { OpenAiStructuredOutput } from "effect/ai";
 import {
   ReviewFindingV1Schema,
   type ReviewFindingV1,
